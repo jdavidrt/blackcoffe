@@ -1,0 +1,79 @@
+# Archivos de configuración de Python
+*.pyc
+__pycache__
+
+# Archivo de registro de Django
+*.log
+
+# Base de datos SQLite
+db.sqlite3
+# Archivos generados por el entorno de desarrollo
+*.swp
+*.swo
+.vscode
+
+# Carpeta de medios (donde se almacenan archivos cargados por los usuarios)
+media/
+
+# Archivo de variables de entorno
+.venv
+venv/
+env/
+
+# Dependencias
+node_modules
+
+# Ignorar archivos generados por React (cliente)
+/client/node_modules/
+/client/build/
+/client/.env
+/client/.env.local
+/client/.env.development.local
+/client/.env.test.local
+/client/.env.production.local
+
+# Ignorar archivos generados por Django (servidor)
+/server/__pycache__/
+/server/.pyc
+/server/db.sqlite3
+/server/.env
+
+# Ignorar archivos generados por IDEs o editores específicos
+/.vscode/
+/.idea/
+*.iml
+*.pyc
+
+# Otros archivos y directorios generales para ignorar
+node_modules/
+*.log
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
