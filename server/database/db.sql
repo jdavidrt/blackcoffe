@@ -10,3 +10,20 @@ CREATE TABLE orders (
     items TEXT,
     deposit INT
 );
+
+
+CREATE TABLE clients (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    premises VARCHAR(20) NOT NULL,
+    clientName VARCHAR(20) NOT NULL,
+    mall VARCHAR(20) NOT NULL,
+    phoneNumber INT
+);
+
+CREATE TABLE products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    productName VARCHAR(20) NOT NULL,
+    unitValue INT
+);

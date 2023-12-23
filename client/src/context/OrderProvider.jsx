@@ -9,14 +9,6 @@ import {
 } from "../api/orders.api";
 import { OrderContext } from "./OrderContext";
 
-export const useorders = () => {
-  const context = useContext(OrderContext);
-  if (context === undefined) {
-    throw new Error("useOrders must be used within a OrderContextProvider");
-  }
-  return context;
-};
-
 export const useOrders = () => {
   const context = useContext(OrderContext);
   if (context === undefined) {

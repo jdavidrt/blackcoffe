@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 function OrderForm() {
   const { createOrder, getOrder, updateOrder } = useOrders();
   const [order, setOrder] = useState({
-    clientId: 0,
-    shopId: 0,
+    clientId: "",
+    shopId: "",
     paymentMethod: ""
   });
   const params = useParams();
@@ -19,7 +19,7 @@ function OrderForm() {
         const order = await getOrder(params.id);
         console.log(order);
         setOrder({
-          clientId: order.title,
+          clientId: order.clientId,
           shopId: order.shopId,
           paymentMethod: order.paymentMethod
         });
@@ -42,8 +42,8 @@ function OrderForm() {
           }
           navigate("/");
           setOrder({
-            clientId: 0,
-            shopId: 0,
+            clientId: "",
+            shopId: "",
             paymentMethod: ""
           });
         }}
@@ -59,20 +59,20 @@ function OrderForm() {
             <label className="block">clientId</label>
             <input
               type="text"
-              name="clienId"
+              name="clientId"
               placeholder="Id cliente"
               className="px-2 py-1 rounded-sm w-full"
               onChange={handleChange}
-              value={values.title}
+              value={values.clientId}
             />
-            <label className="block">shpId</label>
+            <label className="block">shopId</label>
             <input
               type="text"
               name="shopId"
               placeholder="Id tienda"
               className="px-2 py-1 rounded-sm w-full"
               onChange={handleChange}
-              value={values.title}
+              value={values.shopId}
             />
 
             <label className="block">Metodo de pago</label>
@@ -82,7 +82,7 @@ function OrderForm() {
               placeholder="Metodo de pago"
               className="px-2 py-1 rounded-sm w-full"
               onChange={handleChange}
-              value={values.title}
+              value={values.paymentMethod}
             />
 
             <button

@@ -12,8 +12,15 @@ function Navbar() {
           <Link to="/" className="bg-slate-200 px-2 py-1">Home</Link>
         </li>
         <li>
-          <Link to="/new" className="bg-teal-200 px-2 py-1">Create order</Link>
+          <Link to="/newOrder" className="bg-teal-200 px-2 py-1">Create order</Link>
         </li>
+        <li>
+          <Link to="/newProduct" className="bg-teal-200 px-2 py-1">Create Product</Link>
+        </li>
+        <li>
+          <Link to="/newClient" className="bg-teal-200 px-2 py-1">Create Client</Link>
+        </li>
+
       </ul>
     </div>
   );
