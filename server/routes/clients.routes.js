@@ -4,14 +4,16 @@ import {
     getClient,
     getClients,
     deleteClient,
-    updateClient
+    updateClient,
+    getAllClients
 } from "../controllers/clients.controllers.js"
 const router = Router();
 
-router.get('/clients', getClients);
+router.get('/clients', getAllClients);
 
-router.get('/client/:id', getClient);
+router.get('/clients/:mall', getClients);
 
+router.get('/client/:id', updateClient);
 
 router.post('/client', createClient);
 

@@ -21,8 +21,8 @@ export const useClients = () => {
 export const ClientContextProvider = ({ children }) => {
   const [clients, setClients] = useState([]);
 
-  async function loadClients() {
-    const response = await getClientsRequest();
+  async function loadClients(mall) {
+    const response = await getClientsRequest(mall);
     setClients(response.data);
   }
 

@@ -2,23 +2,23 @@ import { Link } from "react-router-dom";
 
 function Navbar() {
   return (
-    <div className="bg-neutral-800 flex justify-between px-20 py-4">
+    <div className="bg-stone-700 flex justify-between px-20 py-4">
       <Link to="/" className="text-white font-bold">
-        <h1>Black Coffe</h1>
+        <h1 className="text-l font-bold">Black Coffe</h1>
       </Link>
 
       <ul className="flex gap-x-1">
         <li>
-          <Link to="/" className="bg-slate-200 px-2 py-1">Home</Link>
+          <Link to="/" className="bg-slate-200 px-2 py-1">Inicio</Link>
         </li>
         <li>
-          <Link to="/newOrder" className="bg-teal-200 px-2 py-1">Create order</Link>
+          <Link to="/nuevaOrden" className="bg-teal-200 px-2 py-1">Nueva order</Link>
         </li>
         <li>
-          <Link to="/newProduct" className="bg-teal-200 px-2 py-1">Create Product</Link>
+          <Link to="/nuevoProducto" className="bg-teal-200 px-2 py-1">Productos</Link>
         </li>
         <li>
-          <Link to="/newClient" className="bg-teal-200 px-2 py-1">Create Client</Link>
+          <Link to="/nuevoCliente" className="bg-teal-200 px-2 py-1">Clientes</Link>
         </li>
 
       </ul>

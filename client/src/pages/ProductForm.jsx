@@ -48,36 +48,38 @@ function ProductForm() {
         {({ handleChange, handleSubmit, values, isSubmitting }) => (
           <Form
             onSubmit={handleSubmit}
-            className="bg-slate-300 max-w-sm rounded-md p-4 mx-auto mt-10"
+            className="bg-stone-300 max-w-sm rounded-md p-4 mx-auto mt-8"
           >
             <h1 className="text-xl font-bold uppercase text-center">
-              {params.id ? "Edit Product" : "New Product"}
+              {params.id ? "Editar Producto" : "Nuevo Producto"}
             </h1>
-            <label className="block">productName</label>
+            <label className="block text-center py-2">Nombre de producto: </label>
             <input
               type="text"
               name="productName"
-              placeholder="Id producte"
+              placeholder="Ej: Chocorramo"
               className="px-2 py-1 rounded-sm w-full"
               onChange={handleChange}
               value={values.productName}
             />
-            <label className="block">unitValue</label>
+            <label className="block text-center py-2">Valor unitario del producto: </label>
             <input
               type="number"
               name="unitValue"
-              placeholder="Id tienda"
+              placeholder="Ingresar valor sin puntos ni comas"
+              min="100"
               className="px-2 py-1 rounded-sm w-full"
               onChange={handleChange}
               value={values.unitValue}
             />
+            <div className="py-2"></div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="block bg-indigo-500 px-2 py-1 text-white w-full rounded-md"
+              className="block bg-green-500 px-2 py-2 text-white w-full rounded-md"
             >
-              {isSubmitting ? "Saving..." : "Crear"}
+              <b className="gray-400">{isSubmitting ? "Guardando producto..." : "CREAR"}</b>
             </button>
           </Form>
         )}

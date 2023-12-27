@@ -16,7 +16,7 @@ function OrdersPage() {
 
   return (
     <div>
-      <h1 className="text-5xl text-white font-bold text-center">Orders</h1>
+      <h2 className="text-2xl text-black  font-bold text-center">Cuenta de cobro {orders.length}</h2>
       <div className="grid grid-cols-3 gap-2">{renderMain()}</div>
     </div>
   );

@@ -1,8 +1,17 @@
 import pool from '../db.js'
 
-export const getClients = async (req, res) => {
+export const getAllClients = async (req, res) => {
     const [result] = await pool.query("SELECT * FROM clients ORDER BY createdAt ASC")
     //console.log(result);
+    res.json(result)
+}
+
+export const getClients = async (req, res) => {
+    console.log(req.params.mall)
+    const [result] = await pool.query("SELECT id, premises, clientName,  phoneNumber FROM clients WHERE mall = ?", [
+        req.params.mall,
+    ]);
+    //console.log(result)
     res.json(result)
 }
 export const getClient = async (req, res) => {

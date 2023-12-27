@@ -13,7 +13,7 @@ import Navbar from "./components/Navbar";
 
 function App() {
   return (
-    <div className="bg-zinc-900 h-screen">
+    <div className="bg-slate-200 h-screen">
       <Navbar />
       <div className="container mx-auto py-4 px-20">
         <ClientContextProvider>
@@ -21,10 +21,10 @@ function App() {
             <OrderContextProvider>
               <Routes>
                 <Route path="/" element={<OrdersPage />} />
-                <Route path="/newOrder" element={<OrderForm />} />
-                <Route path="/newClient" element={<ClientForm />} />
-                <Route path="/newProduct" element={<ProductForm />} />
-                <Route path="/editOrder/:id" element={<OrderForm />} />
+                <Route path="/nuevaOrden" element={<OrderForm />} />
+                <Route path="/nuevoCliente" element={<ClientForm />} />
+                <Route path="/nuevoProducto" element={<ProductForm />} />
+                <Route path="/editarOrden/:id" element={<OrderForm />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </OrderContextProvider>

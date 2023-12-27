@@ -1,7 +1,7 @@
 import pool from '../db.js'
 
 export const getProducts = async (req, res) => {
-    const [result] = await pool.query("SELECT * FROM products ORDER BY createdAt ASC")
+    const [result] = await pool.query("SELECT id, productName , unitValue FROM products ORDER BY createdAt ASC")
     //console.log(result);
     res.json(result)
 }
@@ -12,7 +12,7 @@ export const getProduct = async (req, res) => {
         ]);
 
         if (result.length === 0)
-            return res.status(404).json({ message: "Product not found" });
+            return res.status(404).json({ message: "Producto no encontrado" });
 
         res.json(result[0]);
     } catch (error) {
