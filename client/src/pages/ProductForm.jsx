@@ -18,8 +18,8 @@ function ProductForm() {
         const product = await getProduct(params.id);
         console.log(product);
         setProduct({
-          productName: product.productId,
-          unitValue: product.shopId
+          productName: product.productName,
+          unitValue: product.unitValue
         });
       }
     };
@@ -38,7 +38,7 @@ function ProductForm() {
           } else {
             await createProduct(values);
           }
-          navigate("/");
+          navigate("/productos");
           setProduct({
             productName: "",
             unitValue: ""

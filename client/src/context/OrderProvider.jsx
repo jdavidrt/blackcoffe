@@ -21,8 +21,8 @@ export const useOrders = () => {
 export const OrderContextProvider = ({ children }) => {
   const [orders, setOrders] = useState([]);
 
-  async function loadOrders() {
-    const response = await getOrdersRequest();
+  async function loadOrders(date) {
+    const response = await getOrdersRequest(date);
     setOrders(response.data);
   }
 

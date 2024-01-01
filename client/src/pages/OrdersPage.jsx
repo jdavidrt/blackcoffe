@@ -1,23 +1,33 @@
 import { useEffect } from "react";
+import dayjs from "dayjs";
 import OrderCard from "../components/OrderCard";
 import { useOrders } from "../context/OrderProvider";
+import { DatePicker } from "antd";
 
 function OrdersPage() {
-  const { orders, loadOrders } = useOrders();
 
+  const { orders, loadOrders } = useOrders();
+  const dateFormat = 'YYYY-MM-DD';
+  const fechaActual = dayjs().format('YYYY-MM-DD');
+  const onDatePickerChange = (date, dateString) => {
+    dateString ? loadOrders(dateString) : loadOrders(fechaActual)
+  };
   useEffect(() => {
-    loadOrders();
+    onDatePickerChange()
+    renderMain()
   }, []);
 
   function renderMain() {
-    if (orders.length === 0) return <h1>No orders yet</h1>;
+    if (orders.length === 0) return <h1>No hay ordenes para el dia seleccionado</h1>;
     return orders.map((order) => <OrderCard order={order} key={order.id} />);
   }
 
   return (
     <div>
-      <h2 className="text-2xl text-black  font-bold text-center">Cuenta de cobro {orders.length}</h2>
-      <div className="grid grid-cols-3 gap-2">{renderMain()}</div>
+      <div className="flex py-2"><h4 className="text-xl text-black  font-bold text-center">Cuenta de cobro ({orders.length}) </h4>
+        <div className="ml-auto"> <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
+        </div></div>
+      <div className="bg-yellow-500  rounded-md grid">{renderMain()}</div>
     </div>
   );
 }

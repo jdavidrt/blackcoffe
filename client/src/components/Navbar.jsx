@@ -15,10 +15,10 @@ function Navbar() {
           <Link to="/nuevaOrden" className="bg-teal-200 px-2 py-1">Nueva order</Link>
         </li>
         <li>
-          <Link to="/nuevoProducto" className="bg-teal-200 px-2 py-1">Productos</Link>
+          <Link to="/productos" className="bg-teal-200 px-2 py-1">Productos</Link>
         </li>
         <li>
-          <Link to="/nuevoCliente" className="bg-teal-200 px-2 py-1">Clientes</Link>
+          <Link to="/clientes" className="bg-teal-200 px-2 py-1">Clientes</Link>
         </li>
 
       </ul>

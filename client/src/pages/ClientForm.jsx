@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 function ClientForm() {
   const { createClient, getClient, updateClient } = useClients();
+
   const [client, setClient] = useState({
     premises: "",
     clientName: "",
@@ -14,15 +15,17 @@ function ClientForm() {
   const params = useParams();
   const navigate = useNavigate();
 
+
   useEffect(() => {
     const loadClient = async () => {
       if (params.id) {
         const client = await getClient(params.id);
-        console.log(client);
+        console.log('loaded client', client)
         setClient({
-          clientId: client.clientId,
-          shopId: client.shopId,
-          paymentMethod: client.paymentMethod
+          premises: client.premises,
+          clientName: client.clientName,
+          mall: client.mall,
+          phoneNumber: client.phoneNumber
         });
       }
     };
@@ -41,7 +44,7 @@ function ClientForm() {
           } else {
             await createClient(values);
           }
-          navigate("/");
+          navigate("/clientes");
           setClient({
             premises: "",
             clientName: "",
@@ -98,9 +101,8 @@ function ClientForm() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="block bg-green-500 px-2 py-2 text-white w-full rounded-md"
-            >
-              <b className="gray-400">{isSubmitting ? "Guardando cliente..." : "CREAR"}</b>
+              className="block bg-green-500 px-2 py-2 text-white w-full rounded-md">
+              {params.id ? <b className="gray-400">{isSubmitting ? "Guardando cliente..." : "GUARDAR"}</b> : <b className="gray-400">{isSubmitting ? "Guardando cliente..." : "CREAR"}</b>}
             </button>
           </Form>
         )}

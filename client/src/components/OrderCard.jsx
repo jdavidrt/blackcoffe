@@ -1,33 +1,26 @@
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
+import { EditOutlined } from '@ant-design/icons';
 
 function orderCard({ order }) {
   const { deleteOrder, toggleorderDone } = useOrders();
   const navigate = useNavigate();
 
   return (
-    <div className="bg-zinc-700 text-white rounded-md p-4">
-      <header className="flex justify-between">
-        <h2 className="text-sm font-bold">{order.paymentMethod}</h2>
-        <span>{order.done == 1 ? "️✅️" : "❌"}</span>
-      </header>
-      <p className="text-xs">{order.createdAt}</p>
+    <div className="flex bg-stone-100 text-black rounded-md m-2">
       <span>{order.createAt}</span>
-      <div className="flex gap-x-1">
+      <b>
+        <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p></b>
+      <div className="flex p-2 ml-auto">
+        <b><p className="text-green-500">$7.500</p></b>
         <button
-          className="bg-slate-300 px-2 py-1 text-black"
-          onClick={() => deleteOrder(order.id)}
+          className="flex bg-slate-300 px-2 py-1 text-black ml-auto"
+          onClick={() => navigate(`/editarOrden/${order.id}`)}
         >
-          Delete
-        </button>
-        <button
-          className="bg-slate-300 px-2 py-1 text-black"
-          onClick={() => navigate(`/editOrder/${order.id}`)}
-        >
-          Edit
+          <EditOutlined onClick={() => navigate(`/editarOrden/${order.id}`)} />
         </button>
       </div>
-    </div>
+    </div >
   );
 }
 

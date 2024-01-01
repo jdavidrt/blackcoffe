@@ -1,8 +1,9 @@
 import pool from '../db.js'
 
 export const getOrders = async (req, res) => {
-    const [result] = await pool.query("SELECT * FROM orders ORDER BY createdAt ASC")
-    //console.log(result);
+    const [result] = await pool.query("select orders.id, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.items, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) = ? ORDER BY orders.createdAt ASC", [
+        req.params.date,
+    ]);
     res.json(result)
 }
 export const getOrder = async (req, res) => {

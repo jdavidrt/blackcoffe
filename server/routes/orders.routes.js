@@ -8,7 +8,7 @@ import {
 } from "../controllers/orders.controllers.js"
 const router = Router();
 
-router.get('/orders', getOrders);
+router.get('/orders/:date', getOrders);
 
 router.get('/order/:id', getOrder);
 
