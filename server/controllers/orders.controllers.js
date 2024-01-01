@@ -8,7 +8,7 @@ export const getOrders = async (req, res) => {
 }
 export const getOrder = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT * FROM orders WHERE id = ?", [
+        const [result] = await pool.query("SELECT orders.id, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.items, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
             req.params.id,
         ]);
 
@@ -22,16 +22,16 @@ export const getOrder = async (req, res) => {
 }
 export const createOrder = async (req, res) => {
     try {
-        const { shopId, clientId, paymentMethod } = req.body
-        const result = await pool.query("INSERT INTO orders(shopId, clientId, paymentMethod) VALUES (?, ?, ?)", [
+        const { shopId, clientId, items } = req.body
+        const result = await pool.query("INSERT INTO orders(shopId, clientId, items) VALUES (?, ?, ?)", [
             shopId,
             clientId,
-            paymentMethod]
+            items]
         );
         res.json({
             shopId,
             clientId,
-            paymentMethod,
+            items,
         })
         console.log(res);
     } catch (error) {
@@ -39,6 +39,7 @@ export const createOrder = async (req, res) => {
     }
 }
 export const updateOrder = async (req, res) => {
+    console.log(req.body)
     try {
         const result = await pool.query("UPDATE orders SET ? WHERE id = ?", [
             req.body,

@@ -7,7 +7,6 @@ export const getAllClients = async (req, res) => {
 }
 
 export const getClients = async (req, res) => {
-    console.log(req.params.mall)
     const [result] = await pool.query("SELECT id, premises, clientName,  phoneNumber FROM clients WHERE mall = ?", [
         req.params.mall,
     ]);

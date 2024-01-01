@@ -23,7 +23,7 @@ function OrdersPage() {
   }
 
   return (
-    <div>
+    <div className="bg-slate-200 h-dvh rounded-md">
       <div className="flex py-2"><h4 className="text-xl text-black  font-bold text-center">Cuenta de cobro ({orders.length}) </h4>
         <div className="ml-auto"> <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
         </div></div>

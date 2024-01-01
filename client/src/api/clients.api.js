@@ -1,7 +1,6 @@
 import axios from "axios";
 
 export const getClientsRequest = async (mall) =>
-  //console.log(`http://localhost:4000/clients/${mall}`)
   await axios.get(`http://localhost:4000/clients/${mall}`);
 
 export const createClientRequest = async (client) =>

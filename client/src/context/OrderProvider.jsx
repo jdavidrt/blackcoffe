@@ -54,6 +54,7 @@ export const OrderContextProvider = ({ children }) => {
   };
 
   const updateOrder = async (id, newFields) => {
+    console.log('newFields', newFields)
     try {
       const response = await updateOrderRequest(id, newFields);
       console.log(response);

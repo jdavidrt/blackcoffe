@@ -20,7 +20,6 @@ function ClientForm() {
     const loadClient = async () => {
       if (params.id) {
         const client = await getClient(params.id);
-        console.log('loaded client', client)
         setClient({
           premises: client.premises,
           clientName: client.clientName,
@@ -38,7 +37,6 @@ function ClientForm() {
         initialValues={client}
         enableReinitialize={true}
         onSubmit={async (values, actions) => {
-          console.log(values);
           if (params.id) {
             await updateClient(params.id, values);
           } else {
@@ -87,6 +85,7 @@ function ClientForm() {
               <option value="">--Por favor seleccione uno--</option>
               <option value="Unilago">Unilago</option>
               <option value="Alta Tecnología">Alta Tecnología</option>
+              <option value="Otros">Otros</option>
             </select>
             <label className="block text-left py-2">Celular:</label>
             <input

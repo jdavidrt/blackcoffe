@@ -4,6 +4,7 @@ import { useClients } from "../context/ClientProvider";
 import { useProducts } from "../context/ProductProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { PlusCircleOutlined, MinusCircleOutlined } from "@ant-design/icons";
 
 function OrderForm() {
   const { createOrder, getOrder, updateOrder } = useOrders();
@@ -14,30 +15,41 @@ function OrderForm() {
   const [mall, setMall] = useState("");
   const [order, setOrder] = useState({
     clientId: "",
-    shopId: "",
-    products: ""
+    shopId: "1",
+    items: ""
   });
   const params = useParams();
   const navigate = useNavigate();
 
-  const addToOrder = (product) => {
-    const updatedCart = [...cart];
-    const existingProductIndex = updatedCart.findIndex(
-      (item) => item.name === product.name
+  const handleAddToCart = (product) => {
+    const existingProduct = cart.find((item) => item.id === product.id);
+
+    if (existingProduct) {
+      const updatedCart = cart.map((item) =>
+        item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+      );
+      setCart(updatedCart);
+    } else {
+      setCart([...cart, { ...product, quantity: 1 }]);
+    }
+  };
+
+  const handleRemoveFromCart = (productId) => {
+    const updatedCart = cart.map((item) =>
+      item.id === productId ? { ...item, quantity: item.quantity - 1 } : item
     );
 
-    if (existingProductIndex !== -1) {
-      updatedCart[existingProductIndex].quantity += 1;
-    } else {
-      updatedCart.push({ ...product, quantity: 1 });
-    }
+    // Elimina el producto del carrito si la cantidad es 0
+    setCart(updatedCart.filter((item) => item.quantity > 0));
+  };
+
+  const handleAddOneToCart = (productId) => {
+    const updatedCart = cart.map((item) =>
+      item.id === productId ? { ...item, quantity: item.quantity + 1 } : item
+    );
     setCart(updatedCart);
   };
 
-  const removeOrder = (productName) => {
-    const updatedCart = cart.filter((item) => item.name !== productName);
-    setCart(updatedCart);
-  };
 
 
   const selectMall = (selectedMall) => {
@@ -48,19 +60,29 @@ function OrderForm() {
 
   const selectClient = (event) => {
     const newClient = event.target.value;
+    console.log('clientSelected', newClient)
     setClient(newClient);
-    console.log(newClient);
+  };
+
+  const calculateTotal = () => {
+    return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
   };
 
   useEffect(() => {
     const loadOrder = async () => {
       if (params.id) {
         const order = await getOrder(params.id);
-        console.log(order);
+        loadClients([])
+        setMall(order.mall)
+        setClient(order.clientId)
+        //console.log(order);
+        setCart(JSON.parse(order.items))
         setOrder({
-          clientId: client,
+          clientId: order.clientId,
           shopId: 1,
-          products: order.products
+          items: cart,
+          clientName: order.clientName,
+          premises: order.premises
         });
       }
     };
@@ -74,27 +96,27 @@ function OrderForm() {
         {params.id ? "Editar Orden" : "Nueva Orden"}
       </h1>
 
-      <div className="flex">
+      <div className="flex content-center items-center justify-around">
         <button type="button" style={{
           backgroundColor: mall === 'Unilago' ? '#A6C4F0' : '#F3F1F1',
         }}
-          className=" bg-indigo-500 px-3 py-1 text-black rounded-md" onClick={() => selectMall('Unilago')}>Unilago</button>
+          className=" bg-indigo-500 px-2 py-1 text-black rounded-md" onClick={() => selectMall('Unilago')}>Unilago</button>
         <div className="px-2" />
         <button type="button" style={{
           backgroundColor: mall === 'Alta Tecnología' ? '#A6C4F0' : '#F3F1F1',
         }}
-          className="bg-indigo-500 px-3 py-1 text-black rounded-md" onClick={() => selectMall('Alta Tecnología')}>Alta Tecnología</button>
+          className="bg-indigo-500 px-2 py-1 text-black rounded-md" onClick={() => selectMall('Alta Tecnología')}>Alta Tecnología</button>
         <div className="px-2" />
         <button type="button" style={{
           backgroundColor: mall === 'Cliente Frecuente' ? '#A6C4F0' : '#F3F1F1',
         }}
-          className="bg-indigo-500 px-3 py-1 text-black rounded-md" onClick={() => selectMall('Cliente Frecuente')}>Cliente Frecuente</button>
+          className="bg-indigo-500 px-2 py-1 text-black rounded-md" onClick={() => selectMall('Cliente Frecuente')}>Cliente Frecuente</button>
         <div className="px-2" />
         <select name="clientId" className="px-2 py-1 rounded-sm w-100%"
           onChange={selectClient}
         //value={values.clientId}
         >
-          <option key={1} value={1}> --- </option>
+          {params.id ? <option selected="selected" key={order.clientId} value={order.clientId}>{order.premises} - {order.clientName}</option> : <option key={1} value={1}> --- </option>}
           {clients.map((client) => (
             <option key={client.id} value={client.id}>
               {client.premises} - {client.clientName}
@@ -110,55 +132,66 @@ function OrderForm() {
         onSubmit={async (values, actions) => {
           values.shopId = 1;
           values.clientId = client;
-          console.log(values);
+          values.items = JSON.stringify(cart)
+          //console.log('values', values);
           if (params.id) {
+            delete values.clientName;
+            delete values.premises;
             await updateOrder(params.id, values);
           } else {
             await createOrder(values);
           }
           navigate("/");
-          setOrder({
-            clientId: "",
-            shopId: "",
-            paymentMethod: ""
-          });
+          setOrder({ order });
         }}
       >
         {({ handleChange, handleSubmit, values, isSubmitting }) => (
           <Form
             onSubmit={handleSubmit}
             className="bg-slate-300 rounded-md p-4 mx-auto mt-10">
+            <div className="flex items-center py-1 justify-around ">
+              <div>
+                <p className="font-bold">Valor total: ${calculateTotal()}</p>
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
+                {isSubmitting ? "Creando Orden..." : "Crear Orden"}
+              </button>
+            </div>
+            {cart.map((item) => (
+              <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
+                <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue}</p>
 
-            <label className="block">Productos</label>
-            <input
-              type="text"
-              name="products"
-              placeholder="Metodo de pago"
-              className="px-2 py-1 rounded-sm w-full"
-              onChange={handleChange}
-              value={values.products}
-            />
-
-            <h2>Productos</h2>
-            <ul>
-              {products.map((product) => (
-                <li key={product.id}>
-                  {product.productName} - ${product.unitValue.toFixed(2)}{' '}
-                  <button onClick={() => addToCart(product)}>Add to Cart</button>
-                </li>
-              ))}
-            </ul>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="block bg-indigo-500 px-2 py-1 text-white w-full rounded-md"
-            >
-              {isSubmitting ? "Saving..." : "Save"}
-            </button>
+                <p className="">
+                  <button className="px-2" type="button" onClick={() => handleRemoveFromCart(item.id)}><MinusCircleOutlined style={{
+                    verticalAlign: 'middle'
+                  }} /></button>
+                  <button className="px-2" type="button" onClick={() => handleAddOneToCart(item.id)}><PlusCircleOutlined style={{
+                    verticalAlign: 'middle'
+                  }} /></button>
+                </p>
+              </div>
+            ))}
           </Form>
-        )}
-      </Formik>
+        )
+        }
+      </Formik >
+      <div>
+        {products.map((product) => (
+          <div className="bg-stone-100 rounded-md m-2 flex font-bold" key={product.id}>
+            <p className="flex items-center px-2">{product.productName}</p>
+            <p className="flex items-center sticky right-0 text-green-500 px-2 py-1 ml-auto">${product.unitValue}</p>
+            <p className="">
+              <button className="px-2" type="button" onClick={() => handleAddToCart(product)}><PlusCircleOutlined style={{
+                verticalAlign: 'middle'
+              }} /></button>
+            </p>
+          </div>
+        ))}
+      </div>
     </div >
   );
 }
