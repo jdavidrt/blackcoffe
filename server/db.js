@@ -3,9 +3,9 @@ import { createPool } from "mysql2/promise";
 
 export const pool = await createPool({
     database: "pedidos",
-    user: "sc3guundom615xsufy73",
+    user: "yrmz3a94ulovkmralvpm",
     host: "aws.connect.psdb.cloud",
-    password: "pscale_pw_oEEk4zfyPJ2uNhVZu7FB2doHNR2EExOUE5E3xV9dKYa",
+    password: "pscale_pw_v4pQggEkGunrDk8C3dccPryoIcU6gkSgCvJoPgZwmft",
     ssl: {
         rejectUnauthorized: false
     }

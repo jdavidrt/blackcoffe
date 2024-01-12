@@ -6,12 +6,16 @@ import ClientForm from "./pages/ClientForm";
 import ProductForm from "./pages/ProductForm";
 import ClientsPage from "./pages/ClientsPage";
 import ProductsPage from "./pages/ProductsPage";
+import CollectOrdersPage from "./pages/CollectOrdersPage";
+import CollectOrderForm from "./pages/CollectOrderForm";
 import NotFound from "./pages/NotFound";
 import { OrderContextProvider } from "./context/OrderProvider";
 import { ClientContextProvider } from "./context/ClientProvider";
 import { ProductContextProvider } from "./context/ProductProvider";
 
 import Navbar from "./components/Navbar";
+
+
 
 function App() {
   return (
@@ -24,6 +28,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<OrdersPage />} />
                 <Route path="/productos" element={<ProductsPage />} />
+                <Route path="/cobrarOrdenes" element={<CollectOrdersPage />} />
                 <Route path="/clientes" element={<ClientsPage />} />
                 <Route path="/editarProducto/:id" element={<ProductForm />} />
                 <Route path="/editarCliente/:id" element={<ClientForm />} />
@@ -31,6 +36,7 @@ function App() {
                 <Route path="/nuevoCliente" element={<ClientForm />} />
                 <Route path="/nuevoProducto" element={<ProductForm />} />
                 <Route path="/editarOrden/:id" element={<OrderForm />} />
+                <Route path="/cobrarOrden/:id" element={<CollectOrderForm />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </OrderContextProvider>
