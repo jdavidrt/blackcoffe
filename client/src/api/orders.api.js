@@ -3,6 +3,9 @@ import axios from "axios";
 export const getOrdersRequest = async (date) =>
   await axios.get(`http://localhost:4000/orders/${date}`, date);
 
+export const getCollectedOrders = async (date) =>
+  await axios.get(`http://localhost:4000/collectedOrders/${date}`, date);
+
 export const createOrderRequest = async (order) =>
   await axios.post("http://localhost:4000/order", order);
 

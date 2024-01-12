@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     createOrder,
     getOrder,
+    getCollectedOrders,
     getOrders,
     deleteOrder,
     updateOrder
@@ -9,6 +10,8 @@ import {
 const router = Router();
 
 router.get('/orders/:date', getOrders);
+
+router.get('/collectedOrders/:date', getCollectedOrders);
 
 router.get('/order/:id', getOrder);
 

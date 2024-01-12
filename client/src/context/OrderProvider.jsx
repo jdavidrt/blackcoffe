@@ -1,6 +1,7 @@
 import { createContext, useContext, useState } from "react";
 import {
   getOrdersRequest,
+  getCollectedOrders,
   deleteOrderRequest,
   createOrderRequest,
   getOrderRequest,
@@ -23,6 +24,11 @@ export const OrderContextProvider = ({ children }) => {
 
   async function loadOrders(date) {
     const response = await getOrdersRequest(date);
+    setOrders(response.data);
+  }
+
+  async function loadCollectedOrders(date) {
+    const response = await getCollectedOrders(date);
     setOrders(response.data);
   }
 
@@ -82,6 +88,7 @@ export const OrderContextProvider = ({ children }) => {
       value={{
         orders,
         loadOrders,
+        loadCollectedOrders,
         deleteOrder,
         createOrder,
         getOrder,

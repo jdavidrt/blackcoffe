@@ -24,20 +24,37 @@ function CollectOrderForm() {
     return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
   };
 
+  console.log(order)
+
   useEffect(() => {
     const loadOrder = async () => {
       if (params.id) {
         const order = await getOrder(params.id);
         //console.log(order);
         setCart(JSON.parse(order.items))
-        setOrder({
-          clientId: order.clientId,
-          shopId: 1,
-          items: cart,
-          clientName: order.clientName,
-          premises: order.premises,
-          createdAt: order.createdAt.slice(0, 9)
-        });
+        if (order.paid) {
+          setOrder({
+            clientId: order.clientId,
+            shopId: 1,
+            items: cart,
+            clientName: order.clientName,
+            premises: order.premises,
+            createdAt: order.createdAt.slice(0, 10),
+            paid: order.paid,
+            paidAt: order.paidAt.slice(0, 10)
+          });
+        } else {
+          setOrder({
+            clientId: order.clientId,
+            shopId: 1,
+            items: cart,
+            clientName: order.clientName,
+            premises: order.premises,
+            createdAt: order.createdAt.slice(0, 10),
+            paid: order.paid
+          });
+        }
+
       }
     };
     loadOrder();
@@ -51,7 +68,9 @@ function CollectOrderForm() {
       <h1 className="text-xl font-bold uppercase text-center">
         {order.premises} - {order.clientName} / {order.createdAt}
       </h1>
-      <div className="py-2" />
+
+      {order.paid ? <h1 className="text-xl font-bold uppercase text-center">Dia de pago: {order.paidAt}  </h1> : ''}
+
 
       <Formik
         initialValues={order}
@@ -85,12 +104,17 @@ function CollectOrderForm() {
               <div>
                 <p className="font-bold">Valor total: ${calculateTotal()}</p>
               </div>
-              <button
+              {order.paid ? <button
+                type="button"
+                className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
+                {'Orden Cobrada'}
+              </button> : <button
                 type="submit"
                 disabled={isSubmitting}
                 className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
                 {isSubmitting ? "Cobrando Orden..." : "Cobrar Orden"}
-              </button>
+              </button>}
+
             </div>
             {cart.map((item) => (
               <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">

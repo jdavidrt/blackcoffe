@@ -8,6 +8,7 @@ import ClientsPage from "./pages/ClientsPage";
 import ProductsPage from "./pages/ProductsPage";
 import CollectOrdersPage from "./pages/CollectOrdersPage";
 import CollectOrderForm from "./pages/CollectOrderForm";
+import CollectedOrdersPage from "./pages/CollectedOrdersPage";
 import NotFound from "./pages/NotFound";
 import { OrderContextProvider } from "./context/OrderProvider";
 import { ClientContextProvider } from "./context/ClientProvider";
@@ -29,6 +30,7 @@ function App() {
                 <Route path="/" element={<OrdersPage />} />
                 <Route path="/productos" element={<ProductsPage />} />
                 <Route path="/cobrarOrdenes" element={<CollectOrdersPage />} />
+                <Route path="/ordenesPagas" element={<CollectedOrdersPage />} />
                 <Route path="/clientes" element={<ClientsPage />} />
                 <Route path="/editarProducto/:id" element={<ProductForm />} />
                 <Route path="/editarCliente/:id" element={<ClientForm />} />
