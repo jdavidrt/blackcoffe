@@ -70,8 +70,6 @@ function CollectOrderForm() {
       </h1>
 
       {order.paid ? <h1 className="text-xl font-bold uppercase text-center">Dia de pago: {order.paidAt}  </h1> : ''}
-
-
       <Formik
         initialValues={order}
         enableReinitialize={true}

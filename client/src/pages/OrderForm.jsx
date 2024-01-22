@@ -5,6 +5,8 @@ import { useProducts } from "../context/ProductProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { PlusCircleOutlined, MinusCircleOutlined } from "@ant-design/icons";
+import { Select } from "antd"
+import SearchBar from "../components/SearchBar";
 
 function OrderForm() {
   const { createOrder, getOrder, updateOrder } = useOrders();
@@ -12,6 +14,8 @@ function OrderForm() {
   const { clients, loadClients } = useClients()
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
+  const [clientChanged, setClientChanged] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [mall, setMall] = useState("");
   const [order, setOrder] = useState({
     clientId: "",
@@ -20,6 +24,10 @@ function OrderForm() {
   });
   const params = useParams();
   const navigate = useNavigate();
+
+  const filteredProducts = products.filter((product) =>
+    product.productName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const handleAddToCart = (product) => {
     const existingProduct = cart.find((item) => item.id === product.id);
@@ -58,9 +66,10 @@ function OrderForm() {
     loadClients(newMall);
   };
 
-  const selectClient = (event) => {
-    const newClient = event.target.value;
+  const selectClient = (value) => {
+    const newClient = value;
     console.log('clientSelected', newClient)
+    setClientChanged(true)
     setClient(newClient);
   };
 
@@ -75,7 +84,6 @@ function OrderForm() {
         loadClients([])
         setMall(order.mall)
         setClient(order.clientId)
-        //console.log(order);
         setCart(JSON.parse(order.items))
         setOrder({
           clientId: order.clientId,
@@ -89,6 +97,7 @@ function OrderForm() {
     loadOrder();
     loadProducts();
   }, []);
+  console.log(client, cart)
 
   return (
     <div>
@@ -112,17 +121,23 @@ function OrderForm() {
         }}
           className="bg-indigo-500 px-2 py-1 text-black rounded-md" onClick={() => selectMall('Cliente Frecuente')}>Cliente Frecuente</button>
         <div className="px-2" />
-        <select name="clientId" className="px-2 py-1 rounded-sm w-100%"
-          onChange={selectClient}
-        //value={values.clientId}
-        >
-          {params.id ? <option selected="selected" key={order.clientId} value={order.clientId}>{order.premises} - {order.clientName}</option> : <option key={1} value={1}> --- </option>}
+        {params.id && !clientChanged ? <Select value={order.premises + ' - ' + order.clientName} onChange={selectClient} showSearch optionFilterProp="children" placeholder="Seleccionar cliente" name="clientId" className="px-2 py-1 rounded-sm w-100%">
+          {params.id ? <Select.Option defaultValue={order.premises + ' - ' + order.clientName} selected="selected" title={order.clientId} label={order.clientId} value={order.clientId}>{order.premises} - {order.clientName}</Select.Option> : <Select.Option value={1}> </Select.Option>}
           {clients.map((client) => (
-            <option key={client.id} value={client.id}>
+            <Select.Option title={client.id} value={client.id}>
               {client.premises} - {client.clientName}
-            </option>
+            </Select.Option>
           ))}
-        </select>
+        </Select> :
+          <Select onChange={selectClient} showSearch optionFilterProp="children" placeholder="Seleccionar cliente" name="clientId" className="px-2 py-1 rounded-sm w-100%">
+            {params.id ? <Select.Option selected="selected" title={order.clientId} label={order.clientId} value={order.clientId}>{order.premises} - {order.clientName}</Select.Option> : <Select.Option value={1}> </Select.Option>}
+            {clients.map((client) => (
+              <Select.Option title={client.id} value={client.id}>
+                {client.premises} - {client.clientName}
+              </Select.Option>
+            ))}
+          </Select>
+        }
       </div>
       <div className="py-2" />
 
@@ -142,7 +157,11 @@ function OrderForm() {
             await createOrder(values);
           }
           navigate("/");
-          setOrder({ order });
+          if (client == [] || cart == []) {
+            alert("Por favor selecciona un cliente y agrega propductos para crear la orden");
+          } else {
+            setOrder({ order });
+          }
         }}
       >
         {({ handleChange, handleSubmit, values, isSubmitting }) => (
@@ -156,8 +175,8 @@ function OrderForm() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
-                {isSubmitting ? "Creando Orden..." : "Crear Orden"}
+                className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto">
+                {params.id && isSubmitting ? "Modificando Orden..." : params.id ? "Modificar Orden" : isSubmitting ? "Creando Orden..." : "Crear Orden"}
               </button>
             </div>
             {cart.map((item) => (
@@ -180,7 +199,8 @@ function OrderForm() {
         }
       </Formik >
       <div>
-        {products.map((product) => (
+        <SearchBar onSearch={setSearchTerm} />
+        {filteredProducts.map((product) => (
           <div className="bg-stone-100 rounded-md m-2 flex font-bold" key={product.id}>
             <p className="flex items-center px-2">{product.productName}</p>
             <p className="flex items-center sticky right-0 text-green-500 px-2 py-1 ml-auto">${product.unitValue}</p>

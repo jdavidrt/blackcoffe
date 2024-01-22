@@ -3,9 +3,6 @@ import { Link } from "react-router-dom";
 function Navbar() {
   return (
     <div className="bg-stone-700 flex justify-between px-20 py-4">
-      <Link to="/" className="text-white font-bold">
-        <h1 className="text-l font-bold">Black Coffe</h1>
-      </Link>
 
       <ul className="flex gap-x-1">
         <li>
