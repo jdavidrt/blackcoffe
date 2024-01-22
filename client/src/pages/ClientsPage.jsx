@@ -18,7 +18,6 @@ function ClientsPage() {
   useEffect(() => {
     loadClients(mall)
   }, []);
-  console.log(clients)
 
   const filteredClients = clients.filter((client) =>
     client.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
