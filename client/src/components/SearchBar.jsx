@@ -5,7 +5,7 @@ const SearchBar = ({ onSearch }) => {
         <div className="px-2 py-1">
             <input
                 type="text"
-                placeholder="Buscar productos..."
+                placeholder="Buscar..."
                 onChange={(e) => onSearch(e.target.value)}
                 className="p-2 border rounded-md w-full"
             />

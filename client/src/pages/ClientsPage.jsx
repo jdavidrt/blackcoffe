@@ -1,13 +1,11 @@
 import { useEffect } from "react";
-import dayjs from "dayjs";
 import ClientCard from "../components/ClientCard";
 import { useClients } from "../context/ClientProvider";
 import { useState } from "react";
-import { PlusCircleOutlined } from "@ant-design/icons";
 import { Link } from "react-router-dom";
-
+import SearchBar from "../components/SearchBar";
 function ClientsPage() {
-
+  const [searchTerm, setSearchTerm] = useState('');
   const selectMall = (selectedMall) => {
     const newMall = selectedMall;
     setMall(newMall);
@@ -15,14 +13,22 @@ function ClientsPage() {
   };
   const [mall, setMall] = useState("Unilago");
 
+
   const { clients, loadClients } = useClients();
   useEffect(() => {
     loadClients(mall)
   }, []);
+  console.log(clients)
+
+  const filteredClients = clients.filter((client) =>
+    client.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.premises.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
 
   function renderMain() {
     if (clients.length === 0) return <h1>No hay clientes</h1>;
-    return clients.map((client) => <ClientCard client={client} key={client.id} />);
+    return filteredClients.map((client) => <ClientCard client={client} key={client.id} />);
   }
 
   return (
@@ -51,7 +57,7 @@ function ClientsPage() {
             </Link>
           </div>
         </div>
-
+        <SearchBar onSearch={setSearchTerm} />
       </div>
       <div className="bg-yellow-500  rounded-md grid">{renderMain()}</div>
     </div>
