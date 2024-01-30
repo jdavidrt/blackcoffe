@@ -20,7 +20,7 @@ import Navbar from "./components/Navbar";
 
 function App() {
   return (
-    <div className="bg-slate-200 h-full">
+    <div className="bg-slate-200 h-screen">
       <Navbar />
       <div className="container mx-auto py-4 px-20">
         <ClientContextProvider>
