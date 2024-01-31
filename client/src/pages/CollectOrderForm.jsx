@@ -119,11 +119,16 @@ function CollectOrderForm() {
                 backgroundColor: platformPayment == true ? '#A6C4F0' : '#F3F1F1',
               }}
                 className="bg-indigo-500 px-2 py-1 text-black rounded-md ml-auto" onClick={() => togglePlatform()}>Plataforma</button>
-              {order.paid ? <button
+              {order.paid ? <><button
+                type="button"
+                onClick={() => navigate(`../pdfOrden/` + params.id)}
+                className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
+                {'Generar Factura'}
+              </button><button
                 type="button"
                 className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
-                {'Orden Cobrada'}
-              </button> :
+                  {'Orden Cobrada'}
+                </button></> :
                 <> <input
                   type="number"
                   name="deposit"

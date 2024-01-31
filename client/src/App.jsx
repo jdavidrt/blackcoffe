@@ -1,5 +1,6 @@
 import { Route, Routes, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
+import Invoice from "./pages/Invoice";
 import OrdersPage from "./pages/OrdersPage";
 import OrderForm from "./pages/OrderForm";
 import ClientForm from "./pages/ClientForm";
@@ -48,6 +49,7 @@ function App() {
                   <Route path="/nuevoProducto" element={<ProductForm />} />
                   <Route path="/editarOrden/:id" element={<OrderForm />} />
                   <Route path="/cobrarOrden/:id" element={<CollectOrderForm />} />
+                  <Route path="/pdfOrden/:id" element={<Invoice />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </OrderContextProvider>
