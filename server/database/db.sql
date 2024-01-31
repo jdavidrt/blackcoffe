@@ -28,6 +28,13 @@ CREATE TABLE products (
     unitValue INT
 );
 
+CREATE TABLE users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    userName VARCHAR(50),
+    pass VARCHAR(50)
+);
+
 INSERT INTO clients (premises, clientName, mall, phoneNumber) VALUES
 (126, 'Alex', 'Unilago', 3008223400),
 (127, 'Alex', 'Unilago', 3194014051),
