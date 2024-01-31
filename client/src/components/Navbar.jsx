@@ -55,25 +55,25 @@ function Navbar() {
       {/* Menú de navegación */}
       <ul className={`flex flex-col lg:flex flex-col lg:flex-row lg:gap-x-1 ${menuOpen ? 'block' : 'hidden'}`}>
         <li className="mb-1 flex items-center">
-          <Link to="/" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cuentas por cobrar</Link>
+          <Link onClick={toggleMenu} to="/" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cuentas por cobrar</Link>
         </li>
         <li className="mb-1 flex items-center">
-          <Link to="/nuevaOrden" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Nueva Orden</Link>
+          <Link onClick={toggleMenu} to="/nuevaOrden" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Nueva Orden</Link>
         </li>
         <li className="mb-1 flex items-center">
-          <Link to="/cobrarOrdenes" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar</Link>
+          <Link onClick={toggleMenu} to="/cobrarOrdenes" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar</Link>
         </li>
         <li className="mb-1 flex items-center">
-          <Link to="/ordenesPagas" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cuentas al día</Link>
+          <Link onClick={toggleMenu} to="/ordenesPagas" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cuentas al día</Link>
         </li>
         <li className="mb-1 flex items-center">
-          <Link to="/productos" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Productos</Link>
+          <Link onClick={toggleMenu} to="/productos" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Productos</Link>
         </li>
         <li className="mb-1 flex items-center">
-          <Link to="/clientes" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Clientes</Link>
+          <Link onClick={toggleMenu} to="/clientes" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Clientes</Link>
         </li>
         <li className="mb-1 flex items-center" onClick={logOut}>
-          <Link to="/iniciarSesion" className="text-white hover:text-black bg-red-900 rounded px-3 py-2">Salir</Link>
+          <Link onClick={toggleMenu} to="/iniciarSesion" className="text-white hover:text-black bg-red-900 rounded px-3 py-2">Salir</Link>
         </li>
       </ul>
     </div>
