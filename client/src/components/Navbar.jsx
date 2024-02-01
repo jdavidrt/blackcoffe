@@ -1,28 +1,28 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const toggleMenu = () => {
     setMenuOpen(!menuOpen);
   };
 
-  const logOut = () => {
+  function logOut() {
     // Abre una ventana de confirmación
-    const confirmacion = window.confirm("¿Estás seguro de cerrar sesión?");
-
-    // Verifica la respuesta del usuario
-    if (confirmacion) {
+    let result = confirm("¿Estás seguro de cerrar sesión?");
+    if (result == true) {
       // El usuario seleccionó "Aceptar"
       // Aquí puedes agregar la lógica para cerrar sesión
-      localStorage.setItem('user', '');
       console.log("Sesión cerrada");
+      localStorage.setItem('user', '');
+      navigate("/iniciarSesion")
     } else {
       // El usuario seleccionó "Cancelar" o cerró la ventana de confirmación
       console.log("Cierre de sesión cancelado");
     }
-  };
+  }
 
   return (
     <div className="bg-stone-700 px-4 py-2 lg:px-20" style={{
@@ -73,7 +73,7 @@ function Navbar() {
           <Link onClick={toggleMenu} to="/clientes" className="text-white hover:text-black bg-sky-800 rounded px-3 py-2">Clientes</Link>
         </li>
         <li className="mb-1 flex items-center" onClick={logOut}>
-          <Link onClick={toggleMenu} to="/iniciarSesion" className="text-white hover:text-black bg-red-900 rounded px-3 py-2">Salir</Link>
+          <Link onClick={toggleMenu} to={window.location.pathname} className="text-white hover:text-black bg-red-900 rounded px-3 py-2">Salir</Link>
         </li>
       </ul>
     </div>
