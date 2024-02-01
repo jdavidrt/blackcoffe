@@ -1,4 +1,4 @@
-import axios from "axios";
-
+import axios from `axios`;
+var renderServer = 'https://coffeserver.onrender.com'
 export const autenticateUserRequest = async (userName, pass) =>
-    await axios.get(`http://localhost:4000/users/${userName}/${pass}`);
+    await axios.get(`${renderServer}/users/${userName}/${pass}`);
