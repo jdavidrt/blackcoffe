@@ -31,7 +31,7 @@ function App() {
     <div className="bg-slate-200 h-screen">
       <UserContextProvider>
         <Navbar />
-        <div className="container mx-auto py-4 px-20">
+        <div className="w-full mx-auto py-4 px-2 ">
           <ClientContextProvider>
             <ProductContextProvider>
               <OrderContextProvider>
