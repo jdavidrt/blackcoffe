@@ -47,6 +47,7 @@ function CollectOrderForm() {
             paid: order.paid,
             paidAt: order.paidAt.slice(0, 10),
             deposit: order.deposit,
+            collectedBy: localStorage.getItem('user')
           });
         } else {
           setOrder({
@@ -57,7 +58,8 @@ function CollectOrderForm() {
             premises: order.premises,
             createdAt: order.createdAt.slice(0, 10),
             paid: order.paid,
-            deposit: order.deposit
+            deposit: order.deposit,
+            collectedBy: localStorage.getItem('user')
           });
         }
 
