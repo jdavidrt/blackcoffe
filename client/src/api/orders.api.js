@@ -9,6 +9,9 @@ export const getCollectedOrders = async (date) =>
 export const getUnpaidOrders = async (mall) =>
   await axios.get(`${renderServer}/unPaidOrders/${mall}`, mall);
 
+export const getUnpaidOrdersbyClient = async (clintId) =>
+  await axios.get(`${renderServer}/unPaidOrdersByClient/${clintId}`, clintId);
+
 export const createOrderRequest = async (order) =>
   await axios.post(`${renderServer}/order`, order);
 

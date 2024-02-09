@@ -16,7 +16,7 @@ function CollectOrdersPage() {
     loadUnPaidOrders(newMall);
   };
 
-  const filteredOrders = orders.filter((order) =>
+  const filteredOrders = mergeItemsByClientId(orders).filter((order) =>
     order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.premises.toLowerCase().includes(searchTerm.toLowerCase())
   );

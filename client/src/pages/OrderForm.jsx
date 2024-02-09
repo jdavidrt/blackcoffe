@@ -198,7 +198,7 @@ function OrderForm() {
         }
       </Formik >
       <div>
-        <SearchBar onSearch={setSearchTerm} allowClear />
+        <SearchBar onSearch={setSearchTerm} />
         {filteredProducts.map((product) => (
           <div className="bg-stone-100 rounded-md m-2 flex font-bold" key={product.id}>
             <p className="flex items-center px-2">{product.productName}</p>

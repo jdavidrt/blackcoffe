@@ -7,7 +7,7 @@ function orderCard({ order }) {
   const navigate = useNavigate();
 
   const calculateTotal = () => {
-    return JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
+    return (order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
   };
 
   return (
