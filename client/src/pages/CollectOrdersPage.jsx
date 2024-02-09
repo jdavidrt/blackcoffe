@@ -9,22 +9,11 @@ function CollectOrdersPage() {
 
   const [loading, setLoading] = useState(false);
   const { orders, loadOrders, loadUnPaidOrders } = useOrders();
-  const dateFormat = 'YYYY-MM-DD';
-  const fechaActual = dayjs().format('YYYY-MM-DD');
   const [mall, setMall] = useState("Unilago");
   const selectMall = (selectedMall) => {
     const newMall = selectedMall;
     setMall(newMall);
     loadUnPaidOrders(newMall);
-  };
-
-  const onDatePickerChange = async (date, dateString) => {
-    setLoading(true);
-    try {
-      await (dateString ? loadOrders(dateString) : loadOrders(fechaActual));
-    } finally {
-      setLoading(false);
-    }
   };
 
   const filteredOrders = orders.filter((order) =>
@@ -62,8 +51,7 @@ function CollectOrdersPage() {
 
   console.log('merged', mergeItemsByClientId(orders));
 
-  useEffect(() => {
-    onDatePickerChange(); // Iniciar carga al montar el componente
+  useEffect(() => {// Iniciar carga al montar el componente
   }, []);
 
   function renderMain() {
