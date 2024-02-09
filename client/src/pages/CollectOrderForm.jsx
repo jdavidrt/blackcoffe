@@ -27,11 +27,12 @@ function CollectOrderForm() {
   function togglePlatform() {
     setPlatformPayment(!platformPayment); // Cambiar el valor de verdadero a falso y viceversa
   }
-
+  console.log(params.id)
   useEffect(() => {
     const loadOrder = async () => {
       if (params.id) {
         const order = await getOrder(params.id);
+
         setCart(JSON.parse(order.items))
         if (order.paymentMethod == "Plataforma") {
           togglePlatform(true)

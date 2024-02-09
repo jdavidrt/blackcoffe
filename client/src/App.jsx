@@ -49,7 +49,7 @@ function App() {
                   <Route path="/nuevoCliente" element={<ClientForm />} />
                   <Route path="/nuevoProducto" element={<ProductForm />} />
                   <Route path="/editarOrden/:id" element={<OrderForm />} />
-                  <Route path="/cobrarOrden/:clientId" element={<CollectOrderForm />} />
+                  <Route path="/cobrarOrden/:id" element={<CollectOrderForm />} />
                   <Route path="/pdfOrden/:id" element={<Invoice />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
