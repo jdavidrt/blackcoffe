@@ -71,7 +71,7 @@ function CollectOrderForm() {
   return (
     <div>
       <h1 className="text-xl font-bold uppercase text-center">
-        Cobrar Orden
+        {order.paid ? 'ORDEN COBRADA' : 'COBRAR ORDEN'}
       </h1>
       <h1 className="text-xl font-bold uppercase text-center">
         {order.premises} - {order.clientName} / {order.createdAt}

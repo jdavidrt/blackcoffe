@@ -26,7 +26,7 @@ function Navbar() {
 
   return (
     <div className="bg-stone-700 px-4 py-2 lg:px-20" style={{
-      visibility: (window.location.pathname.includes("/iniciarSesion") || window.location.pathname.includes("/pdfOrden")) == true ? 'hidden' : 'visible',
+      display: (window.location.pathname.includes("/iniciarSesion") || window.location.pathname.includes("/pdfOrden")) == true ? 'none' : 'block',
     }}>
       <div className="flex justify-between items-center">
 
