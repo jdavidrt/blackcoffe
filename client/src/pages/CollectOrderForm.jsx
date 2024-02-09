@@ -7,7 +7,7 @@ import { calc } from "antd/es/theme/internal";
 
 function CollectOrderForm() {
 
-  const { getUnPaidOrdersbyClient, updateOrder } = useOrders();
+  const { getOrder, updateOrder } = useOrders();
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
   const [order, setOrder] = useState({
@@ -28,40 +28,40 @@ function CollectOrderForm() {
     setPlatformPayment(!platformPayment); // Cambiar el valor de verdadero a falso y viceversa
   }
 
-  function combineOrders(orders) {
-    return orders.reduce((combined, order) => {
-      combined.clientId = order.clientId;
-      combined.clientName = order.clientName;
-      combined.paid += order.paid;
-      combined.collectedBy = order.collectedBy;
-      combined.createdAt = order.createdAt; // Puedes ajustar esto si necesitas una lógica específica para la fecha
-      combined.items = combined.items.concat(JSON.parse(order.items));
-      combined.premises = order.premises;
-      combined.mall = order.mall;
-
-      return combined;
-    }, {
-      clientId: null,
-      clientName: null,
-      paid: 0,
-      collectedBy: null,
-      createdAt: null,
-      items: [],
-      premises: null,
-      mall: null,
-    });
-  }
-
-  const orders = [
-    // ... tus datos aquí
-  ];
-
-
   useEffect(() => {
     const loadOrder = async () => {
-      if (params.clientId) {
-        const response = await getUnPaidOrdersbyClient(params.clientId);
-        console.log(response)
+      if (params.id) {
+        const order = await getOrder(params.id);
+        setCart(JSON.parse(order.items))
+        if (order.paymentMethod == "Plataforma") {
+          togglePlatform(true)
+        }
+        if (order.paid) {
+          setOrder({
+            clientId: order.clientId,
+            shopId: 1,
+            items: cart,
+            clientName: order.clientName,
+            premises: order.premises,
+            createdAt: order.createdAt.slice(0, 10),
+            paid: order.paid,
+            paidAt: order.paidAt.slice(0, 10),
+            deposit: order.deposit,
+            collectedBy: localStorage.getItem('user')
+          });
+        } else {
+          setOrder({
+            clientId: order.clientId,
+            shopId: 1,
+            items: cart,
+            clientName: order.clientName,
+            premises: order.premises,
+            createdAt: order.createdAt.slice(0, 10),
+            paid: order.paid,
+            deposit: order.deposit,
+            collectedBy: localStorage.getItem('user')
+          });
+        }
 
       }
     };
