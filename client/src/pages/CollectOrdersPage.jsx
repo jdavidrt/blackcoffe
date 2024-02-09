@@ -3,10 +3,8 @@ import dayjs from "dayjs";
 import OrderCollectCard from "../components/OrderCollectCard";
 import { useOrders } from "../context/OrderProvider";
 import { DatePicker } from "antd";
-import SearchBar from "../components/SearchBar";
-function CollectOrdersPage() {
-  const [searchTerm, setSearchTerm] = useState('');
 
+function CollectOrdersPage() {
   const [loading, setLoading] = useState(false);
   const { orders, loadOrders, loadUnPaidOrders } = useOrders();
   const [mall, setMall] = useState("Unilago");
@@ -16,6 +14,7 @@ function CollectOrdersPage() {
     loadUnPaidOrders(newMall);
   };
 
+<<<<<<< HEAD
   const filteredOrders = mergeItemsByClientId(orders).filter((order) =>
     order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.premises.toLowerCase().includes(searchTerm.toLowerCase())
@@ -52,6 +51,10 @@ function CollectOrdersPage() {
   console.log('merged', mergeItemsByClientId(orders));
 
   useEffect(() => {// Iniciar carga al montar el componente
+=======
+  useEffect(() => {
+    onDatePickerChange(); // Iniciar carga al montar el componente
+>>>>>>> parent of e23be0d (collect and collected searchbars)
   }, []);
 
   function renderMain() {
@@ -67,7 +70,7 @@ function CollectOrdersPage() {
       return <h1>No hay órdenes para el día seleccionado</h1>;
     }
 
-    return filteredOrders.map((order) => <OrderCollectCard order={order} key={order.id} />);
+    return orders.map((order) => <OrderCollectCard order={order} key={order.id} />);
   }
 
   return (
@@ -96,7 +99,6 @@ function CollectOrdersPage() {
           </div>
         </div>
       </div>
-      <SearchBar onSearch={setSearchTerm} />
       <div className="bg-green-500 rounded-md grid">{renderMain()}</div>
     </div>
   );

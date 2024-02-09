@@ -3,11 +3,9 @@ import dayjs from "dayjs";
 import OrderCollectCard from "../components/OrderCollectCard";
 import { useOrders } from "../context/OrderProvider";
 import { DatePicker } from "antd";
-import SearchBar from "../components/SearchBar";
 
 function CollectedOrdersPage() {
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const { orders, loadCollectedOrders } = useOrders();
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
@@ -20,11 +18,6 @@ function CollectedOrdersPage() {
       setLoading(false);
     }
   };
-
-  const filteredOrders = orders.filter((order) =>
-    order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.premises.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   useEffect(() => {
     onDatePickerChange(); // Iniciar carga al montar el componente
@@ -43,14 +36,14 @@ function CollectedOrdersPage() {
       return <h1>No hay órdenes para el día seleccionado</h1>;
     }
 
-    return filteredOrders.map((order) => <OrderCollectCard order={order} key={order.id} />);
+    return orders.map((order) => <OrderCollectCard order={order} key={order.id} />);
   }
 
   function calcularTotalesCollectedBy(orders) {
     let totalUnilago = 0;
     let totalAltaTec = 0;
 
-    filteredOrders.forEach(order => {
+    orders.forEach(order => {
       const subtotal = JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
       if (order.collectedBy === "Unilago") {
         totalUnilago += subtotal;
@@ -75,7 +68,6 @@ function CollectedOrdersPage() {
           Total cobrado por Unilago: ${calcularTotalesCollectedBy(orders).totalUnilago} AltaTec: ${calcularTotalesCollectedBy(orders).totalAltaTec}
         </div>
       ) : null}
-      <SearchBar onSearch={setSearchTerm} />
       <div className="bg-white-500 rounded-md grid">{renderMain()}</div>
     </div>
   );

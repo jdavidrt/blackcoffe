@@ -3,11 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { DollarOutlined } from '@ant-design/icons';
 
 function orderCard({ order }) {
-  const { deleteOrder, toggleorderDone } = useOrders();
   const navigate = useNavigate();
 
   const calculateTotal = () => {
-    return (order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
+    return JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
   };
 
   return (

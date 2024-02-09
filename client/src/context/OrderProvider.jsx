@@ -7,7 +7,8 @@ import {
   getOrderRequest,
   updateOrderRequest,
   toggleOrderDoneRequest,
-  getUnpaidOrders
+  getUnpaidOrders,
+  loadUnPaidOrdersbyClient
 } from "../api/orders.api";
 import { OrderContext } from "./OrderContext";
 
@@ -55,6 +56,12 @@ export const OrderContextProvider = ({ children }) => {
     }
   };
 
+
+  async function getUnPaidOrdersbyClient(clientId) {
+    const response = await loadUnPaidOrdersbyClient(clientId);
+    setOrders(response.data);
+  }
+
   const getOrder = async (id) => {
     try {
       const response = await getOrderRequest(id);
@@ -99,7 +106,8 @@ export const OrderContextProvider = ({ children }) => {
         getOrder,
         updateOrder,
         toggleOrderDone,
-        loadUnPaidOrders
+        loadUnPaidOrders,
+        getUnPaidOrdersbyClient
       }}
     >
       {children}
