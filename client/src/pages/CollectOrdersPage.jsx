@@ -14,47 +14,8 @@ function CollectOrdersPage() {
     loadUnPaidOrders(newMall);
   };
 
-<<<<<<< HEAD
-  const filteredOrders = mergeItemsByClientId(orders).filter((order) =>
-    order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.premises.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  function mergeItemsByClientId(orders) {
-    const mergedOrders = orders.reduce((acc, order) => {
-      const existingOrder = acc.find((o) => o.clientId === order.clientId);
-
-      if (existingOrder) {
-        // Si ya existe una orden con el mismo clientId, se concatenan los items
-        existingOrder.items = [...existingOrder.items, ...JSON.parse(order.items)];
-      } else {
-        // Si no existe una orden con el mismo clientId, se agrega la orden al resultado
-        acc.push({
-          clientId: order.clientId,
-          clientName: order.clientName,
-          collectedBy: order.collectedBy,
-          createdAt: order.createdAt,
-          id: order.id,
-          items: JSON.parse(order.items),
-          mall: order.mall,
-          paid: order.paid,
-          premises: order.premises,
-        });
-      }
-
-      return acc;
-    }, []);
-
-    return mergedOrders;
-  }
-
-  console.log('merged', mergeItemsByClientId(orders));
-
-  useEffect(() => {// Iniciar carga al montar el componente
-=======
   useEffect(() => {
     onDatePickerChange(); // Iniciar carga al montar el componente
->>>>>>> parent of e23be0d (collect and collected searchbars)
   }, []);
 
   function renderMain() {
