@@ -17,6 +17,7 @@ import { ProductContextProvider } from "./context/ProductProvider";
 import { UserContextProvider } from "./context/UserProvider";
 import LoginForm from "./pages/LoginForm";
 import Navbar from "./components/Navbar";
+import './fonts/ShareTechMono-Regular.ttf';
 
 function App() {
   // Obtener el valor del usuario desde el localStorage

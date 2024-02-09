@@ -101,7 +101,7 @@ function ClientForm() {
               type="submit"
               disabled={isSubmitting}
               className="block bg-green-500 px-2 py-2 text-white w-full rounded-md">
-              {params.id ? <b className="gray-400">{isSubmitting ? "Guardando cliente..." : "GUARDAR"}</b> : <b className="gray-400">{isSubmitting ? "Guardando cliente..." : "CREAR"}</b>}
+              {params.id ? <b className="gray-400">{isSubmitting ? "Guardando cliente..." : params.id ? "MODIFICAR" : 'CREAR'}</b> : <b className="gray-400">{isSubmitting ? "Guardando cliente..." : "CREAR"}</b>}
             </button>
           </Form>
         )}

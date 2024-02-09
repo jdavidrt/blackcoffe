@@ -9,7 +9,7 @@ function OrdersPage() {
   const { orders, loadOrders } = useOrders();
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
-  const onDatePickerChange = (date, dateString) => {
+  const onDatePickerChange = (dateString) => {
     dateString ? loadOrders(dateString) : loadOrders(fechaActual)
   };
   useEffect(() => {

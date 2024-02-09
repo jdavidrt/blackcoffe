@@ -97,7 +97,6 @@ function OrderForm() {
     loadOrder();
     loadProducts();
   }, []);
-  console.log(client, cart)
 
   return (
     <div>

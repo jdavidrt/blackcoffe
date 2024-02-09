@@ -54,16 +54,10 @@ function Invoice() {
         shopId: "1",
         items: ""
     });
-    const [platformPayment, setPlatformPayment] = useState(false);
-    const fechaActual = dayjs().format('YYYY-MM-DD');
 
     const calculateTotal = () => {
         return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
     };
-
-    function togglePlatform() {
-        setPlatformPayment(!platformPayment); // Cambiar el valor de verdadero a falso y viceversa
-    }
 
     useEffect(() => {
         const loadOrder = async () => {
@@ -72,6 +66,7 @@ function Invoice() {
                 setCart(JSON.parse(order.items))
 
                 setOrder({
+                    orderId: order.id,
                     clientId: order.clientId,
                     shopId: 1,
                     items: cart,
@@ -90,26 +85,76 @@ function Invoice() {
 
     return (
 
-        <div className="invoice">
-            <div className="header">
-                <div className="logo">Black Coffe</div>
-                <div className="company-info">
-                    <div>NIT: 8074330-5</div>
-                    <div>Teléfono: 3505410817</div>
-                </div>
+        <div className="invoice-font w-58  center">
+            <div className="text-center">
+                <div className="font-bold">BLACK COFFE</div>
+                <div>CARLOS GRANDAS</div>
+                <div>NIT: 8074330-5</div>
+                <div>CR 15 77-05 LC 1 101 A</div>
+                <div>Teléfono: 3505410817</div>
+                <div>R 99 PN NO APLICA OTROS</div>
+                <br />
             </div>
             <div className="content">
                 <div className="order-info">
-                    <div>Cliente: {order.clientName} - {order.premises}</div>
-                    <div>Fecha de Creación: {order.createdAt}</div>
-                    <div>Fecha de Pago: {order.paidAt}</div>
-                    <div>Valor Total: ${calculateTotal()}</div>
+                    <div>FACTURA INTERNA DE VENTA No. {order.orderId}</div>
+                    <div>CLIENTE: {order.clientName} - {order.premises}</div>
+                    <div>FECHA: {order.createdAt}</div>
+
                 </div>
+                <br />
+                <td>NOMBRE</td>
+                <td>CANTIDAD</td>
+                <td>VALUR UNI.</td>
+                <td>VALOR TOT.</td>
                 {cart.map((product) => (
-                    <li key={product.id}>
-                        {product.productName} - Cantidad: {product.quantity} - Valor Unitario: ${product.unitValue}
-                    </li>
+                    <tr key={product.id}>
+                        <td>{product.productName}</td>
+                        <td>{product.quantity}</td>
+                        <td>${product.unitValue}</td>
+                        <td>${product.quantity * product.unitValue}</td>
+                        <br />
+                    </tr>
                 ))}
+                <br />
+                <table>
+                    <tbody className="w-full">
+                        <tr>
+                            <td >TOTAL BRUTO:</td>
+                            <td >${calculateTotal()}</td>
+                        </tr>
+                        <tr>
+                            <td >DESCUENTO:</td>
+                            <td >$0</td>
+                        </tr>
+                        <tr>
+                            <td >TOTAL NETO:</td>
+                            <td >${calculateTotal()}</td>
+                        </tr>
+                        <tr>
+                            <td >TOTAL EXENTO:</td>
+                            <td >$0</td>
+                        </tr>
+                        <tr>
+                            <td >BASE INC 0%:</td>
+                            <td >${calculateTotal()}</td>
+                        </tr>
+                        <tr>
+                            <td >INC 0%:</td>
+                            <td >$0</td>
+                        </tr>
+                        <tr>
+                            <td >TOTAL IMPUESTO:</td>
+                            <td >$0</td>
+                        </tr>
+                        <tr>
+                            <td className="py-2 pr-4 text-right font-bold">TOTAL GENERAL:</td>
+                            <td className="py-2 pr-4 text-right font-bold">${calculateTotal()}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <br />
+                CODIGO CIIU: 5613 / 4711
             </div>
         </div>
     );

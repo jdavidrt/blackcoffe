@@ -61,6 +61,7 @@ function ProductForm() {
               className="px-2 py-1 rounded-sm w-full"
               onChange={handleChange}
               value={values.productName}
+              style={{ textTransform: 'uppercase' }}
             />
             <label className="block text-center py-2">Valor unitario del producto: </label>
             <input
@@ -79,7 +80,7 @@ function ProductForm() {
               disabled={isSubmitting}
               className="block bg-green-500 px-2 py-2 text-white w-full rounded-md"
             >
-              <b className="gray-400">{isSubmitting ? "Guardando producto..." : "CREAR"}</b>
+              <b className="gray-400">{isSubmitting ? "Guardando producto..." : params.id ? "MODIFICAR" : 'CREAR'}</b>
             </button>
           </Form>
         )}
