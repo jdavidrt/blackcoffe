@@ -17,7 +17,7 @@ router.get('/collectedOrders/:date', getCollectedOrders);
 
 router.get('/unPaidOrders/:mall', getUnPaidOrders);
 
-router.get('/unPaidOrdersByCLient/:id', getUnPaidOrdersbyClientId);
+router.get('/unPaidOrdersByClient/:id', getUnPaidOrdersbyClientId);
 
 router.get('/order/:id', getOrder);
 
