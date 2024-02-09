@@ -3,8 +3,10 @@ import dayjs from "dayjs";
 import OrderCollectCard from "../components/OrderCollectCard";
 import { useOrders } from "../context/OrderProvider";
 import { DatePicker } from "antd";
-
+import SearchBar from "../components/SearchBar";
 function CollectOrdersPage() {
+  const [searchTerm, setSearchTerm] = useState('');
+
   const [loading, setLoading] = useState(false);
   const { orders, loadOrders } = useOrders();
   const dateFormat = 'YYYY-MM-DD';
@@ -18,6 +20,11 @@ function CollectOrdersPage() {
       setLoading(false);
     }
   };
+
+  const filteredOrders = orders.filter((order) =>
+    order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.premises.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     onDatePickerChange(); // Iniciar carga al montar el componente
@@ -36,7 +43,7 @@ function CollectOrdersPage() {
       return <h1>No hay órdenes para el día seleccionado</h1>;
     }
 
-    return orders.map((order) => <OrderCollectCard order={order} key={order.id} />);
+    return filteredOrders.map((order) => <OrderCollectCard order={order} key={order.id} />);
   }
 
   return (
@@ -47,6 +54,7 @@ function CollectOrdersPage() {
           <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
         </div>
       </div>
+      <SearchBar onSearch={setSearchTerm} />
       <div className="bg-green-500 rounded-md grid">{renderMain()}</div>
     </div>
   );
