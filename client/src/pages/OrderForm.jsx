@@ -118,7 +118,7 @@ function OrderForm() {
         <button type="button" style={{
           backgroundColor: mall === 'Cliente Frecuente' ? '#A6C4F0' : '#F3F1F1',
         }}
-          className="bg-indigo-500 px-2 py-1 text-black rounded-md" onClick={() => selectMall('Cliente Frecuente')}>Cliente Frecuente</button>
+          className="bg-indigo-500 px-2 py-1 text-black rounded-md" onClick={() => selectMall('Cliente Frecuente')}>C.F.</button>
         <div className="px-2" />
         {params.id && !clientChanged ? <Select value={order.premises + ' - ' + order.clientName} onChange={selectClient} showSearch optionFilterProp="children" placeholder="Seleccionar cliente" name="clientId" className="px-2 py-1 rounded-sm w-100%">
           {params.id ? <Select.Option defaultValue={order.premises + ' - ' + order.clientName} selected="selected" title={order.clientId} label={order.clientId} value={order.clientId}>{order.premises} - {order.clientName}</Select.Option> : <Select.Option value={1}> </Select.Option>}
@@ -198,7 +198,7 @@ function OrderForm() {
         }
       </Formik >
       <div>
-        <SearchBar onSearch={setSearchTerm} />
+        <SearchBar onSearch={setSearchTerm} allowClear />
         {filteredProducts.map((product) => (
           <div className="bg-stone-100 rounded-md m-2 flex font-bold" key={product.id}>
             <p className="flex items-center px-2">{product.productName}</p>

@@ -4,10 +4,11 @@ const SearchBar = ({ onSearch }) => {
     return (
         <div className="px-2 py-1">
             <input
-                type="text"
+                type="search"
                 placeholder="Buscar..."
                 onChange={(e) => onSearch(e.target.value)}
                 className="p-2 border rounded-md w-full"
+                allowCLear
             />
         </div>
     );
