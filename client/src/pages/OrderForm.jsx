@@ -24,6 +24,8 @@ function OrderForm() {
   });
   const params = useParams();
   const navigate = useNavigate();
+  const dateFormat = 'YYYY-MM-DD';
+  const fechaActual = dayjs().format('YYYY-MM-DD');
 
   const filteredProducts = products.filter((product) =>
     product.productName.toLowerCase().includes(searchTerm.toLowerCase())
@@ -53,7 +55,7 @@ function OrderForm() {
 
   const handleAddOneToCart = (productId) => {
     const updatedCart = cart.map((item) =>
-      item.id === productId ? { ...item, quantity: item.quantity + 1 } : item
+      item.id === productId ? { ...item, quantity: item.quantity + 1, dateAdded: fechaActual } : item
     );
     setCart(updatedCart);
   };
