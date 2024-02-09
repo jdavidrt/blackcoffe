@@ -12,7 +12,7 @@ function clientCard({ client }) {
       <b><p className="p-2 flex items-center h-content">{client.premises} {client.clientName}</p> </b>
       <div className="p-2 ml-auto">
         <button
-          className="bg-slate-300 px-2 py-1 text-black"
+          className="bg-slate-300 px-2 mx-8 py-1 text-black"
           onClick={() => deleteClient(client.id)}
         >
           <DeleteOutlined />

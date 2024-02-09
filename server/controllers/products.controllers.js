@@ -1,7 +1,7 @@
 import pool from '../db.js'
 
 export const getProducts = async (req, res) => {
-    const [result] = await pool.query("SELECT id, productName , unitValue FROM products ORDER BY createdAt ASC")
+    const [result] = await pool.query("SELECT id, productName , unitValue FROM products ORDER BY productName ASC")
     //console.log(result);
     res.json(result)
 }
