@@ -7,6 +7,13 @@ export const getOrders = async (req, res) => {
     res.json(result)
 }
 
+export const getUnPaidOrders = async (req, res) => {
+    const [result] = await pool.query("select orders.id, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? orders.paid = 0 ORDER BY clients.premises ASC, clients.clientname ASC, orders.createdAt ASC", [
+        req.params.mall,
+    ]);
+    res.json(result)
+}
+
 export const getCollectedOrders = async (req, res) => {
     const [result] = await pool.query("select orders.id, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), CONVERT_TZ(orders.paidAt, '+00:00', '-05:00'), orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) = ? and orders.paid = 1  ORDER BY clients.premises ASC, clients.clientname ASC, orders.createdAt ASC", [
         req.params.date,
