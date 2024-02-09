@@ -88,7 +88,6 @@ function Invoice() {
         <div className="invoice-font w-58  center">
             <div className="text-center">
                 <div className="font-bold">BLACK COFFE</div>
-                <div>CARLOS GRANDAS</div>
                 <div>NIT: 8074330-5</div>
                 <div>CR 15 77-05 LC 1 101 A</div>
                 <div>Teléfono: 3505410817</div>

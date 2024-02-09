@@ -10,9 +10,10 @@ function OrdersPage() {
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
 
-  const onDatePickerChange = async (dateString) => {
+  const onDatePickerChange = async (value, dateString) => {
     setLoading(true);
     try {
+      console.log('date', dateString)
       await loadOrders(dateString || fechaActual);
     } finally {
       setLoading(false);

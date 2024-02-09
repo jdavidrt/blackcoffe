@@ -5,7 +5,6 @@ import { EditOutlined } from '@ant-design/icons';
 function orderCard({ order }) {
   const { deleteOrder, toggleorderDone } = useOrders();
   const navigate = useNavigate();
-  console.log(order)
 
   const calculateTotal = () => {
     return JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
