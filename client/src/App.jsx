@@ -40,7 +40,7 @@ function App() {
                   <Route path="/" element={<OrdersPage />} />
                   <Route path="/iniciarSesion" element={<LoginForm />} />
                   <Route path="/productos" element={<ProductsPage />} />
-                  <Route path="/cobrarOrdenes" element={<CollectOrdersPage />} />
+                  <Route path="/cobrarOrdenes/:mall" element={<CollectOrdersPage />} />
                   <Route path="/ordenesPagas" element={<CollectedOrdersPage />} />
                   <Route path="/clientes" element={<ClientsPage />} />
                   <Route path="/editarProducto/:id" element={<ProductForm />} />

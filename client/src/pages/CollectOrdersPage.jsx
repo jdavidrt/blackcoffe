@@ -3,19 +3,21 @@ import dayjs from "dayjs";
 import OrderCollectCard from "../components/OrderCollectCard";
 import { useOrders } from "../context/OrderProvider";
 import { DatePicker } from "antd";
+import { useParams, useNavigate } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
 function CollectOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
-
+  const params = useParams();
   const [loading, setLoading] = useState(false);
-  const { orders, loadOrders } = useOrders();
+  const { orders, loadUnPaidOrders } = useOrders();
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
+  console.log('PARAMS', params.mall)
 
-  const onDatePickerChange = async (date, dateString) => {
+  const loadOrders = async () => {
     setLoading(true);
     try {
-      await (dateString ? loadOrders(dateString) : loadOrders(fechaActual));
+      await orders(loadUnPaidOrders(params.mall));
     } finally {
       setLoading(false);
     }
@@ -27,7 +29,7 @@ function CollectOrdersPage() {
   );
 
   useEffect(() => {
-    onDatePickerChange(); // Iniciar carga al montar el componente
+    loadOrders(); // Iniciar carga al montar el componente
   }, []);
 
   function renderMain() {
@@ -51,7 +53,6 @@ function CollectOrdersPage() {
       <div className="flex py-2">
         <h4 className="text-xl text-black font-bold text-center">Cuenta de cobro ({orders.length}) </h4>
         <div className="ml-auto">
-          <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
         </div>
       </div>
       <SearchBar onSearch={setSearchTerm} />
