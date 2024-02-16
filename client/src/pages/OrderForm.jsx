@@ -37,7 +37,7 @@ function OrderForm() {
 
     if (existingProduct) {
       const updatedCart = cart.map((item) =>
-        item.id === product.id && item.dateAdded === fechaActual ? { ...item, quantity: item.quantity + 1 } : item
+        item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
       );
       setCart(updatedCart);
     } else {
@@ -56,7 +56,7 @@ function OrderForm() {
 
   const handleAddOneToCart = (productId) => {
     const updatedCart = cart.map((item) =>
-      item.id === productId && item.dateAdded === fechaActual ? { ...item, quantity: item.quantity + 1, dateAdded: fechaActual } : item
+      item.id === productId ? { ...item, quantity: item.quantity + 1 } : item
     );
     setCart(updatedCart);
   };
@@ -71,10 +71,11 @@ function OrderForm() {
 
   const selectClient = async (value) => {
     const newClient = value;
-    getUnPaidOrdersbyClient(value);
-    setCart(JSON.parse(unPaidOrder.items))
+    //setCart([]);
+    await getUnPaidOrdersbyClient(value);
     setClientChanged(true)
     setClient(newClient);
+    //setCart(JSON.parse(unPaidOrder.items))
   };
 
   const calculateTotal = () => {
@@ -100,7 +101,6 @@ function OrderForm() {
     };
     loadOrder();
     loadProducts();
-
   }, []);
 
   return (
@@ -160,6 +160,24 @@ function OrderForm() {
             await updateOrder(params.id, values);
           } else if (unPaidOrder) {
             console.log('unpaid order on this client')
+            const array1 = JSON.parse(values.items);
+            const array2 = JSON.parse(unPaidOrder.items);
+            const mergedJson = array1.concat(array2);
+            const idMap = {};
+            mergedJson.forEach((item) => {
+              const { id, quantity } = item;
+              if (idMap[id]) {
+                // Si ya existe el ID en el mapa, sumar la cantidad
+                idMap[id].quantity += quantity;
+              } else {
+                // Si no existe el ID en el mapa, agregar el elemento al mapa
+                idMap[id] = { ...item };
+              }
+            });
+            const resultArray = Object.values(idMap);
+            console.log('merged items', resultArray)
+            values.items = JSON.stringify(resultArray);
+            setCart(JSON.parse(unPaidOrder.items))
             await updateOrder(unPaidOrder.id, values)
           } else {
             await createOrder(values);
