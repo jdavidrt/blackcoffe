@@ -37,7 +37,7 @@ function OrderForm() {
 
     if (existingProduct) {
       const updatedCart = cart.map((item) =>
-        item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        item.id === product.id && item.dateAdded === fechaActual ? { ...item, quantity: item.quantity + 1 } : item
       );
       setCart(updatedCart);
     } else {
@@ -56,7 +56,7 @@ function OrderForm() {
 
   const handleAddOneToCart = (productId) => {
     const updatedCart = cart.map((item) =>
-      item.id === productId ? { ...item, quantity: item.quantity + 1, dateAdded: fechaActual } : item
+      item.id === productId && item.dateAdded === fechaActual ? { ...item, quantity: item.quantity + 1, dateAdded: fechaActual } : item
     );
     setCart(updatedCart);
   };
@@ -72,6 +72,7 @@ function OrderForm() {
   const selectClient = async (value) => {
     const newClient = value;
     getUnPaidOrdersbyClient(value);
+    setCart(JSON.parse(unPaidOrder.items))
     setClientChanged(true)
     setClient(newClient);
   };
@@ -159,15 +160,6 @@ function OrderForm() {
             await updateOrder(params.id, values);
           } else if (unPaidOrder) {
             console.log('unpaid order on this client')
-            // console.log('values items', values.items)
-            //console.log('unpaid order items', unPaidOrder.items)
-            const array1 = JSON.parse(values.items);
-            const array2 = JSON.parse(unPaidOrder.items);
-
-            // Unir los dos arreglos JSON
-            const mergedJson = array1.concat(array2);
-            console.log('merged items', mergedJson)
-            values.items = JSON.stringify(mergedJson);
             await updateOrder(unPaidOrder.id, values)
           } else {
             await createOrder(values);

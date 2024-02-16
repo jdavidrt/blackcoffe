@@ -107,14 +107,14 @@ function CollectOrderForm() {
             await updateOrder(params.id, values);
           }
           setOrder({ order });
-          navigate("/cobrarOrdenes");
+          navigate("/ordenesPagas");
         }}
       >
         {({ handleChange, handleSubmit, values, isSubmitting }) => (
           <Form
             onSubmit={handleSubmit}
             className="bg-blue-400 rounded-md p-4 mx-auto mt-10">
-            <div className="flex items-center py-1 justify-around ">
+            <div className="grid items-center py-1 ">
               <div>
                 <p className="font-bold">Valor total: ${calculateTotal()}</p>
               </div>

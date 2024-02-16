@@ -30,6 +30,7 @@ export const OrderContextProvider = ({ children }) => {
   }
 
   async function loadCollectedOrders(date) {
+    console.log('fecha', date)
     const response = await getCollectedOrders(date);
     setOrders(response.data);
   }
