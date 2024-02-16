@@ -152,6 +152,9 @@ function CollectOrderForm() {
             {cart.map((item) => (
               <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
                 <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                <p className="p-2 text-sm text-gray-300 flex items-center justify-center font-bold h-content">
+                  {item.id.slice(-14)}
+                </p>
                 <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue}</p>
               </div>
             ))}

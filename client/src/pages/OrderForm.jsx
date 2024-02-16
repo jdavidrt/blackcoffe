@@ -27,12 +27,14 @@ function OrderForm() {
   const navigate = useNavigate();
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
-
+  const fechaProducto = dayjs().format('HH:mm DD/MM/YY');
+  console.log(fechaProducto)
   const filteredProducts = products.filter((product) =>
     product.productName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleAddToCart = (product) => {
+    console.log(product)
     const existingProduct = cart.find((item) => item.id === product.id);
 
     if (existingProduct) {
@@ -208,6 +210,9 @@ function OrderForm() {
             {cart.map((item) => (
               <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
                 <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                <p className="p-2 text-sm text-gray-300 flex items-center justify-center font-bold h-content">
+                  {item.id.slice(-14)}
+                </p>
                 <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue}</p>
 
                 <p className="">
@@ -227,11 +232,12 @@ function OrderForm() {
       <div>
         <SearchBar onSearch={setSearchTerm} />
         {filteredProducts.map((product) => (
-          <div className="bg-stone-100 rounded-md m-2 flex font-bold" key={product.id}>
+          <div className="bg-stone-100 rounded-md m-2 flex font-bold" key={(product.id)}>
             <p className="flex items-center px-2">{product.productName}</p>
             <p className="flex items-center sticky right-0 text-green-500 px-2 py-1 ml-auto">${product.unitValue}</p>
             <p className="">
-              <button className="px-2" type="button" onClick={() => handleAddToCart(product)}><PlusCircleOutlined style={{
+              <button className="px-2" type="button" onClick={() => handleAddToCart({ ...product, id: product.id + ' ' + fechaProducto })}
+              ><PlusCircleOutlined style={{
                 verticalAlign: 'middle'
               }} /></button>
             </p>
