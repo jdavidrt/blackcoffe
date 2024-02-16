@@ -10,14 +10,12 @@ function CollectOrdersPage() {
   const params = useParams();
   const [loading, setLoading] = useState(false);
   const { orders, loadUnPaidOrders } = useOrders();
-  const dateFormat = 'YYYY-MM-DD';
-  const fechaActual = dayjs().format('YYYY-MM-DD');
-  console.log('PARAMS', params.mall)
 
-  const loadOrders = async () => {
+  const loadOrders = async (mall) => {
+    //console.log('PARAMS', params.mall)    
     setLoading(true);
     try {
-      await orders(loadUnPaidOrders(params.mall));
+      await loadUnPaidOrders(mall);
     } finally {
       setLoading(false);
     }
@@ -29,8 +27,8 @@ function CollectOrdersPage() {
   );
 
   useEffect(() => {
-    loadOrders(); // Iniciar carga al montar el componente
-  }, []);
+    loadOrders(params.mall);
+  }, [params.mall]);
 
   function renderMain() {
     if (loading) {
@@ -51,7 +49,7 @@ function CollectOrdersPage() {
   return (
     <div className="bg-slate-200 h-dvh rounded-md">
       <div className="flex py-2">
-        <h4 className="text-xl text-black font-bold text-center">Cuenta de cobro ({orders.length}) </h4>
+        <h4 className="text-xl text-black font-bold text-center">Cuenta de cobro ({orders.length}) - {params.mall} </h4>
         <div className="ml-auto">
         </div>
       </div>

@@ -9,8 +9,6 @@ function OrdersPage() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { orders, loadOrders } = useOrders();
-  const dateFormat = 'YYYY-MM-DD';
-  const fechaActual = dayjs().format('YYYY-MM-DD');
 
   const loadOrdersS = async (value, dateString) => {
     setLoading(true);
