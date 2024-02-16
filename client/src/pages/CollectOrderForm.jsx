@@ -10,6 +10,7 @@ function CollectOrderForm() {
   const { getOrder, updateOrder } = useOrders();
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
+  const [deposit, setDeposit] = useState();
   const [order, setOrder] = useState({
     clientId: "",
     shopId: "1",
@@ -19,6 +20,7 @@ function CollectOrderForm() {
   const navigate = useNavigate();
   const [platformPayment, setPlatformPayment] = useState(false);
   const fechaActual = dayjs().format('YYYY-MM-DD');
+  var depositedTotal = false;
 
   const calculateTotal = () => {
     return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
@@ -26,6 +28,12 @@ function CollectOrderForm() {
 
   function togglePlatform() {
     setPlatformPayment(!platformPayment); // Cambiar el valor de verdadero a falso y viceversa
+  }
+
+  function depositTotal() {
+    console.log('deposit total')
+    depositedTotal = true;
+    setDeposit(calculateTotal() - order.deposit)
   }
   console.log(params.id)
   useEffect(() => {
@@ -86,11 +94,19 @@ function CollectOrderForm() {
           values.shopId = 1;
           values.clientId = client;
           values.items = JSON.stringify(cart)
-          if (values.deposit == calculateTotal()) {
+          if (depositedTotal) {
+            values.deposit = calculateTotal()
+            console.log(values.deposit)
+          } else {
+            values.deposit = values.deposit + order.deposit
+          }
+          if (values.deposit >= calculateTotal()) {
+            console.log('ORDEN PAGAAAAA')
             values.paid = 1;
           } else {
             values.paid = 0;
           }
+
 
           values.paidAt = fechaActual;
           if (platformPayment) {
@@ -107,7 +123,7 @@ function CollectOrderForm() {
             await updateOrder(params.id, values);
           }
           setOrder({ order });
-          navigate("/ordenesPagas");
+          navigate(-1);
         }}
       >
         {({ handleChange, handleSubmit, values, isSubmitting }) => (
@@ -138,8 +154,15 @@ function CollectOrderForm() {
                   placeholder="Ej: $10.000"
                   className="m-2 px-2 py-1 rounded-sm rounded"
                   onChange={handleChange}
-                  value={values.deposit}
+                  value={deposit}
                 />
+                  <button
+                    type="button"
+                    onClick={depositTotal}
+                    disabled={isSubmitting}
+                    className="block bg-indigo-500 my-1 px-2 py-1 text-white w-20% rounded-md ml-auto"  >
+                    Cobrar Total
+                  </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
