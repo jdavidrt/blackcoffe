@@ -6,7 +6,6 @@ import {
   createOrderRequest,
   getOrderRequest,
   updateOrderRequest,
-  toggleOrderDoneRequest,
   getUnpaidOrders,
   loadUnPaidOrdersbyClient
 } from "../api/orders.api";
@@ -23,6 +22,7 @@ export const useOrders = () => {
 
 export const OrderContextProvider = ({ children }) => {
   const [orders, setOrders] = useState([]);
+  var [unPaidOrder, setUnPaidOrder] = useState([]);
 
   async function loadOrders(date) {
     const response = await getOrdersRequest(date);
@@ -60,7 +60,12 @@ export const OrderContextProvider = ({ children }) => {
 
   async function getUnPaidOrdersbyClient(clientId) {
     const response = await loadUnPaidOrdersbyClient(clientId);
-    setOrders(response.data);
+    if (response.data.length > 0) {
+      setUnPaidOrder(response.data[0]);
+    } else {
+      setUnPaidOrder(false)
+    }
+    console.log('unpaidord', unPaidOrder)
   }
 
   const getOrder = async (id) => {
@@ -81,32 +86,17 @@ export const OrderContextProvider = ({ children }) => {
       console.error(error);
     }
   };
-
-  const toggleOrderDone = async (id) => {
-    try {
-      const orderFound = orders.find((order) => order.id === id);
-      await toggleOrderDoneRequest(id, orderFound.done === 0 ? true : false);
-      setOrders(
-        orders.map((order) =>
-          order.id === id ? { ...order, done: !order.done } : order
-        )
-      );
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   return (
     <OrderContext.Provider
       value={{
         orders,
+        unPaidOrder,
         loadOrders,
         loadCollectedOrders,
         deleteOrder,
         createOrder,
         getOrder,
         updateOrder,
-        toggleOrderDone,
         loadUnPaidOrders,
         getUnPaidOrdersbyClient
       }}

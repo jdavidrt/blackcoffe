@@ -10,8 +10,8 @@ import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
 
 function OrderForm() {
-  const { createOrder, getOrder, updateOrder } = useOrders();
-  const { products, loadProducts } = useProducts();
+  const { unPaidOrder, createOrder, getOrder, updateOrder, getUnPaidOrdersbyClient } = useOrders();
+  const { products, loadProducts, } = useProducts();
   const { clients, loadClients } = useClients()
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
@@ -69,9 +69,9 @@ function OrderForm() {
     loadClients(newMall);
   };
 
-  const selectClient = (value) => {
+  const selectClient = async (value) => {
     const newClient = value;
-    console.log('clientSelected', newClient)
+    getUnPaidOrdersbyClient(value);
     setClientChanged(true)
     setClient(newClient);
   };
@@ -99,6 +99,7 @@ function OrderForm() {
     };
     loadOrder();
     loadProducts();
+
   }, []);
 
   return (
@@ -149,12 +150,25 @@ function OrderForm() {
         onSubmit={async (values, actions) => {
           values.shopId = 1;
           values.clientId = client;
+          getUnPaidOrdersbyClient(client);
           values.items = JSON.stringify(cart)
           //console.log('values', values);
           if (params.id) {
             delete values.clientName;
             delete values.premises;
             await updateOrder(params.id, values);
+          } else if (unPaidOrder) {
+            console.log('unpaid order on this client')
+            // console.log('values items', values.items)
+            //console.log('unpaid order items', unPaidOrder.items)
+            const array1 = JSON.parse(values.items);
+            const array2 = JSON.parse(unPaidOrder.items);
+
+            // Unir los dos arreglos JSON
+            const mergedJson = array1.concat(array2);
+            console.log('merged items', mergedJson)
+            values.items = JSON.stringify(mergedJson);
+            await updateOrder(unPaidOrder.id, values)
           } else {
             await createOrder(values);
           }
