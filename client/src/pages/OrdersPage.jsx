@@ -38,7 +38,7 @@ function OrdersPage() {
     }
 
     if (orders.length === 0) {
-      return <h1>No hay órdenes para el día seleccionado</h1>;
+      return <h1>No hay órdenes nuevas</h1>;
     }
 
     return filteredOrders.map((order) => <OrderCard order={order} key={order.id} />);
