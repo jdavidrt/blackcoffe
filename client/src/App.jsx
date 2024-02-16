@@ -24,9 +24,10 @@ function App() {
   const navigate = useNavigate();
   //console.log('app', localStorage.getItem('user'));
   useEffect(() => {
+    console.log(localStorage.getItem('user'))
     if (!window.location.pathname.includes("/iniciarSesion") && localStorage.getItem('user') === "") {
       navigate("/iniciarSesion")
-    } else if (localStorage.getItem('user') === "") {
+    } else if (localStorage.getItem('user') === null || localStorage.getItem('user') === "") {
       navigate("/iniciarSesion")
     }
   }, [window.location.pathname]);
