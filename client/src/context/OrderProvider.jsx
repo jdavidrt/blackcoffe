@@ -24,8 +24,8 @@ export const OrderContextProvider = ({ children }) => {
   const [orders, setOrders] = useState([]);
   var [unPaidOrder, setUnPaidOrder] = useState([]);
 
-  async function loadOrders(date) {
-    const response = await getOrdersRequest(date);
+  async function loadOrders() {
+    const response = await getOrdersRequest();
     setOrders(response.data);
   }
 

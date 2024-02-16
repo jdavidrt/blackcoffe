@@ -12,11 +12,10 @@ function OrdersPage() {
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
 
-  const onDatePickerChange = async (value, dateString) => {
+  const loadOrdersS = async (value, dateString) => {
     setLoading(true);
     try {
-      console.log('date', dateString)
-      await loadOrders(dateString || fechaActual);
+      await loadOrders();
     } finally {
       setLoading(false);
     }
@@ -28,7 +27,7 @@ function OrdersPage() {
   );
 
   useEffect(() => {
-    onDatePickerChange(); // Iniciar carga al montar el componente
+    loadOrdersS(); // Iniciar carga al montar el componente
   }, []);
 
   function renderMain() {
@@ -52,7 +51,6 @@ function OrdersPage() {
       <div className="flex py-2">
         <h4 className="text-xl text-black font-bold text-center">Órdenes por cobrar ({filteredOrders.length}) </h4>
         <div className="ml-auto">
-          <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
         </div>
       </div>
       <SearchBar onSearch={setSearchTerm} />

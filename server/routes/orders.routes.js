@@ -11,7 +11,7 @@ import {
 } from "../controllers/orders.controllers.js"
 const router = Router();
 
-router.get('/orders/:date', getOrders);
+router.get('/orders/', getOrders);
 
 router.get('/collectedOrders/:date', getCollectedOrders);
 
