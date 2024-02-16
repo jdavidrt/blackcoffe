@@ -39,7 +39,7 @@ function CollectOrdersPage() {
     }
 
     if (orders.length === 0) {
-      return <h1>No hay órdenes para el día seleccionado</h1>;
+      return <h1>No hay órdenes por cobrar para el centro comercial seleccionado</h1>;
     }
 
     return filteredOrders.map((order) => <OrderCollectCard order={order} key={order.id} />);

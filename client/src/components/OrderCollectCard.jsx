@@ -13,7 +13,7 @@ function orderCard({ order }) {
     <div className="flex bg-stone-100 text-black rounded-md m-2">
       <span>{order.createAt}</span>
       <b>
-        <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}  {order.collectedBy ? ' - Cobrado por: ' + order.collectedBy : ""}</p></b>
+        <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p></b>
       <div className="flex p-2 ml-auto">
         <b><p className="text-green-500 px-2">${calculateTotal()}</p></b>
         <button

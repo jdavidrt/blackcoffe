@@ -48,7 +48,7 @@ function CollectOrderForm() {
             paid: order.paid,
             paidAt: order.paidAt.slice(0, 10),
             deposit: order.deposit,
-            collectedBy: localStorage.getItem('user')
+            collectedBy: order.mall
           });
         } else {
           setOrder({
@@ -60,7 +60,7 @@ function CollectOrderForm() {
             createdAt: order.createdAt.slice(0, 10),
             paid: order.paid,
             deposit: order.deposit,
-            collectedBy: localStorage.getItem('user')
+            collectedBy: order.mall
           });
         }
 
@@ -125,7 +125,7 @@ function CollectOrderForm() {
               {order.paid ? <><button
                 type="button"
                 onClick={() => navigate(`../pdfOrden/` + params.id)}
-                className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
+                className="block bg-indigo-500 px-2 my-2 py-1 text-white w-20% rounded-md ml-auto"              >
                 {'Generar Factura'}
               </button><button
                 type="button"

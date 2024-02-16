@@ -49,7 +49,7 @@ function CollectedOrdersPage() {
       const subtotal = JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
       if (order.collectedBy === "Unilago") {
         totalUnilago += subtotal;
-      } else if (order.collectedBy === "AltaTec") {
+      } else if (order.collectedBy === "Alta Tecnología") {
         totalAltaTec += subtotal;
       }
     });
@@ -67,7 +67,7 @@ function CollectedOrdersPage() {
       </div>
       {orders.length !== 0 ? (
         <div>
-          Total cobrado por Unilago: ${calcularTotalesCollectedBy(orders).totalUnilago} AltaTec: ${calcularTotalesCollectedBy(orders).totalAltaTec}
+          Total cobrado en Unilago: ${calcularTotalesCollectedBy(orders).totalUnilago} AltaTec: ${calcularTotalesCollectedBy(orders).totalAltaTec}
         </div>
       ) : null}
       <div className="bg-white-500 rounded-md grid">{renderMain()}</div>
