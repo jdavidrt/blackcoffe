@@ -12,7 +12,6 @@ function CollectOrdersPage() {
   const { orders, loadUnPaidOrders } = useOrders();
 
   const loadOrders = async (mall) => {
-    //console.log('PARAMS', params.mall)    
     setLoading(true);
     try {
       await loadUnPaidOrders(mall);
