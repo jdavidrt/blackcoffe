@@ -24,7 +24,7 @@ function App() {
   const navigate = useNavigate();
   //console.log('app', localStorage.getItem('user'));
   useEffect(() => {
-    if (!window.location.pathname.includes("/iniciarSesion") || localStorage.getItem('user') == "") (
+    if (!window.location.pathname.includes("/iniciarSesion") && localStorage.getItem('user') === "") (
       navigate("/iniciarSesion")
     )
   }, [window.location.pathname]);
