@@ -64,7 +64,7 @@ function Navbar() {
           <Link onClick={toggleMenu} to="/cobrarOrdenes/Unilago" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Unilago</Link>
         </li>
         <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/cobrarOrdenes/Alta Tecnología" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Alta Tecnologia</Link>
+          <Link onClick={toggleMenu} to="/cobrarOrdenes/Alta Tecnología" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Alta Tecnología</Link>
         </li>
         <li className="mb-1 flex items-center">
           <Link onClick={toggleMenu} to="/ordenesPagas" className="text-white hover:text-black bg-gray-500 rounded px-3 py-2">Cuentas al día</Link>
