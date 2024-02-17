@@ -31,11 +31,9 @@ function CollectOrderForm() {
   }
 
   function depositTotal() {
-    console.log('deposit total')
     setDepositedTotal(true);
     setDeposit(calculateTotal() - order.deposit)
   }
-  console.log(params.id)
   useEffect(() => {
     const loadOrder = async () => {
       if (params.id) {
@@ -76,7 +74,6 @@ function CollectOrderForm() {
     };
     loadOrder();
   }, []);
-  console.log('orderdep', order.deposit)
 
   return (
     <div>
@@ -97,12 +94,10 @@ function CollectOrderForm() {
           values.items = JSON.stringify(cart)
           if (depositedTotal) {
             values.deposit = order.deposit + deposit
-            console.log('ordermasdepo', values.deposit)
           } else {
             values.deposit = values.deposit + order.deposit
           }
           if (values.deposit >= calculateTotal()) {
-            console.log('ORDEN PAGAAAAA')
             values.paid = 1;
           } else {
             values.paid = 0;
@@ -112,7 +107,6 @@ function CollectOrderForm() {
           if (platformPayment) {
             values.paymentMethod = 'Plataforma'
           }
-          //console.log('values', values);
           if (params.id) {
             delete values.clientName;
             delete values.premises;
@@ -120,8 +114,8 @@ function CollectOrderForm() {
             delete values.clientId;
             delete values.items;
             delete values.shopId;
-            console.log('valu dep', values.deposit)
             await updateOrder(params.id, values);
+            navigate(-1);
           }
           setOrder({ order });
           navigate(-1);
@@ -134,8 +128,8 @@ function CollectOrderForm() {
             <div className="grid items-center py-1 ">
               <div>
                 <p className="text-white-400">Valor total: ${calculateTotal()}</p>
-                <p className="font-bold">Abonado: ${order.deposit}</p>
-                <p className="text-red-600 font-bold">Debe: ${calculateTotal() - order.deposit}</p>
+                {order.deposit && calculateTotal() - order.deposit ? <p className="font-bold">Abonado: ${order.deposit}</p> : ''}
+                {calculateTotal() - order.deposit ? <p className="text-red-600 font-bold">Debe: ${calculateTotal() - order.deposit}</p> : ''}
               </div>
               {!platformPayment && order.paid ? '' : <button type="button" style={{
                 backgroundColor: platformPayment == true ? '#A6C4F0' : '#F3F1F1',
