@@ -1,7 +1,7 @@
 import pool from '../db.js'
 
 export const getDeposits = async (req, res) => {
-    const [result] = await pool.query("SELECT * FROM deposits join orders on orders.id = deposits.orderId ORDER BY deposits.createdAt ASC")
+    const [result] = await pool.query("SELECT * FROM deposits join orders on orders.id = deposits.orderId ORDER BY deposits.depositCreatedAt ASC")
     res.json(result)
 }
 export const getDepositsByOrder = async (req, res) => {
