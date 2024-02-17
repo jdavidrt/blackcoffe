@@ -8,7 +8,7 @@ const router = Router();
 
 router.get('/deposits', getDeposits);
 
-router.get('/deposits/id', getDepositsByOrder);
+router.get('/deposits/:id', getDepositsByOrder);
 
 router.post('/deposits', createDeposit);
 
