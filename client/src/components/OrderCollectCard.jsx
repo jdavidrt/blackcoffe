@@ -11,7 +11,7 @@ function orderCard({ order }) {
   console.log(order)
   return (
     <div className="flex bg-stone-100 text-black rounded-md m-2">
-      <span>{order.createAt} ASDASDASD</span>
+      <span>{order.createAt}</span>
       <b>
         <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p></b>
       <div className="flex p-2 ml-auto">
