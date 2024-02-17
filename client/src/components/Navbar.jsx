@@ -58,6 +58,15 @@ function Navbar() {
           <Link onClick={toggleMenu} to="/" className="text-white hover:text-black bg-yellow-700 rounded px-3 py-2">Cuentas por cobrar</Link>
         </li>
         <li className="mb-1 flex items-center">
+          <Link onClick={toggleMenu} to="/" className="text-white hover:text-black bg-yellow-700 rounded px-3 py-2">CasdasdQWEQWEE</Link>
+        </li>
+        <li className="mb-1 flex items-center">
+          <Link onClick={toggleMenu} to="/" className="text-white hover:text-black bg-yellow-700 rounded px-3 py-2">CasdasdQWEQWEE</Link>
+        </li>
+        <li className="mb-1 flex items-center">
+          <Link onClick={toggleMenu} to="/" className="text-white hover:text-black bg-yellow-700 rounded px-3 py-2">CasdasdQWEQWEE</Link>
+        </li>
+        <li className="mb-1 flex items-center">
           <Link onClick={toggleMenu} to="/nuevaOrden" className="text-white hover:text-black bg-emerald-900 rounded px-3 py-2">Nueva Orden</Link>
         </li>
         <li className="mb-1 flex items-center">
