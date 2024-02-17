@@ -1,0 +1,28 @@
+import pool from '../db.js'
+
+export const getDeposits = async (req, res) => {
+    const [result] = await pool.query("SELECT * FROM deposits ORDER BY createdAt ASC")
+    res.json(result)
+}
+export const getDepositsByOrder = async (req, res) => {
+    try {
+        const [result] = await pool.query("SELECT * FROM deposits WHERE orderId = ?", [
+            req.params.id,
+        ]);
+
+        if (result.length === 0)
+            return res.status(404).json({ message: "Deposito no encontrado" });
+
+        res.json(result[0]);
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+}
+export const createDeposit = async (req, res) => {
+    try {
+        const result = await pool.query("INSERT INTO deposits SET ?", req.body);
+        res.json(result);
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+}

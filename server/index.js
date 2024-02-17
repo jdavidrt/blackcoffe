@@ -9,6 +9,7 @@ import ordersRoutes from "./routes/orders.routes.js";
 import productRoutes from "./routes/products.routes.js";
 import clientRoutes from "./routes/clients.routes.js";
 import userRoutes from "./routes/users.routes.js";
+import depositRoutes from "./routes/deposits.routes.js";
 
 
 const app = express();
@@ -18,6 +19,7 @@ app.use(express.json())
 app.use(indexRoutes)
 app.use(ordersRoutes)
 app.use(productRoutes)
+app.use(depositRoutes)
 app.use(clientRoutes)
 app.use(userRoutes)
 app.use(express.static(join(__dirname, '../client/dist')))

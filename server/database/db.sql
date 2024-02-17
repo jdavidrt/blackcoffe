@@ -35,6 +35,18 @@ CREATE TABLE users (
     pass VARCHAR(50)
 );
 
+CREATE TABLE deposits (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,    
+    orderId INT NOT NULL,
+    clientId INT NOT NULL,
+    paymentMethod VARCHAR(20),
+    depositValue INT NOT NULL,
+    lastDeposit INT NOT NULL,
+    newDeposit INT NOT NULL
+);
+
+
 INSERT INTO clients (premises, clientName, mall, phoneNumber) VALUES
 (126, 'Alex', 'Unilago', 3008223400),
 (127, 'Alex', 'Unilago', 3194014051),
