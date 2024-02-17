@@ -1,12 +1,12 @@
 import pool from '../db.js'
 
 export const getDeposits = async (req, res) => {
-    const [result] = await pool.query("SELECT * FROM deposits ORDER BY createdAt ASC")
+    const [result] = await pool.query("SELECT * FROM deposits join orders on orders.id = deposits.orderId ORDER BY deposits.createdAt ASC")
     res.json(result)
 }
 export const getDepositsByOrder = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT * FROM deposits WHERE orderId = ?", [
+        const [result] = await pool.query("SELECT * FROM deposits join orders on orders.id = deposits.orderId WHERE deposits.orderId = ?", [
             req.params.id,
         ]);
 
