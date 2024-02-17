@@ -210,10 +210,10 @@ function CollectOrderForm() {
                 <tbody>
                   {deposits.map((deposit) => (
                     <tr key={deposit.depositId} className="bg-stone-100 text-gray-700">
-                      <td className="text-green-400 px-2 py-1">+${deposit.depositValue}</td>
-                      <td className="px-2 py-1">${deposit.lastDeposit}</td>
-                      <td className="px-2 py-1">${deposit.newDeposit}</td>
-                      <td className="px-2 py-1">{deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}</td>
+                      <td className="text-green-400 px-2 py-1 text-center">+${deposit.depositValue}</td>
+                      <td className="px-2 py-1 text-center">${deposit.lastDeposit}</td>
+                      <td className="px-2 py-1 text-center">${deposit.newDeposit}</td>
+                      <td className="px-2 py-1 text-center">{deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}</td>
                     </tr>
                   ))}
                 </tbody>
