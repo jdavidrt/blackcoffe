@@ -15,6 +15,7 @@ import { OrderContextProvider } from "./context/OrderProvider";
 import { ClientContextProvider } from "./context/ClientProvider";
 import { ProductContextProvider } from "./context/ProductProvider";
 import { UserContextProvider } from "./context/UserProvider";
+import { DepositContextProvider } from "./context/DepositsProvider";
 import LoginForm from "./pages/LoginForm";
 import Navbar from "./components/Navbar";
 import './fonts/ShareTechMono-Regular.ttf';
@@ -39,23 +40,25 @@ function App() {
           <ClientContextProvider>
             <ProductContextProvider>
               <OrderContextProvider>
-                <Routes>
-                  <Route path="/" element={<OrdersPage />} />
-                  <Route path="/iniciarSesion" element={<LoginForm />} />
-                  <Route path="/productos" element={<ProductsPage />} />
-                  <Route path="/cobrarOrdenes/:mall" element={<CollectOrdersPage />} />
-                  <Route path="/ordenesPagas" element={<CollectedOrdersPage />} />
-                  <Route path="/clientes" element={<ClientsPage />} />
-                  <Route path="/editarProducto/:id" element={<ProductForm />} />
-                  <Route path="/editarCliente/:id" element={<ClientForm />} />
-                  <Route path="/nuevaOrden" element={<OrderForm />} />
-                  <Route path="/nuevoCliente" element={<ClientForm />} />
-                  <Route path="/nuevoProducto" element={<ProductForm />} />
-                  <Route path="/editarOrden/:id" element={<OrderForm />} />
-                  <Route path="/cobrarOrden/:id" element={<CollectOrderForm />} />
-                  <Route path="/pdfOrden/:id" element={<Invoice />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
+                <DepositContextProvider>
+                  <Routes>
+                    <Route path="/" element={<OrdersPage />} />
+                    <Route path="/iniciarSesion" element={<LoginForm />} />
+                    <Route path="/productos" element={<ProductsPage />} />
+                    <Route path="/cobrarOrdenes/:mall" element={<CollectOrdersPage />} />
+                    <Route path="/ordenesPagas" element={<CollectedOrdersPage />} />
+                    <Route path="/clientes" element={<ClientsPage />} />
+                    <Route path="/editarProducto/:id" element={<ProductForm />} />
+                    <Route path="/editarCliente/:id" element={<ClientForm />} />
+                    <Route path="/nuevaOrden" element={<OrderForm />} />
+                    <Route path="/nuevoCliente" element={<ClientForm />} />
+                    <Route path="/nuevoProducto" element={<ProductForm />} />
+                    <Route path="/editarOrden/:id" element={<OrderForm />} />
+                    <Route path="/cobrarOrden/:id" element={<CollectOrderForm />} />
+                    <Route path="/pdfOrden/:id" element={<Invoice />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </DepositContextProvider>
               </OrderContextProvider>
             </ProductContextProvider>
           </ClientContextProvider>

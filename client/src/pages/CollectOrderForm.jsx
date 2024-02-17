@@ -1,13 +1,16 @@
 import { Form, Formik } from "formik";
 import { useOrders } from "../context/OrderProvider";
+import { useDeposits } from "../context/DepositsProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { calc } from "antd/es/theme/internal";
 
+
 function CollectOrderForm() {
 
   const { getOrder, updateOrder } = useOrders();
+  const { getDepositsByOrderId, createDeposit } = useOrders();
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
   const [deposit, setDeposit] = useState(0);
@@ -92,6 +95,16 @@ function CollectOrderForm() {
           values.shopId = 1;
           values.clientId = client;
           values.items = JSON.stringify(cart)
+          if (values.deposit) {
+            var neewDeposit = {};
+            neewDeposit.orderId = params.id;
+            neewDeposit.clientId = values.clientId;
+            { values.paymentMethod ? neewDeposit.paymentMethod = values.paymentMethod : neewDeposit.paymentMethod = 'Efectivo' }
+            neewDeposit.depositValue = values.deposit
+            neewDeposit.lastDeposit = order.deposit
+            neewDeposit.newDeposit = values.deposit + order.deposit
+            createDeposit(neewDeposit)
+          }
           if (depositedTotal) {
             values.deposit = order.deposit + deposit
           } else {
@@ -107,6 +120,7 @@ function CollectOrderForm() {
           if (platformPayment) {
             values.paymentMethod = 'Plataforma'
           }
+
           if (params.id) {
             delete values.clientName;
             delete values.premises;
