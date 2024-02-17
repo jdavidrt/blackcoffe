@@ -9,10 +9,8 @@ export const getDepositsByOrder = async (req, res) => {
         const [result] = await pool.query("SELECT *, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt FROM deposits join orders on orders.id = deposits.orderId WHERE deposits.orderId = ?", [
             req.params.id,
         ]);
-
         if (result.length === 0)
             return res.status(404).json({ message: "Deposito no encontrado" });
-
         res.json(result);
     } catch (error) {
         return res.status(500).json({ message: error.message });

@@ -19,6 +19,7 @@ function CollectOrderForm() {
     shopId: "1",
     items: ""
   });
+  const [deposits, setDeposits] = useState([]);
   const params = useParams();
   const navigate = useNavigate();
   const [platformPayment, setPlatformPayment] = useState(false);
@@ -41,7 +42,9 @@ function CollectOrderForm() {
     const loadOrder = async () => {
       if (params.id) {
         const order = await getOrder(params.id);
-
+        const depositsRequest = await getDepositsByOrderId(params.id);
+        setDeposits(depositsRequest);
+        console.log(deposits)
         setCart(JSON.parse(order.items))
         if (order.paymentMethod == "Plataforma") {
           togglePlatform(true)
@@ -95,22 +98,23 @@ function CollectOrderForm() {
           values.shopId = 1;
           values.clientId = client;
           values.items = JSON.stringify(cart)
-          if (values.deposit) {
+          if (values.deposit || deposit) {
+            console.log()
             var neewDeposit = {};
             neewDeposit.orderId = params.id;
             neewDeposit.clientId = order.clientId;
             { values.paymentMethod ? neewDeposit.paymentMethod = values.paymentMethod : neewDeposit.paymentMethod = 'Efectivo' };
-            neewDeposit.depositValue = values.deposit;
-            neewDeposit.lastDeposit = order.deposit;
-            neewDeposit.newDeposit = values.deposit + order.deposit;
+            { depositedTotal ? neewDeposit.depositValue = deposit : neewDeposit.depositValue = values.deposit }
+            { order.deposit ? neewDeposit.lastDeposit = order.deposit : neewDeposit.lastDeposit = 0 };
+            { depositedTotal ? neewDeposit.newDeposit = order.deposit + deposit : neewDeposit.newDeposit = values.deposit + order.deposit }
             await createDeposit(neewDeposit);
           }
-
           if (depositedTotal) {
             values.deposit = order.deposit + deposit
           } else {
             values.deposit = values.deposit + order.deposit
           }
+
           if (values.deposit >= calculateTotal()) {
             values.paid = 1;
           } else {
@@ -141,7 +145,7 @@ function CollectOrderForm() {
             className="bg-blue-400 rounded-md p-4 mx-auto mt-10">
             <div className="grid items-center py-1 ">
               <div>
-                <p className="text-white-400">Valor total: ${calculateTotal()}</p>
+                <p className="text-white-400"><b>Valor total: ${calculateTotal()}</b></p>
                 {order.deposit && calculateTotal() - order.deposit ? <p className="font-bold">Abonado: ${order.deposit}</p> : ''}
                 {calculateTotal() - order.deposit ? <p className="text-red-600 font-bold">Debe: ${calculateTotal() - order.deposit}</p> : ''}
               </div>
@@ -192,6 +196,30 @@ function CollectOrderForm() {
                 <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue}</p>
               </div>
             ))}
+            {deposits ? <>
+              <h3>Abonos de esta orden:</h3>
+              <table className="border-collapse w-full border-2 border-gray-500 m-2">
+                <thead>
+                  <tr className="bg-stone-200 text-gray-700 font-bold">
+                    <th className="px-2 py-1">Valor de Abono</th>
+                    <th className="px-2 py-1">Valor Abonado Anterior</th>
+                    <th className="px-2 py-1">Nuevo Abono de la Orden</th>
+                    <th className="px-2 py-1">Fecha Abono</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deposits.map((deposit) => (
+                    <tr key={deposit.depositId} className="bg-stone-100 text-gray-700">
+                      <td className="text-green-400 px-2 py-1">+${deposit.depositValue}</td>
+                      <td className="px-2 py-1">${deposit.lastDeposit}</td>
+                      <td className="px-2 py-1">${deposit.newDeposit}</td>
+                      <td className="px-2 py-1">{deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+              : ''}
           </Form>
         )
         }
