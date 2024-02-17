@@ -10,7 +10,7 @@ function CollectOrderForm() {
   const { getOrder, updateOrder } = useOrders();
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
-  const [deposit, setDeposit] = useState();
+  const [deposit, setDeposit] = useState(0);
   const [order, setOrder] = useState({
     clientId: "",
     shopId: "1",
@@ -20,7 +20,7 @@ function CollectOrderForm() {
   const navigate = useNavigate();
   const [platformPayment, setPlatformPayment] = useState(false);
   const fechaActual = dayjs().format('YYYY-MM-DD');
-  var depositedTotal = false;
+  const [depositedTotal, setDepositedTotal] = useState(false);
 
   const calculateTotal = () => {
     return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
@@ -32,7 +32,7 @@ function CollectOrderForm() {
 
   function depositTotal() {
     console.log('deposit total')
-    depositedTotal = true;
+    setDepositedTotal(true);
     setDeposit(calculateTotal() - order.deposit)
   }
   console.log(params.id)
@@ -76,6 +76,7 @@ function CollectOrderForm() {
     };
     loadOrder();
   }, []);
+  console.log('orderdep', order.deposit)
 
   return (
     <div>
@@ -95,8 +96,8 @@ function CollectOrderForm() {
           values.clientId = client;
           values.items = JSON.stringify(cart)
           if (depositedTotal) {
-            values.deposit = calculateTotal()
-            console.log(values.deposit)
+            values.deposit = order.deposit + deposit
+            console.log('ordermasdepo', values.deposit)
           } else {
             values.deposit = values.deposit + order.deposit
           }
@@ -106,7 +107,6 @@ function CollectOrderForm() {
           } else {
             values.paid = 0;
           }
-
 
           values.paidAt = fechaActual;
           if (platformPayment) {
@@ -120,6 +120,7 @@ function CollectOrderForm() {
             delete values.clientId;
             delete values.items;
             delete values.shopId;
+            console.log('valu dep', values.deposit)
             await updateOrder(params.id, values);
           }
           setOrder({ order });
@@ -132,12 +133,14 @@ function CollectOrderForm() {
             className="bg-blue-400 rounded-md p-4 mx-auto mt-10">
             <div className="grid items-center py-1 ">
               <div>
-                <p className="font-bold">Valor total: ${calculateTotal()}</p>
+                <p className="text-white-400">Valor total: ${calculateTotal()}</p>
+                <p className="font-bold">Abonado: ${order.deposit}</p>
+                <p className="text-red-600 font-bold">Debe: ${calculateTotal() - order.deposit}</p>
               </div>
-              <button type="button" style={{
+              {!platformPayment && order.paid ? '' : <button type="button" style={{
                 backgroundColor: platformPayment == true ? '#A6C4F0' : '#F3F1F1',
               }}
-                className="bg-indigo-500 px-2 py-1 text-black rounded-md ml-auto" onClick={() => togglePlatform()}>Plataforma</button>
+                className="bg-indigo-500 px-2 py-1 text-black rounded-md ml-auto" onClick={() => togglePlatform()}>Plataforma</button>}
               {order.paid ? <><button
                 type="button"
                 onClick={() => navigate(`../pdfOrden/` + params.id)}
@@ -154,7 +157,7 @@ function CollectOrderForm() {
                   placeholder="Ej: $10.000"
                   className="m-2 px-2 py-1 rounded-sm rounded"
                   onChange={handleChange}
-                  value={deposit}
+                  value={deposit ? deposit : values.deposit}
                 />
                   <button
                     type="button"
