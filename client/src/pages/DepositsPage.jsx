@@ -3,8 +3,9 @@ import dayjs from "dayjs";
 import DepositsCard from "../components/DepositsCard";
 import { useDeposits } from "../context/DepositsProvider";
 import { DatePicker } from "antd";
-
+import SearchBar from "../components/SearchBar";
 function DepositsPage() {
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const { deposits, getDepositsByDate } = useDeposits();
   const dateFormat = 'YYYY-MM-DD';
@@ -19,6 +20,12 @@ function DepositsPage() {
       setLoading(false);
     }
   };
+
+  const filteredDeposits = deposits.filter((deposit) =>
+    deposit.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    deposit.premises.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    deposit.mall.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     onDatePickerChange(); // Iniciar carga al montar el componente
@@ -37,7 +44,7 @@ function DepositsPage() {
       return <h1>No hay órdenes para el día seleccionado</h1>;
     }
 
-    return deposits.map((deposit) => <DepositsCard order={deposit} key={deposit.id + deposit.depositCreatedAt} />);
+    return filteredDeposits.map((deposit) => <DepositsCard order={deposit} key={deposit.id + deposit.depositCreatedAt} />);
   }
 
   return (
@@ -48,6 +55,7 @@ function DepositsPage() {
           <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
         </div>
       </div>
+      <SearchBar onSearch={setSearchTerm} />
       <div className="bg-white-500 rounded-md grid">{renderMain()}</div>
     </div>
   );
