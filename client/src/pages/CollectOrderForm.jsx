@@ -198,13 +198,14 @@ function CollectOrderForm() {
             ))}
             {deposits ? <>
               <h3>Abonos de esta orden:</h3>
-              <table className="border-collapse w-full border-2 border-gray-500 m-2">
+              <table className="border-collapse w-100 border-2 border-gray-500 m-2">
                 <thead>
                   <tr className="bg-stone-200 text-gray-700 font-bold">
                     <th className="px-2 py-1">Valor de Abono</th>
                     <th className="px-2 py-1">Valor Abonado Anterior</th>
                     <th className="px-2 py-1">Nuevo Abono de la Orden</th>
                     <th className="px-2 py-1">Fecha Abono</th>
+                    <th className="px-2 py-1">Método de Pago</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -214,6 +215,7 @@ function CollectOrderForm() {
                       <td className="px-2 py-1 text-center">${deposit.lastDeposit}</td>
                       <td className="px-2 py-1 text-center">${deposit.newDeposit}</td>
                       <td className="px-2 py-1 text-center">{deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}</td>
+                      <td className="px-2 py-1 text-center">{deposit.paymentMethod}</td>
                     </tr>
                   ))}
                 </tbody>

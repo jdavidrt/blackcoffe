@@ -28,6 +28,7 @@ export const getDepositsByDate = async (req, res) => {
     } catch (error) {
         return res.status(500).json({ message: error.message });
     }
+    res.json(result)
 }
 
 export const createDeposit = async (req, res) => {
