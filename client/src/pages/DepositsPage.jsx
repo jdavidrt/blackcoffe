@@ -50,7 +50,7 @@ function DepositsPage() {
   return (
     <div className="bg-slate-200 h-dvh rounded-md">
       <div className="flex py-2">
-        <h4 className="text-xl text-black font-bold text-center">Depositos de este dia ({deposits.length}) </h4>
+        <h4 className="text-xl text-black font-bold text-center">Abonos de este dia ({deposits.length}) </h4>
         <div className="ml-auto">
           <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
         </div>
