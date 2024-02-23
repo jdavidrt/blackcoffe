@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import dayjs from "dayjs";
-import OrderCollectCard from "../components/OrderCollectCard";
+import DepositsCard from "../components/DepositsCard";
 import { DatePicker } from "antd";
 import { useDeposits } from "../context/DepositsProvider";
 
@@ -63,7 +63,7 @@ function DepositsPage() {
     if (depositos.length === 0) {
       return <h1>No hay abonos para el día seleccionado</h1>;
     }
-    return deposits.map((deposit) => <OrderCollectCard order={deposit} key={deposit.id} />);
+    return deposits.map((deposit) => <DepositsCard order={deposit} key={deposit.id} />);
   }
 
   return (
