@@ -84,7 +84,7 @@ function CollectOrderForm() {
   return (
     <div>
       <h1 className="text-xl font-bold uppercase text-center">
-        {order.paid ? 'ORDEN COBRADA' : 'COBRAR ORDEN'}
+        {order.paid ? 'ORDEN COBRADA' : 'COBRAR/ABONAR ORDEN'}
       </h1>
       <h1 className="text-xl font-bold uppercase text-center">
         {order.premises} - {order.clientName} / {order.createdAt}
@@ -103,7 +103,7 @@ function CollectOrderForm() {
             var neewDeposit = {};
             neewDeposit.orderId = params.id;
             neewDeposit.clientId = order.clientId;
-            { values.paymentMethod ? neewDeposit.paymentMethod = values.paymentMethod : neewDeposit.paymentMethod = 'Efectivo' };
+            { platformPayment ? neewDeposit.paymentMethod = 'Plataforma' : neewDeposit.paymentMethod = 'Efectivo' };
             { depositedTotal ? neewDeposit.depositValue = deposit : neewDeposit.depositValue = values.deposit }
             { order.deposit ? neewDeposit.lastDeposit = order.deposit : neewDeposit.lastDeposit = 0 };
             { depositedTotal ? neewDeposit.newDeposit = order.deposit + deposit : neewDeposit.newDeposit = values.deposit + order.deposit }
