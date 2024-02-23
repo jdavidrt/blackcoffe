@@ -8,3 +8,9 @@ export const createDepositRequest = async (product) =>
 
 export const getDepositByOrderIdRequest = async (id) =>
     await axios.get(`${renderServer}/deposits/${id}`);
+
+export const getDepositsByDateRequest = async (date) =>
+    await axios.get(`${renderServer}/depositsByDate/${date}`);
+
+
+

@@ -2,7 +2,8 @@ import { createContext, useContext, useState } from "react";
 import {
     getDepositsRequest,
     getDepositByOrderIdRequest,
-    createDepositRequest
+    createDepositRequest,
+    getDepositsByDateRequest
 } from "../api/deposits.api";
 import { DepositContext } from "./DepositsContext.jsx";
 
@@ -41,13 +42,25 @@ export const DepositContextProvider = ({ children }) => {
         }
     };
 
+    const getDepositsByDate = async (date) => {
+        console.log('fecha', date)
+        try {
+            const response = await getDepositsByDateRequest(date);
+            setDeposits(response.data)
+            return response.data;
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     return (
         <DepositContext.Provider
             value={{
                 deposits,
                 loadDeposits,
                 createDeposit,
-                getDepositsByOrderId
+                getDepositsByOrderId,
+                getDepositsByDate
             }}
         >
             {children}
