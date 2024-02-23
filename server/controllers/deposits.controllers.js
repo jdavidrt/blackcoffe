@@ -6,7 +6,7 @@ export const getDeposits = async (req, res) => {
 }
 export const getDepositsByOrder = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT *, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt FROM deposits join orders on orders.id = deposits.orderId WHERE deposits.orderId = ?", [
+        const [result] = await pool.query("SELECT *, deposits.paymentMethod as paymentMeethd , CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt FROM deposits join orders on orders.id = deposits.orderId WHERE deposits.orderId = ?", [
             req.params.id,
         ]);
         if (result.length === 0)

@@ -215,7 +215,7 @@ function CollectOrderForm() {
                       <td className="px-2 py-1 text-center">${deposit.lastDeposit}</td>
                       <td className="px-2 py-1 text-center">${deposit.newDeposit}</td>
                       <td className="px-2 py-1 text-center">{deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}</td>
-                      <td className="px-2 py-1 text-center">{deposit.paymentMethod}</td>
+                      <td className="px-2 py-1 text-center">{deposit.paymentMeethd}</td>
                     </tr>
                   ))}
                 </tbody>
