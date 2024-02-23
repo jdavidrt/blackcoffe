@@ -122,10 +122,6 @@ function CollectOrderForm() {
           }
 
           values.paidAt = fechaActual;
-          if (platformPayment) {
-            values.paymentMethod = 'Plataforma'
-          }
-
           if (params.id) {
             delete values.clientName;
             delete values.premises;
