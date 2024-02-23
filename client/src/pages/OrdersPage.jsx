@@ -47,7 +47,7 @@ function OrdersPage() {
   return (
     <div className="bg-slate-200 h-dvh rounded-md">
       <div className="flex py-2">
-        <h4 className="text-xl text-black font-bold text-center">Órdenes por cobrar ({filteredOrders.length}) </h4>
+        <h4 className="text-xl text-black font-bold text-center">Ordenes activas ({filteredOrders.length}) </h4>
         <div className="ml-auto">
         </div>
       </div>
