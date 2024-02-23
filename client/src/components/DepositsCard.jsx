@@ -14,8 +14,9 @@ function depositsCard({ order }) {
       <span>{order.createAt}</span>
       <b>
         <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p></b>
+      {order.depositCreatedAt.slice(11, 16) + ' ' + order.depositCreatedAt.slice(2, 10)}
       <div className="flex p-2 ml-auto">
-        <b>{order.deposit ? <><p>Abono: ${order.deposit} <p className="text-red-500">Debe: ${calculateTotal() - order.deposit}</p></p> </> : ''}{order.deposit ? '' : <p className="text-green-500 px-2"> Total: ${calculateTotal()}</p>}</b>
+        <b>{order.deposit ? <><p>Abono: ${order.depositValue}<p>Abonado Anterior de la Orden: ${order.lastDeposit} </p><p className="text-red-500">Debe: ${calculateTotal() - order.newDeposit}</p></p> </> : ''}{order.deposit ? '' : <p className="text-green-500 px-2"> Total: ${calculateTotal()}</p>}</b>
         <button
           className="flex bg-slate-300 px-2 py-1 text-black ml-auto"
           onClick={() => navigate(`/cobrarOrden/${order.id}`)}
