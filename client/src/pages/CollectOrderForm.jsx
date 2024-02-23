@@ -98,7 +98,7 @@ function CollectOrderForm() {
           values.shopId = 1;
           values.clientId = client;
           values.items = JSON.stringify(cart)
-          if (values.deposit || deposit) {
+          if (values.deposit) {
             console.log()
             var neewDeposit = {};
             neewDeposit.orderId = params.id;
