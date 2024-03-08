@@ -24,7 +24,7 @@ export const getNotDeliveredOrders = async (req, res) => {
         JOIN 
             clients ON orders.clientId = clients.id 
         WHERE 
-            orders.paid = 0 AND orders.items LIKE '%"delivered":0%' 
+            orders.paid = 0 AND orders.items LIKE '%"delivered":false%' 
         ORDER BY 
             clients.premises ASC, 
             clients.clientname ASC, 

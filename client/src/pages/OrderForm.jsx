@@ -43,7 +43,7 @@ function OrderForm() {
       );
       setCart(updatedCart);
     } else {
-      setCart([...cart, { ...product, quantity: 1, delivered: 0 }]);
+      setCart([...cart, { ...product, quantity: 1, delivered: false }]);
     }
   };
 

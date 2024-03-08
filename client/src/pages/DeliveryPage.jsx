@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import orderDeliveryCard from "../components/OrderDeliveryCard";
+import OrderDeliveryCard from "../components/OrderDeliveryCard";
 import { useOrders } from "../context/OrderProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
@@ -7,12 +7,12 @@ function DeliveryOrdersPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const params = useParams();
     const [loading, setLoading] = useState(false);
-    const { orders, loadUnPaidOrders } = useOrders();
+    const { orders, loadUnDeliveredOrders } = useOrders();
 
-    const loadOrders = async (mall) => {
+    const loadOrders = async () => {
         setLoading(true);
         try {
-            await loadUnPaidOrders(mall);
+            await loadUnDeliveredOrders();
         } finally {
             setLoading(false);
         }
@@ -37,21 +37,21 @@ function DeliveryOrdersPage() {
         }
 
         if (orders.length === 0) {
-            return <h1>No hay órdenes por cobrar para el centro comercial seleccionado</h1>;
+            return <h1>No hay órdenes sin entregar</h1>;
         }
 
-        return filteredOrders.map((order) => <orderDeliveryCard order={order} key={order.id} />);
+        return filteredOrders.map((order) => <OrderDeliveryCard order={order} key={order.id} />);
     }
 
     return (
         <div className="bg-slate-200 h-dvh rounded-md">
             <div className="flex py-2">
-                <h4 className="text-xl text-black font-bold text-center">Cuenta de cobro ({orders.length}) - {params.mall} </h4>
+                <h4 className="text-xl text-black font-bold text-center">Pedidos sin entregar: ({orders.length})</h4>
                 <div className="ml-auto">
                 </div>
             </div>
             <SearchBar onSearch={setSearchTerm} />
-            <div className="bg-green-500 rounded-md grid">{renderMain()}</div>
+            <div className="bg-orange-400 rounded-md grid">{renderMain()}</div>
         </div>
     );
 }

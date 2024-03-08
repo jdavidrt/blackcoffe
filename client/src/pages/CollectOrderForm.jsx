@@ -26,6 +26,31 @@ function CollectOrderForm() {
   const fechaActual = dayjs().format('YYYY-MM-DD');
   const [depositedTotal, setDepositedTotal] = useState(false);
 
+
+  const handleCheckboxChange = async (itemId) => {
+    setCart((prevCart) => {
+      const updatedCart = prevCart.map((item) => {
+        if (item.id === itemId) {
+          return {
+            ...item,
+            delivered: !item.delivered, // Invierte el valor actual
+          };
+        }
+        return item;
+      });
+
+      console.log('cart', updatedCart); // Usa updatedCart en lugar de cart
+      var values = {};
+      values.items = JSON.stringify(updatedCart);
+      console.log('vals', values.items);
+
+      // Llama a tu función asíncrona aquí (en este caso, updateOrder)
+      updateOrder(params.id, values);
+
+      return updatedCart;
+    });
+  };
+
   const calculateTotal = () => {
     return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
   };
@@ -38,13 +63,13 @@ function CollectOrderForm() {
     setDepositedTotal(true);
     setDeposit(calculateTotal() - order.deposit)
   }
+
   useEffect(() => {
     const loadOrder = async () => {
       if (params.id) {
         const order = await getOrder(params.id);
         const depositsRequest = await getDepositsByOrderId(params.id);
         setDeposits(depositsRequest);
-        console.log(deposits)
         setCart(JSON.parse(order.items))
         if (order.paymentMethod == "Plataforma") {
           togglePlatform(true)
@@ -128,7 +153,7 @@ function CollectOrderForm() {
             delete values.clientId;
             delete values.items;
             delete values.shopId;
-            await createDeposit(neewDeposit);
+            await createDeposit(neewDeposit)
             await updateOrder(params.id, values);
           }
           setOrder({ order });
@@ -165,7 +190,6 @@ function CollectOrderForm() {
                   placeholder="Ej: $10.000"
                   className="m-2 px-2 py-1 rounded-sm rounded"
                   onChange={handleChange}
-                  value={deposit ? deposit : values.deposit}
                 />
                   <button
                     type="button"
@@ -185,6 +209,13 @@ function CollectOrderForm() {
             </div>
             {cart.map((item) => (
               <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
+                <input
+                  type="checkbox"
+                  className="ml-2"
+                  value={item.delivered}
+                  checked={item.delivered}
+                  onChange={() => handleCheckboxChange(item.id)}
+                />
                 <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
                 <p className="p-2 text-sm text-gray-300 flex items-center justify-center font-bold h-content">
                   {item.id.slice(-14)}
