@@ -7,11 +7,14 @@ import {
     deleteOrder,
     updateOrder,
     getUnPaidOrders,
-    getUnPaidOrdersbyClientId
+    getUnPaidOrdersbyClientId,
+    getNotDeliveredOrders
 } from "../controllers/orders.controllers.js"
 const router = Router();
 
 router.get('/orders/', getOrders);
+
+router.get('/notDeliveredOrders/', getNotDeliveredOrders);
 
 router.get('/collectedOrders/:date', getCollectedOrders);
 

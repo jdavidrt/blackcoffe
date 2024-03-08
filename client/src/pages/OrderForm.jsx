@@ -43,7 +43,7 @@ function OrderForm() {
       );
       setCart(updatedCart);
     } else {
-      setCart([...cart, { ...product, quantity: 1 }]);
+      setCart([...cart, { ...product, quantity: 1, delivered: 0 }]);
     }
   };
 
@@ -104,6 +104,8 @@ function OrderForm() {
     loadOrder();
     loadProducts();
   }, []);
+
+  console.log(cart)
 
   return (
     <div>

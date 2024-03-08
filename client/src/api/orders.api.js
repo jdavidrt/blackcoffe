@@ -1,7 +1,12 @@
 import axios from "axios";
 var renderServer = 'https://coffeserver.onrender.com'
+
 export const getOrdersRequest = async () =>
   await axios.get(`${renderServer}/orders/`,);
+
+export const getNotDeliveredOrdersRequest = async () =>
+  await axios.get(`${renderServer}/notDeliveredOrders/`,);
+
 
 export const getCollectedOrders = async (date) =>
   await axios.get(`${renderServer}/collectedOrders/${date}`, date);

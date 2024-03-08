@@ -98,17 +98,16 @@ function CollectOrderForm() {
           values.shopId = 1;
           values.clientId = client;
           values.items = JSON.stringify(cart)
-          if (values.deposit) {
-            console.log()
-            var neewDeposit = {};
-            neewDeposit.orderId = params.id;
-            neewDeposit.clientId = order.clientId;
-            { platformPayment ? neewDeposit.paymentMethod = 'Plataforma' : neewDeposit.paymentMethod = 'Efectivo' };
-            { depositedTotal ? neewDeposit.depositValue = deposit : neewDeposit.depositValue = values.deposit }
-            { order.deposit ? neewDeposit.lastDeposit = order.deposit : neewDeposit.lastDeposit = 0 };
-            { depositedTotal ? neewDeposit.newDeposit = order.deposit + deposit : neewDeposit.newDeposit = values.deposit + order.deposit }
-            await createDeposit(neewDeposit);
-          }
+          console.log('creating new deposit')
+          var neewDeposit = {};
+          neewDeposit.orderId = params.id;
+          neewDeposit.clientId = order.clientId;
+          { platformPayment ? neewDeposit.paymentMethod = 'Plataforma' : neewDeposit.paymentMethod = 'Efectivo' };
+          { depositedTotal ? neewDeposit.depositValue = deposit : neewDeposit.depositValue = values.deposit }
+          { order.deposit ? neewDeposit.lastDeposit = order.deposit : neewDeposit.lastDeposit = 0 };
+          { depositedTotal ? neewDeposit.newDeposit = order.deposit + deposit : neewDeposit.newDeposit = values.deposit + order.deposit }
+
+          console.log('new deposit')
           if (depositedTotal) {
             values.deposit = order.deposit + deposit
           } else {
@@ -129,6 +128,7 @@ function CollectOrderForm() {
             delete values.clientId;
             delete values.items;
             delete values.shopId;
+            await createDeposit(neewDeposit);
             await updateOrder(params.id, values);
           }
           setOrder({ order });
