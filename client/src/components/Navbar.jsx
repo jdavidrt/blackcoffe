@@ -61,6 +61,9 @@ function Navbar() {
           <Link onClick={toggleMenu} to="/nuevaOrden" className="text-white hover:text-black bg-emerald-900 rounded px-3 py-2">Nueva Orden</Link>
         </li>
         <li className="mb-1 flex items-center">
+          <Link onClick={toggleMenu} to="/recorrido" className="text-white hover:text-black bg-orange-700 rounded px-3 py-2">Recorrido</Link>
+        </li>
+        <li className="mb-1 flex items-center">
           <Link onClick={toggleMenu} to="/cobrarOrdenes/Unilago" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Unilago</Link>
         </li>
         <li className="mb-1 flex items-center">
