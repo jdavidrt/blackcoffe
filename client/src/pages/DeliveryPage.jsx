@@ -40,7 +40,7 @@ function DeliveryOrdersPage() {
         }
 
         if (orders.length === 0) {
-            return <h1>No hay órdenes sin entregar</h1>;
+            return <h1>No hay pedidos sin entregar</h1>;
         }
 
         return filteredOrders.map((order) => <OrderDeliveryCard order={order} key={order.id} />);
