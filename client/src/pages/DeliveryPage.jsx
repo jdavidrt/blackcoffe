@@ -76,6 +76,17 @@ function DeliveryOrdersPage() {
                     <button
                         type="button"
                         style={{
+                            backgroundColor: filterType === 'Otros' ? '#A6C4F0' : '#F3F1F1',
+                        }}
+                        className="bg-indigo-500 px-2 py-1 text-black rounded-md"
+                        onClick={() => setFilterType('Otros')}
+                    >
+                        Otros
+                    </button>
+                    <div className="px-2" />
+                    <button
+                        type="button"
+                        style={{
                             backgroundColor: filterType === 'Cliente Frecuente' ? '#A6C4F0' : '#F3F1F1',
                         }}
                         className="bg-indigo-500 px-2 py-1 text-black rounded-md"

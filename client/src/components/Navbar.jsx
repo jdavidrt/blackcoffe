@@ -64,13 +64,16 @@ function Navbar() {
           <Link onClick={toggleMenu} to="/recorrido" className="text-white hover:text-black bg-orange-700 rounded px-3 py-2">Recorrido</Link>
         </li>
         <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/cobrarOrdenes/Cliente%20Frecuente" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Cliente F</Link>
+          <Link onClick={toggleMenu} to="/cobrarOrdenes/Unilago" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Uni.</Link>
         </li>
         <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/cobrarOrdenes/Unilago" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Unilago</Link>
+          <Link onClick={toggleMenu} to="/cobrarOrdenes/Alta Tecnología" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Alta T.</Link>
         </li>
         <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/cobrarOrdenes/Alta Tecnología" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Alta Tecnología</Link>
+          <Link onClick={toggleMenu} to="/cobrarOrdenes/Cliente%20Frecuente" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar C. F.</Link>
+        </li>
+        <li className="mb-1 flex items-center">
+          <Link onClick={toggleMenu} to="/cobrarOrdenes/Otros" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Otros</Link>
         </li>
         <li className="mb-1 flex items-center">
           <Link onClick={toggleMenu} to="/abonos" className="text-white hover:text-black bg-gray-400 rounded px-3 py-2">Abonos</Link>
