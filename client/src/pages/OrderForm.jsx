@@ -118,12 +118,14 @@ function OrderForm() {
           backgroundColor: mall === 'Unilago' ? '#A6C4F0' : '#F3F1F1',
         }}
           className=" bg-indigo-500 px-2 py-1 text-black rounded-md" onClick={() => selectMall('Unilago')}>Unilago</button>
-        <div className="px-2" />
         <button type="button" style={{
           backgroundColor: mall === 'Alta Tecnología' ? '#A6C4F0' : '#F3F1F1',
         }}
           className="bg-indigo-500 px-2 py-1 text-black rounded-md" onClick={() => selectMall('Alta Tecnología')}>Alta Tecnología</button>
-        <div className="px-2" />
+        <button type="button" style={{
+          backgroundColor: mall === 'Otros' ? '#A6C4F0' : '#F3F1F1',
+        }}
+          className="bg-indigo-500 px-2 py-1 text-black rounded-md" onClick={() => selectMall('Otros')}>Otros</button>
         <button type="button" style={{
           backgroundColor: mall === 'Cliente Frecuente' ? '#A6C4F0' : '#F3F1F1',
         }}
