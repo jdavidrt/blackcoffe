@@ -44,6 +44,8 @@ function CollectedOrdersPage() {
   function calcularTotalesCollectedBy(orders) {
     let totalUnilago = 0;
     let totalAltaTec = 0;
+    let totalCF = 0;
+    let totalOtros = 0;
 
     orders.forEach(order => {
       const subtotal = JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
@@ -51,10 +53,14 @@ function CollectedOrdersPage() {
         totalUnilago += subtotal;
       } else if (order.collectedBy === "Alta Tecnología") {
         totalAltaTec += subtotal;
+      } else if (order.collectedBy === "Cliente Frecuente") {
+        totalCF += subtotal;
+      } else if (order.collectedBy === "Otros") {
+        totalOtros += subtotal;
       }
     });
 
-    return { totalUnilago, totalAltaTec };
+    return { totalUnilago, totalAltaTec, totalOtros, totalCF };
   }
 
   return (
@@ -67,7 +73,7 @@ function CollectedOrdersPage() {
       </div>
       {orders.length !== 0 ? (
         <div>
-          Total cobrado en Unilago: ${calcularTotalesCollectedBy(orders).totalUnilago} AltaTec: ${calcularTotalesCollectedBy(orders).totalAltaTec}
+          Total cobrado en Unilago: ${calcularTotalesCollectedBy(orders).totalUnilago} - AltaTec: ${calcularTotalesCollectedBy(orders).totalAltaTec} - C.F: ${calcularTotalesCollectedBy(orders).totalCF} - Otros: ${calcularTotalesCollectedBy(orders).totalOtros}
         </div>
       ) : null}
       <div className="bg-white-500 rounded-md grid">{renderMain()}</div>

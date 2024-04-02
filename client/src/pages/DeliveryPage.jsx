@@ -23,7 +23,7 @@ function DeliveryOrdersPage() {
     const filteredOrders = orders.filter((order) =>
         (order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             order.premises.toLowerCase().includes(searchTerm.toLowerCase())) &&
-        (filterType === '' || order.mall === filterType) // Ajusta 'someCustomField' según la estructura de tus órdenes
+        (filterType === '' || order.mall === filterType)
     );
 
     useEffect(() => {
