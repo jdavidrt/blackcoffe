@@ -73,7 +73,7 @@ function CollectedOrdersPage() {
       </div>
       {orders.length !== 0 ? (
         <div>
-          Total cobrado en Unilago: ${calcularTotalesCollectedBy(orders).totalUnilago} - AltaTec: ${calcularTotalesCollectedBy(orders).totalAltaTec} - C.F: ${calcularTotalesCollectedBy(orders).totalCF} - Otros: ${calcularTotalesCollectedBy(orders).totalOtros}
+          Total cobrado en Unilago: ${calcularTotalesCollectedBy(orders).totalUnilago} <br />AltaTec: ${calcularTotalesCollectedBy(orders).totalAltaTec} <br /> C.F: ${calcularTotalesCollectedBy(orders).totalCF} <br /> Otros: ${calcularTotalesCollectedBy(orders).totalOtros}
         </div>
       ) : null}
       <div className="bg-white-500 rounded-md grid">{renderMain()}</div>
