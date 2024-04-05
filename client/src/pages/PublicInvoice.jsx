@@ -69,8 +69,8 @@ function PublicInvoice() {
                 <table className="w-full mt-8 border-collapse border border-black">
                     <thead>
                         <tr>
-                            <th className="py-2 border border-black text-center">NOMBRE</th>
-                            <th className="py-2 border border-black text-center">VALOR TOT.</th>
+                            <th className="py-2 border border-black text-center">NOMBRE (CANTIDAD)</th>
+                            <th className="py-2 border border-black text-center">VALOR TOTAL</th>
                             <th className="py-2 border border-black text-center">PEDIDO A LAS</th>
                         </tr>
                     </thead>
