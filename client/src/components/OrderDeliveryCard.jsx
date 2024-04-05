@@ -43,7 +43,7 @@ function OrderDeliveryCard({ order }) {
   }, [])
 
   return (
-    <div className={`flex flex-col rounded-md m-2 ${order.mall === 'Unilago' ? 'bg-sky-300' : order.mall === 'Alta Tecnología' ? 'bg-teal-500' : order.mall === 'Otros' ? 'bg-amber-500' : 'bg-stone-100'} text-black`}>
+    <div className={`flex flex-col rounded-md m-2 ${order.mall === 'Unilago' ? 'bg-amberx -300' : order.mall === 'Alta Tecnología' ? 'bg-teal-500' : order.mall === 'Otros' ? 'bg-amber-500' : 'bg-stone-100'} text-black`}>
       <div className="flex">
         <span>{order.createAt}</span>
         <b>
