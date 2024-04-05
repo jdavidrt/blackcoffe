@@ -26,7 +26,7 @@ function Navbar() {
 
   return (
     <div className="bg-stone-700 px-4 py-2 lg:px-20" style={{
-      display: (window.location.pathname.includes("/iniciarSesion") || window.location.pathname.includes("/pdfOrden")) == true ? 'none' : 'block',
+      display: (window.location.pathname.includes("/iniciarSesion") || window.location.pathname.includes("/pdfOrden") || window.location.pathname.includes("/factura")) == true ? 'none' : 'block',
     }}>
       <div className="flex justify-between items-center">
 

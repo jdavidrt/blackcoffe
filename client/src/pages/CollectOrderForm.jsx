@@ -177,9 +177,16 @@ function CollectOrderForm() {
                 onClick={() => navigate(`../pdfOrden/` + params.id)}
                 className="block bg-indigo-500 px-2 my-2 py-1 text-white w-20% rounded-md ml-auto"              >
                 {'Generar Factura'}
-              </button><button
-                type="button"
-                className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
+              </button>
+                <button
+                  type="button"
+                  className="block bg-indigo-500 px-2 my-2 py-1 text-white w-20% rounded-md ml-auto"              >
+                  <a href={"whatsapp://send?text=Puedes consultar tu factura aquí: https://blackcofeepedidos.onrender.com/factura/" + params.id} data-action="share/whatsapp/share" >Compartir en WhatsApp</a>
+                </button>
+
+                <button
+                  type="button"
+                  className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
                   {'Orden Cobrada'}
                 </button></> :
                 <> <input

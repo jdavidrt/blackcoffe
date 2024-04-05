@@ -1,6 +1,7 @@
 import { Route, Routes, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import Invoice from "./pages/Invoice";
+import PublicInvoice from "./pages/PublicInvoice";
 import OrdersPage from "./pages/OrdersPage";
 import OrderForm from "./pages/OrderForm";
 import ClientForm from "./pages/ClientForm";
@@ -32,6 +33,7 @@ function App() {
       navigate("/iniciarSesion")
     } else if (localStorage.getItem('user') === null || localStorage.getItem('user') === "") {
       navigate("/iniciarSesion")
+    } else if (window.location.pathname.includes("/factura")) {
     }
   }, [window.location.pathname]);
   return (
@@ -58,6 +60,7 @@ function App() {
                     <Route path="/editarOrden/:id" element={<OrderForm />} />
                     <Route path="/cobrarOrden/:id" element={<CollectOrderForm />} />
                     <Route path="/pdfOrden/:id" element={<Invoice />} />
+                    <Route path="/factura/:id" element={<PublicInvoice />} />
                     <Route path="/abonos/" element={<DepositsPage />} />
                     <Route path="/recorrido/" element={<DeliveryOrdersPage />} />
                     <Route path="*" element={<NotFound />} />
