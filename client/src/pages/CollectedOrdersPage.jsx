@@ -3,12 +3,14 @@ import dayjs from "dayjs";
 import OrderCollectCard from "../components/OrderCollectCard";
 import { useOrders } from "../context/OrderProvider";
 import { DatePicker } from "antd";
+import SearchBar from "../components/SearchBar"; // Importa el componente SearchBar
 
 function CollectedOrdersPage() {
   const [loading, setLoading] = useState(false);
   const { orders, loadCollectedOrders } = useOrders();
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
+  const [searchTerm, setSearchTerm] = useState(''); // Estado para el término de búsqueda
   console.log('collected orders')
 
   const onDatePickerChange = async (date, dateString) => {
@@ -20,6 +22,10 @@ function CollectedOrdersPage() {
       setLoading(false);
     }
   };
+  const filteredOrders = orders.filter((order) =>
+    order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.premises.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     onDatePickerChange(); // Iniciar carga al montar el componente
@@ -38,7 +44,7 @@ function CollectedOrdersPage() {
       return <h1>No hay órdenes para el día seleccionado</h1>;
     }
 
-    return orders.map((order) => <OrderCollectCard order={order} key={order.id} />);
+    return filteredOrders.map((order) => <OrderCollectCard order={order} key={order.id} />);
   }
 
   function calcularTotalesCollectedBy(orders) {
@@ -71,6 +77,7 @@ function CollectedOrdersPage() {
           <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
         </div>
       </div>
+      <SearchBar onSearch={setSearchTerm} />
       {orders.length !== 0 ? (
         <div>
           Total cobrado en Unilago: ${calcularTotalesCollectedBy(orders).totalUnilago} <br />AltaTec: ${calcularTotalesCollectedBy(orders).totalAltaTec} <br /> C.F: ${calcularTotalesCollectedBy(orders).totalCF} <br /> Otros: ${calcularTotalesCollectedBy(orders).totalOtros}
