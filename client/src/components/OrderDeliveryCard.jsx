@@ -43,7 +43,7 @@ function OrderDeliveryCard({ order }) {
   }, [])
 
   return (
-    <div className={`flex flex-col rounded-md m-2 ${order.mall === 'Unilago' ? 'bg-sky-800' : order.mall === 'Alta Tecnología' ? 'bg-teal-500' : order.mall === 'Otros' ? 'bg-amber-500' : 'bg-stone-100'} text-black`}>
+    <div className={`flex flex-col rounded-md m-2 ${order.mall === 'Unilago' ? 'bg-sky-300' : order.mall === 'Alta Tecnología' ? 'bg-teal-500' : order.mall === 'Otros' ? 'bg-amber-500' : 'bg-stone-100'} text-black`}>
       <div className="flex">
         <span>{order.createAt}</span>
         <b>
@@ -56,7 +56,7 @@ function OrderDeliveryCard({ order }) {
                 <p>Abono: ${order.deposit} <p className="text-red-500">Debe: ${calculateTotal() - order.deposit}</p></p>
               </>
             ) : (
-              <p className="text-green-500 px-2"> Total: ${calculateTotal()}</p>
+              <p className="text-zinc-950 px-2"> Total: ${calculateTotal()}</p>
             )}
           </b>
           <button
