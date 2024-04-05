@@ -61,7 +61,7 @@ function PublicInvoice() {
                 </div>
             </div>
             <div className="mt-8">
-                <div className="text-right">
+                <div className="text-left">
                     <div className="font-bold">FACTURA INTERNA DE VENTA No. {order.orderId}</div>
                     <div>CLIENTE: {order.clientName} - {order.premises}</div>
                     <div>FECHA: {order.createdAt}</div>
@@ -70,8 +70,6 @@ function PublicInvoice() {
                     <thead>
                         <tr>
                             <th className="py-2 border border-black text-center">NOMBRE</th>
-                            <th className="py-2 border border-black text-center">CANTIDAD</th>
-                            <th className="py-2 border border-black text-center">VALOR UNI.</th>
                             <th className="py-2 border border-black text-center">VALOR TOT.</th>
                             <th className="py-2 border border-black text-center">PEDIDO A LAS</th>
                         </tr>
@@ -79,9 +77,7 @@ function PublicInvoice() {
                     <tbody>
                         {cart.map((product) => (
                             <tr key={product.id}>
-                                <td className="py-2 border border-black text-center">{product.productName}</td>
-                                <td className="py-2 border border-black text-center">{product.quantity}</td>
-                                <td className="py-2 border border-black text-center">${product.unitValue}</td>
+                                <td className="py-2 border border-black text-center">{product.productName} ({product.quantity})</td>
                                 <td className="py-2 border border-black text-center">${product.quantity * product.unitValue}</td>
                                 <td className="py-2 border border-black text-center">{product.id.slice(-14)}</td>
                             </tr>
