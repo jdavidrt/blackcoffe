@@ -45,7 +45,7 @@ function PublicInvoice() {
     console.log(cart)
 
     return (
-        <div className="container mx-auto">
+        <div className="container mx-auto bg-white">
             <div className="text-center flex justify-between">
                 <div>
                     <h1 className="text-2xl font-bold">BLACK COFFEE</h1>
@@ -69,19 +69,21 @@ function PublicInvoice() {
                 <table className="w-full mt-8 border-collapse border border-black">
                     <thead>
                         <tr>
-                            <th className="py-2 border border-black">NOMBRE</th>
-                            <th className="py-2 border border-black">CANTIDAD</th>
-                            <th className="py-2 border border-black">VALOR UNI.</th>
-                            <th className="py-2 border border-black">VALOR TOT.</th>
+                            <th className="py-2 border border-black text-center">NOMBRE</th>
+                            <th className="py-2 border border-black text-center">CANTIDAD</th>
+                            <th className="py-2 border border-black text-center">VALOR UNI.</th>
+                            <th className="py-2 border border-black text-center">VALOR TOT.</th>
+                            <th className="py-2 border border-black text-center">PEDIDO A LAS</th>
                         </tr>
                     </thead>
                     <tbody>
                         {cart.map((product) => (
                             <tr key={product.id}>
-                                <td className="py-2 border border-black">{product.productName}</td>
-                                <td className="py-2 border border-black">{product.quantity}</td>
-                                <td className="py-2 border border-black">${product.unitValue}</td>
-                                <td className="py-2 border border-black">${product.quantity * product.unitValue}</td>
+                                <td className="py-2 border border-black text-center">{product.productName}</td>
+                                <td className="py-2 border border-black text-center">{product.quantity}</td>
+                                <td className="py-2 border border-black text-center">${product.unitValue}</td>
+                                <td className="py-2 border border-black text-center">${product.quantity * product.unitValue}</td>
+                                <td className="py-2 border border-black text-center">{product.id.slice(-14)}</td>
                             </tr>
                         ))}
                     </tbody>

@@ -183,7 +183,6 @@ function CollectOrderForm() {
                   className="block bg-indigo-500 px-2 my-2 py-1 text-white w-20% rounded-md ml-auto"              >
                   <a href={"whatsapp://send?text=Puedes consultar tu factura aquí: https://blackcofeepedidos.onrender.com/factura/" + params.id} data-action="share/whatsapp/share" >Compartir en WhatsApp</a>
                 </button>
-
                 <button
                   type="button"
                   className="block bg-indigo-500 px-2 py-1 text-white w-20% rounded-md ml-auto"              >
@@ -222,7 +221,7 @@ function CollectOrderForm() {
                   onChange={() => handleCheckboxChange(item.id)}
                 />
                 <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
-                <p className="p-2 text-sm text-gray-300 flex items-center justify-center font-bold h-content">
+                <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
                   {item.id.slice(-14)}
                 </p>
                 <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue}</p>

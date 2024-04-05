@@ -43,7 +43,7 @@ function OrderDeliveryCard({ order }) {
   }, [])
 
   return (
-    <div className="flex flex-col bg-stone-100 text-black rounded-md m-2">
+    <div className={`flex flex-col rounded-md m-2 ${order.mall === 'Unilago' ? 'bg-red-700' : order.mall === 'Alta Tecnología' ? 'bg-neutral-500' : order.mall === 'Otros' ? 'bg-teal-700' : 'bg-stone-100'} text-black`}>
       <div className="flex">
         <span>{order.createAt}</span>
         <b>
@@ -79,7 +79,7 @@ function OrderDeliveryCard({ order }) {
                 onChange={() => handleCheckboxChange(item.id)}
               />
               <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
-              <p className="p-2 text-sm text-gray-300 flex items-center justify-center font-bold h-content">
+              <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
                 {item.id.slice(-14)}
               </p>
               <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue}</p>
