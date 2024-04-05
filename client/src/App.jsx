@@ -29,11 +29,12 @@ function App() {
   //console.log('app', localStorage.getItem('user'));
   useEffect(() => {
     console.log(localStorage.getItem('user'))
-    if (!window.location.pathname.includes("/iniciarSesion") && localStorage.getItem('user') === "") {
-      navigate("/iniciarSesion")
-    } else if (localStorage.getItem('user') === null || localStorage.getItem('user') === "") {
-      navigate("/iniciarSesion")
-    } else if (window.location.pathname.includes("/factura")) {
+    if (!window.location.pathname.includes("/factura")) {
+      if (!window.location.pathname.includes("/iniciarSesion") && localStorage.getItem('user') === "") {
+        navigate("/iniciarSesion");
+      } else if (localStorage.getItem('user') === null || localStorage.getItem('user') === "") {
+        navigate("/iniciarSesion");
+      }
     }
   }, [window.location.pathname]);
   return (
