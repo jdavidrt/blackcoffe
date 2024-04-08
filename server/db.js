@@ -11,6 +11,14 @@ export const pool = await createPool({
         rejectUnauthorized: false
     }
 })
-console.log("Conectado a DigitalOcean")
-//pool.query(`select * from deposits;`)
+console.log("Conectado a PlanetScale")
+/*pool.query(`select`)
+    .then(results => {
+        console.log("Resultado de la consulta:", results);
+    })
+    .catch(error => {
+        console.error("Error al ejecutar la consulta:", error);
+    });?
+    */
+
 export default pool
