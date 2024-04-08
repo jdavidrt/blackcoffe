@@ -29,7 +29,7 @@ function OrderDeliveryCard({ order }) {
       updateOrder(order.id, values);
       setTimeout(() => {
         window.location.reload();
-      }, 3000);
+      }, 1000);
       return updatedCart;
     });
   };
