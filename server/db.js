@@ -11,14 +11,20 @@ export const pool = await createPool({
         rejectUnauthorized: false
     }
 })
-console.log("Conectado a PlanetScale")
-/*pool.query(`select`)
+console.log("Conectado a DigitalOcean DB")
+/*pool.query(`
+
+SELECT LAST_EXECUTED FROM information_schema.events WHERE event_schema = 'pedidos' AND event_name = 'daily_task';
+
+
+
+
+`)
     .then(results => {
         console.log("Resultado de la consulta:", results);
     })
     .catch(error => {
         console.error("Error al ejecutar la consulta:", error);
-    });?
-    */
-
+    });
+*/
 export default pool
