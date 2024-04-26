@@ -8,7 +8,7 @@ import dayjs from "dayjs";
 function CollectOrderForm() {
 
   const { getOrder, updateOrder } = useOrders();
-  const { getDepositsByOrderId, createDeposit, deleteDepositById } = useDeposits();
+  const { getDepositsByOrderId, createDeposit, deleteDeposit } = useDeposits();
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
   const [deposit, setDeposit] = useState(0);
@@ -62,8 +62,8 @@ function CollectOrderForm() {
     setDeposit(calculateTotal() - order.deposit)
   }
 
-  async function deleteDeposit(id) {
-    await deleteDepositById(id);
+  async function deleteDepositt(id) {
+    await deleteDeposit(id);
     setTimeout(() => {
       window.location.reload();
     }, 3000);
@@ -261,7 +261,6 @@ function CollectOrderForm() {
                       <td className="px-2 py-1 text-center">${deposit.dueOnDeposit}</td>
                       <td className="px-2 py-1 text-center">{deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}</td>
                       <td className="px-2 py-1 text-center">{deposit.paymentMeethd}</td>
-                      <td className="px-2 py-1 text-center" ><button onClick={() => deleteDeposit(deposit.depositId)}>X</button></td>
                     </tr>
                   ))}
                 </tbody>
