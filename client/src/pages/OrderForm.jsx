@@ -13,11 +13,12 @@ function OrderForm() {
   const { unPaidOrder, createOrder, getOrder, updateOrder, getUnPaidOrdersbyClient } = useOrders();
   const { products, loadProducts, } = useProducts();
   const { clients, loadClients } = useClients()
+  const [refresh, setRefresh] = useState(true);
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
   const [clientChanged, setClientChanged] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [mall, setMall] = useState("");
+  const [mall, setMall] = useState("Alta Tecnología");
   const [order, setOrder] = useState({
     clientId: "",
     shopId: "1",
@@ -32,6 +33,11 @@ function OrderForm() {
   const filteredProducts = products.filter((product) =>
     product.productName.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (location.pathname.includes('nuevaOrden') && refresh) {
+    setCart([]);
+    setRefresh(false)
+  }
 
   const handleAddToCart = (product) => {
     console.log(product)
@@ -73,18 +79,18 @@ function OrderForm() {
 
   const selectClient = async (value) => {
     const newClient = value;
-    //setCart([]);
     await getUnPaidOrdersbyClient(value);
     setClientChanged(true)
     setClient(newClient);
-    //setCart(JSON.parse(unPaidOrder.items))
   };
 
   const calculateTotal = () => {
     return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
   };
 
+
   useEffect(() => {
+
     const loadOrder = async () => {
       if (params.id) {
         const order = await getOrder(params.id);
@@ -104,7 +110,6 @@ function OrderForm() {
     loadOrder();
     loadProducts();
   }, []);
-
   console.log(cart)
 
   return (
@@ -188,9 +193,10 @@ function OrderForm() {
             await updateOrder(unPaidOrder.id, values)
           } else {
             await createOrder(values);
+            window.location.reload();
           }
           navigate("/nuevaOrden");
-          navigate(navigation.reload());
+          window.location.reload();
           if (client == [] || cart == []) {
             alert("Por favor selecciona un cliente y agrega propductos para crear la orden");
           } else {
