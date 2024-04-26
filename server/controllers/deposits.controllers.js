@@ -32,3 +32,18 @@ export const createDeposit = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 }
+
+export const deleteDeposit = async (req, res) => {
+    const depositId = req.params.id;
+
+    try {
+        const result = await pool.query("DELETE FROM deposits WHERE id = ?", [depositId]);
+        if (result.affectedRows > 0) {
+            res.json({ message: "Depósito eliminado correctamente" });
+        } else {
+            res.status(404).json({ message: "No se encontró ningún depósito con el ID proporcionado" });
+        }
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};

@@ -12,5 +12,8 @@ export const getDepositByOrderIdRequest = async (id) =>
 export const getDepositsByDateRequest = async (date) =>
     await axios.get(`${renderServer}/depositsByDate/${date}`);
 
+export const deleteDepositById = async (id) =>
+    await axios.delete(`${renderServer}/deposits/${id}`);
+
 
 

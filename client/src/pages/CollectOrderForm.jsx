@@ -129,7 +129,8 @@ function CollectOrderForm() {
           { depositedTotal ? neewDeposit.depositValue = deposit : neewDeposit.depositValue = values.deposit }
           { order.deposit ? neewDeposit.lastDeposit = order.deposit : neewDeposit.lastDeposit = 0 };
           { depositedTotal ? neewDeposit.newDeposit = order.deposit + deposit : neewDeposit.newDeposit = values.deposit + order.deposit }
-
+          neewDeposit.dueOnDeposit = (calculateTotal() - neewDeposit.newDeposit)
+          console.log(neewDeposit.dueOnDeposit)
           console.log('new deposit')
           if (depositedTotal) {
             values.deposit = order.deposit + deposit
@@ -240,6 +241,7 @@ function CollectOrderForm() {
                     <th className="px-2 py-1">Valor de Abono</th>
                     <th className="px-2 py-1">Valor Abonado Anterior</th>
                     <th className="px-2 py-1">Nuevo Abono de la Orden</th>
+                    <th className="px-2 py-1">Debe</th>
                     <th className="px-2 py-1">Fecha Abono</th>
                     <th className="px-2 py-1">Método de Pago</th>
                   </tr>
@@ -250,6 +252,7 @@ function CollectOrderForm() {
                       <td className="text-green-400 px-2 py-1 text-center">+${deposit.depositValue}</td>
                       <td className="px-2 py-1 text-center">${deposit.lastDeposit}</td>
                       <td className="px-2 py-1 text-center">${deposit.newDeposit}</td>
+                      <td className="px-2 py-1 text-center">${deposit.dueOnDeposit}</td>
                       <td className="px-2 py-1 text-center">{deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}</td>
                       <td className="px-2 py-1 text-center">{deposit.paymentMeethd}</td>
                     </tr>

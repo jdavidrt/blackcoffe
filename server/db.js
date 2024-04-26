@@ -14,7 +14,8 @@ export const pool = await createPool({
 console.log("Conectado a DigitalOcean DB")
 /*pool.query(`
 
-SELECT LAST_EXECUTED FROM information_schema.events WHERE event_schema = 'pedidos' AND event_name = 'daily_task';
+ALTER TABLE deposits
+ADD COLUMN dueOnDeposit INT;
 
 
 
@@ -26,5 +27,5 @@ SELECT LAST_EXECUTED FROM information_schema.events WHERE event_schema = 'pedido
     .catch(error => {
         console.error("Error al ejecutar la consulta:", error);
     });
-*/
+    */
 export default pool
