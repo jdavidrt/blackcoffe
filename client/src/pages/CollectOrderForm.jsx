@@ -241,7 +241,7 @@ function CollectOrderForm() {
                     <th className="px-2 py-1">Valor de Abono</th>
                     <th className="px-2 py-1">Valor Abonado Anterior</th>
                     <th className="px-2 py-1">Nuevo Abono de la Orden</th>
-                    <th className="px-2 py-1">Debe</th>
+                    <th className="px-2 py-1">Nueva Deuda</th>
                     <th className="px-2 py-1">Fecha Abono</th>
                     <th className="px-2 py-1">Método de Pago</th>
                   </tr>
