@@ -8,7 +8,7 @@ import dayjs from "dayjs";
 function CollectOrderForm() {
 
   const { getOrder, updateOrder } = useOrders();
-  const { getDepositsByOrderId, createDeposit } = useDeposits();
+  const { getDepositsByOrderId, createDeposit, deleteDepositById } = useDeposits();
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
   const [deposit, setDeposit] = useState(0);
@@ -60,6 +60,13 @@ function CollectOrderForm() {
   function depositTotal() {
     setDepositedTotal(true);
     setDeposit(calculateTotal() - order.deposit)
+  }
+
+  async function deleteDeposit(id) {
+    await deleteDepositById(id);
+    setTimeout(() => {
+      window.location.reload();
+    }, 3000);
   }
 
   useEffect(() => {
@@ -130,8 +137,6 @@ function CollectOrderForm() {
           { order.deposit ? neewDeposit.lastDeposit = order.deposit : neewDeposit.lastDeposit = 0 };
           { depositedTotal ? neewDeposit.newDeposit = order.deposit + deposit : neewDeposit.newDeposit = values.deposit + order.deposit }
           neewDeposit.dueOnDeposit = (calculateTotal() - neewDeposit.newDeposit)
-          console.log(neewDeposit.dueOnDeposit)
-          console.log('new deposit')
           if (depositedTotal) {
             values.deposit = order.deposit + deposit
           } else {
@@ -244,6 +249,7 @@ function CollectOrderForm() {
                     <th className="px-2 py-1">Nueva Deuda</th>
                     <th className="px-2 py-1">Fecha Abono</th>
                     <th className="px-2 py-1">Método de Pago</th>
+                    <th className="px-2 py-1">Borrar</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -255,6 +261,7 @@ function CollectOrderForm() {
                       <td className="px-2 py-1 text-center">${deposit.dueOnDeposit}</td>
                       <td className="px-2 py-1 text-center">{deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}</td>
                       <td className="px-2 py-1 text-center">{deposit.paymentMeethd}</td>
+                      <td className="px-2 py-1 text-center" ><button onClick={() => deleteDeposit(deposit.depositId)}>X</button></td>
                     </tr>
                   ))}
                 </tbody>

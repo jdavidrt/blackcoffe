@@ -3,6 +3,7 @@ import {
     getDepositsRequest,
     getDepositByOrderIdRequest,
     createDepositRequest,
+    deleteDepositById,
     getDepositsByDateRequest
 } from "../api/deposits.api";
 import { DepositContext } from "./DepositsContext.jsx";
@@ -42,6 +43,16 @@ export const DepositContextProvider = ({ children }) => {
         }
     };
 
+    const deleteDepositById = async (id) => {
+        try {
+            const response = await deleteDepositById(id);
+            return response.data;
+        } catch (error) {
+            console.error(error);
+            throw error;
+        }
+    };
+
     async function getDepositsByDate(date) {
         console.log('fecha', date)
         const response = await getDepositsByDateRequest(date);
@@ -55,6 +66,7 @@ export const DepositContextProvider = ({ children }) => {
                 loadDeposits,
                 createDeposit,
                 getDepositsByOrderId,
+                deleteDepositById,
                 getDepositsByDate
             }}
         >
