@@ -53,45 +53,63 @@ function Navbar() {
       </div>
 
       {/* Menú de navegación */}
-      <ul className={`flex flex-col lg:flex flex-col lg:flex-row lg:gap-x-1 ${menuOpen ? 'block' : 'hidden'}`}>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/" className="text-white hover:text-black bg-yellow-700 rounded px-3 py-2">Cuentas por cobrar</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/nuevaOrden" className="text-white hover:text-black bg-emerald-900 rounded px-3 py-2">Nueva Orden</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/recorrido" className="text-white hover:text-black bg-orange-700 rounded px-3 py-2">Recorrido</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/cobrarOrdenes/Unilago" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Uni.</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/cobrarOrdenes/Alta Tecnología" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Alta T.</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/cobrarOrdenes/Cliente%20Frecuente" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar C. F.</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/cobrarOrdenes/Otros" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Otros</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/abonos" className="text-white hover:text-black bg-gray-400 rounded px-3 py-2">Abonos</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/ordenesPagas" className="text-white hover:text-black bg-gray-500 rounded px-3 py-2">Cuentas al día</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/productos" className="text-white hover:text-black bg-sky-800 rounded px-3 py-2">Productos</Link>
-        </li>
-        <li className="mb-1 flex items-center">
-          <Link onClick={toggleMenu} to="/clientes" className="text-white hover:text-black bg-sky-800 rounded px-3 py-2">Clientes</Link>
-        </li>
-        <li className="mb-1 flex items-center" onClick={logOut}>
-          <Link onClick={toggleMenu} to={window.location.pathname} className="text-white hover:text-black bg-red-900 rounded px-3 py-2">Salir</Link>
-        </li>
-      </ul>
-    </div>
+      {localStorage.getItem('user') == "Black coffe Unilago" ?
+        <ul className={`flex flex-col lg:flex flex-col lg:flex-row lg:gap-x-1 ${menuOpen ? 'block' : 'hidden'}`}>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/nuevaOrden" className="text-white hover:text-black bg-emerald-900 rounded px-3 py-2">Nueva Orden</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/recorrido" className="text-white hover:text-black bg-orange-700 rounded px-3 py-2">Recorrido</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/cobrarOrdenes/Unilago" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Uni.</Link>
+          </li>
+          <li className="mb-1 flex items-center" onClick={logOut}>
+            <Link onClick={toggleMenu} to={window.location.pathname} className="text-white hover:text-black bg-red-900 rounded px-3 py-2">Salir</Link>
+          </li>
+        </ul>
+        :
+        <ul className={`flex flex-col lg:flex flex-col lg:flex-row lg:gap-x-1 ${menuOpen ? 'block' : 'hidden'}`}>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/" className="text-white hover:text-black bg-yellow-700 rounded px-3 py-2">Cuentas por cobrar</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/nuevaOrden" className="text-white hover:text-black bg-emerald-900 rounded px-3 py-2">Nueva Orden</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/recorrido" className="text-white hover:text-black bg-orange-700 rounded px-3 py-2">Recorrido</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/cobrarOrdenes/Unilago" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Uni.</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/cobrarOrdenes/Alta Tecnología" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Alta T.</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/cobrarOrdenes/Cliente%20Frecuente" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar C. F.</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/cobrarOrdenes/Otros" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Cobrar Otros</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/abonos" className="text-white hover:text-black bg-gray-400 rounded px-3 py-2">Abonos</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/ordenesPagas" className="text-white hover:text-black bg-gray-500 rounded px-3 py-2">Cuentas al día</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/productos" className="text-white hover:text-black bg-sky-800 rounded px-3 py-2">Productos</Link>
+          </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/clientes" className="text-white hover:text-black bg-sky-800 rounded px-3 py-2">Clientes</Link>
+          </li>
+          <li className="mb-1 flex items-center" onClick={logOut}>
+            <Link onClick={toggleMenu} to={window.location.pathname} className="text-white hover:text-black bg-red-900 rounded px-3 py-2">Salir</Link>
+          </li>
+        </ul>
+      }
+
+    </div >
 
   );
 }

@@ -14,8 +14,9 @@ export const pool = await createPool({
 console.log("Conectado a DigitalOcean DB")
 /*pool.query(`
 
-ALTER TABLE deposits
-ADD COLUMN dueOnDeposit INT;
+INSERT INTO users (userName, pass)
+VALUES ('Black coffe Unilago', '2024aromatica');
+
 
 
 
@@ -26,6 +27,5 @@ ADD COLUMN dueOnDeposit INT;
     })
     .catch(error => {
         console.error("Error al ejecutar la consulta:", error);
-    });
-    */
+    });*/
 export default pool
