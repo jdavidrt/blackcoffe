@@ -1,20 +1,36 @@
 import React, { useEffect, useState } from "react";
 import OrderDeliveryCard from "../components/OrderDeliveryCard";
 import { useOrders } from "../context/OrderProvider";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
+import { DatePicker } from "antd";
+import dayjs from "dayjs";
 
-function DeliveryOrdersPage() {
+
+function DeliveredOrdersPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState(''); // Nuevo estado para el tipo de filtro
     const params = useParams();
     const [loading, setLoading] = useState(false);
     const { orders, loadUnDeliveredOrders } = useOrders();
 
+    const dateFormat = 'YYYY-MM-DD';
+    const fechaActual = dayjs().format('YYYY-MM-DD');
+
     const loadOrders = async () => {
         setLoading(true);
         try {
             await loadUnDeliveredOrders();
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const onDatePickerChange = async (date, dateString) => {
+        setLoading(true);
+        try {
+            await (dateString ? loadCollectedOrders(dateString) : loadCollectedOrders(fechaActual));
+            console.log(dateString)
         } finally {
             setLoading(false);
         }
@@ -40,7 +56,7 @@ function DeliveryOrdersPage() {
         }
 
         if (orders.length === 0) {
-            return <h1>No hay pedidos sin entregar</h1>;
+            return <h1>No hay pedidos entregados de esa fecha</h1>;
         }
 
         return filteredOrders.map((order) => <OrderDeliveryCard order={order} key={order.id} />);
@@ -49,15 +65,8 @@ function DeliveryOrdersPage() {
     return (
         <div className="bg-slate-200 h-dvh rounded-md">
             <div className="flex py-2">
-                <h4 className="text-xl text-black font-bold text-center">Pedidos sin entregar: ({filteredOrders.length})</h4>
+                <h4 className="text-xl text-black font-bold text-center">Pedidos  entregados: ({filteredOrders.length})</h4>
                 <div className="ml-auto flex">
-                    <button
-                        type="button"
-                        className="bg-indigo-700 px-2 py-1 text-black rounded-md"
-
-                    >
-                        <Link to="/entregados" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Entregados</Link>
-                    </button>
                     <button
                         type="button"
                         style={{
@@ -101,6 +110,9 @@ function DeliveryOrdersPage() {
                     >
                         C.F.
                     </button>
+                    <div className="ml-auto">
+                        <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
+                    </div>
                 </div>
             </div>
             <SearchBar onSearch={setSearchTerm} />
@@ -109,4 +121,4 @@ function DeliveryOrdersPage() {
     );
 }
 
-export default DeliveryOrdersPage;
+export default DeliveredOrdersPage;

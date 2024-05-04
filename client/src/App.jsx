@@ -13,6 +13,7 @@ import CollectOrderForm from "./pages/CollectOrderForm";
 import CollectedOrdersPage from "./pages/CollectedOrdersPage";
 import DepositsPage from "./pages/DepositsPage";
 import DeliveryOrdersPage from "./pages/DeliveryPage";
+import DeliveredOrdersPage from "./pages/DeliveredPage";
 import NotFound from "./pages/NotFound";
 import { OrderContextProvider } from "./context/OrderProvider";
 import { ClientContextProvider } from "./context/ClientProvider";
@@ -64,6 +65,7 @@ function App() {
                     <Route path="/factura/:id" element={<PublicInvoice />} />
                     <Route path="/abonos/" element={<DepositsPage />} />
                     <Route path="/recorrido/" element={<DeliveryOrdersPage />} />
+                    <Route path="/entregados/" element={<DeliveredOrdersPage />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </DepositContextProvider>

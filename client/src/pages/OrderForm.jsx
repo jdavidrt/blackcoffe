@@ -49,7 +49,7 @@ function OrderForm() {
       );
       setCart(updatedCart);
     } else {
-      setCart([...cart, { ...product, quantity: 1, delivered: false }]);
+      setCart([...cart, { ...product, quantity: 1, delivered: false, deliveredAt: "" }]);
     }
   };
 

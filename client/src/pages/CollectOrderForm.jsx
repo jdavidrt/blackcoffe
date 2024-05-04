@@ -23,15 +23,15 @@ function CollectOrderForm() {
   const [platformPayment, setPlatformPayment] = useState(false);
   const fechaActual = dayjs().format('YYYY-MM-DD');
   const [depositedTotal, setDepositedTotal] = useState(false);
-
-
+  console.log(cart)
   const handleCheckboxChange = async (itemId) => {
     setCart((prevCart) => {
       const updatedCart = prevCart.map((item) => {
         if (item.id === itemId) {
           return {
             ...item,
-            delivered: !item.delivered, // Invierte el valor actual
+            delivered: !item.delivered,
+            deliveredAt: fechaActual
           };
         }
         return item;
@@ -124,6 +124,20 @@ function CollectOrderForm() {
       <Formik
         initialValues={order}
         enableReinitialize={true}
+        validate={values => {
+          const inputValue = parseFloat(values.deposit);
+          const maxAllowed = calculateTotal() - order.deposit;
+
+          if (inputValue < 0) {
+            alert("Por favor, ingrese un valor positivo.");
+            return { deposit: "Por favor, ingrese un valor positivo." };
+          } else if (inputValue > maxAllowed) {
+            alert(`El valor ingresado no puede ser mayor a ${maxAllowed}.`);
+            return { deposit: `El valor ingresado no puede ser mayor a ${maxAllowed}.` };
+          }
+
+          return {};
+        }}
         onSubmit={async (values, actions) => {
           values.shopId = 1;
           values.clientId = client;
@@ -161,7 +175,9 @@ function CollectOrderForm() {
             await updateOrder(params.id, values);
           }
           setOrder({ order });
-          navigate(-1);
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
         }}
       >
         {({ handleChange, handleSubmit, values, isSubmitting }) => (
@@ -195,6 +211,12 @@ function CollectOrderForm() {
                   {'Orden Cobrada'}
                 </button></> :
                 <>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`../pdfOrden/` + params.id)}
+                    className="block bg-indigo-500 px-2 my-2 py-1 text-white w-20% rounded-md ml-auto"              >
+                    {'Generar Factura'}
+                  </button>
                   <button
                     type="button"
                     className="block bg-indigo-500 px-2 my-2 py-1 text-white w-20% rounded-md ml-auto"              >
