@@ -9,7 +9,8 @@ import {
     getUnPaidOrders,
     getUnPaidOrdersbyClientId,
     getNotDeliveredOrders,
-    getDeliveredOrders
+    getDeliveredOrders,
+    getDepositedOrdersByDate
 } from "../controllers/orders.controllers.js"
 const router = Router();
 
@@ -20,6 +21,8 @@ router.get('/notDeliveredOrders/', getNotDeliveredOrders);
 router.get('/deliveredOrders/:date', getDeliveredOrders);
 
 router.get('/collectedOrders/:date', getCollectedOrders);
+
+router.get('/depositedOrdersByDate/:date', getDepositedOrdersByDate);
 
 router.get('/unPaidOrders/:mall', getUnPaidOrders);
 

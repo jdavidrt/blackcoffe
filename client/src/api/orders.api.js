@@ -13,6 +13,9 @@ export const getDeliveredOrdersRequest = async (date) =>
 export const getCollectedOrders = async (date) =>
   await axios.get(`${renderServer}/collectedOrders/${date}`, date);
 
+export const getDepositedOrdersByDate = async (date) =>
+  await axios.get(`${renderServer}/depositedOrdersByDate/${date}`, date);
+
 export const getUnpaidOrders = async (mall) =>
   await axios.get(`${renderServer}/unPaidOrders/${mall}`, mall);
 

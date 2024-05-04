@@ -9,14 +9,14 @@ function DepositedOrdersPage() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('');
-  const { orders, loadOrders } = useOrders();
+  const { orders, loadDepositedOrderByDate } = useOrders();
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
 
   const onDatePickerChange = async (date, dateString) => {
     setLoading(true);
     try {
-      await (dateString ? loadDeliveredOrders(dateString) : loadDeliveredOrders(fechaActual));
+      await (dateString ? loadDepositedOrderByDate(dateString) : loadDepositedOrderByDate(fechaActual));
       console.log(dateString)
     } finally {
       setLoading(false);
@@ -26,7 +26,7 @@ function DepositedOrdersPage() {
   const loadOrdersS = async (value, dateString) => {
     setLoading(true);
     try {
-      await loadOrders();
+      await loadDepositedOrderByDate(fechaActual);
     } finally {
       setLoading(false);
     }

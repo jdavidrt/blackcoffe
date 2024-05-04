@@ -9,7 +9,8 @@ import {
   getUnpaidOrders,
   loadUnPaidOrdersbyClient,
   getNotDeliveredOrdersRequest,
-  getDeliveredOrdersRequest
+  getDeliveredOrdersRequest,
+  getDepositedOrdersByDate
 } from "../api/orders.api";
 import { OrderContext } from "./OrderContext";
 
@@ -44,6 +45,12 @@ export const OrderContextProvider = ({ children }) => {
   async function loadCollectedOrders(date) {
     console.log('fecha', date)
     const response = await getCollectedOrders(date);
+    setOrders(response.data);
+  }
+
+  async function loadDepositedOrderByDate(date) {
+    console.log('fecha', date)
+    const response = await getDepositedOrdersByDate(date);
     setOrders(response.data);
   }
 
@@ -113,7 +120,8 @@ export const OrderContextProvider = ({ children }) => {
         loadUnPaidOrders,
         getUnPaidOrdersbyClient,
         loadUnDeliveredOrders,
-        loadDeliveredOrders
+        loadDeliveredOrders,
+        loadDepositedOrderByDate
       }}
     >
       {children}

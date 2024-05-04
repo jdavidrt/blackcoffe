@@ -64,29 +64,32 @@ export const getDeliveredOrders = async (req, res) => {
 
 export const getDepositedOrdersByDate = async (req, res) => {
     const [result] = await pool.query(`
-        SELECT 
-            orders.id, 
-            orders.deposit, 
-            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt, 
-            orders.clientId, 
-            orders.paid, 
-            orders.collectedBy, 
-            orders.items, 
-            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, 
-            clients.premises, 
-            clients.clientName, 
-            clients.mall 
+            SELECT DISTINCT
+            deposits.orderId,
+            deposits.depositId,
+            deposits.depositCreatedAt,
+            deposits.clientId,
+            deposits.paymentMethod,
+            deposits.depositValue,
+            deposits.lastDeposit,
+            deposits.newDeposit,
+            orders.id,
+            orders.createdAt,
+            orders.shopId,
+            orders.clientId,
+            orders.paymentMethod,
+            orders.paid,
+            orders.paidAt,
+            orders.items,
+            orders.deposit,
+            orders.collectedBy
         FROM 
-            orders 
+            deposits
         JOIN 
-            clients ON orders.clientId = clients.id 
-        JOIN 
-            deposits ON orders.id deposits.orderId
+            orders ON deposits.orderId = orders.id
         WHERE 
-            deposits.
+            DATE(deposits.depositCreatedAt) = ?        
         ORDER BY 
-            CAST(clients.premises AS SIGNED), 
-            clients.clientname ASC, 
             orders.createdAt ASC
     `, [req.params.date]);
     res.json(result);

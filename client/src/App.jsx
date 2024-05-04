@@ -14,6 +14,7 @@ import CollectedOrdersPage from "./pages/CollectedOrdersPage";
 import DepositsPage from "./pages/DepositsPage";
 import DeliveryOrdersPage from "./pages/DeliveryPage";
 import DeliveredOrdersPage from "./pages/DeliveredPage";
+import DepositedOrdersPage from "./pages/DepositedOrdersPage";
 import NotFound from "./pages/NotFound";
 import { OrderContextProvider } from "./context/OrderProvider";
 import { ClientContextProvider } from "./context/ClientProvider";
@@ -66,6 +67,7 @@ function App() {
                     <Route path="/abonos/" element={<DepositsPage />} />
                     <Route path="/recorrido/" element={<DeliveryOrdersPage />} />
                     <Route path="/entregados/" element={<DeliveredOrdersPage />} />
+                    <Route path="/cobrosHoy/" element={<DepositedOrdersPage />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </DepositContextProvider>
