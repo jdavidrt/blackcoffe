@@ -7,6 +7,8 @@ export const getOrdersRequest = async () =>
 export const getNotDeliveredOrdersRequest = async () =>
   await axios.get(`${renderServer}/notDeliveredOrders/`,);
 
+export const getDeliveredOrdersRequest = async (date) =>
+  await axios.get(`${renderServer}/deliveredOrders/${date}`, date);
 
 export const getCollectedOrders = async (date) =>
   await axios.get(`${renderServer}/collectedOrders/${date}`, date);

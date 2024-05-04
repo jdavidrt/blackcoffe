@@ -53,7 +53,7 @@ export const getDeliveredOrders = async (req, res) => {
             clients ON orders.clientId = clients.id 
         WHERE 
             orders.items LIKE '%"delivered":true%' AND 
-            orders.items LIKE '%"deliveredAt":'?'';
+            orders.items LIKE '%"deliveredAt":"?"%';
         ORDER BY 
         CAST(clients.premises AS SIGNED), 
             clients.clientname ASC, 

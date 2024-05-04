@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { LoginOutlined } from '@ant-design/icons';
 import dayjs from "dayjs";
 
-function OrderDeliveryCard({ order }) {
+function OrderDeliveredCard({ order }) {
   const navigate = useNavigate();
   const { updateOrder } = useOrders();
   const [cart, setCart] = useState([]);
@@ -72,7 +72,7 @@ function OrderDeliveryCard({ order }) {
       </div>
       <div id='asd'>
         {JSON.parse(order.items).map((item) => (
-          !item.delivered && (
+          item.delivered && (
             <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
               <input
                 type="checkbox"
@@ -98,4 +98,4 @@ function OrderDeliveryCard({ order }) {
   );
 }
 
-export default OrderDeliveryCard;
+export default OrderDeliveredCard;

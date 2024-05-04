@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import OrderDeliveryCard from "../components/OrderDeliveryCard";
+import OrderDeliveredCard from "../components/OrderDeliveredCard";
 import { useOrders } from "../context/OrderProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
@@ -12,7 +12,7 @@ function DeliveredOrdersPage() {
     const [filterType, setFilterType] = useState(''); // Nuevo estado para el tipo de filtro
     const params = useParams();
     const [loading, setLoading] = useState(false);
-    const { orders, loadUnDeliveredOrders } = useOrders();
+    const { orders, loadDeliveredOrders } = useOrders();
 
     const dateFormat = 'YYYY-MM-DD';
     const fechaActual = dayjs().format('YYYY-MM-DD');
@@ -20,7 +20,7 @@ function DeliveredOrdersPage() {
     const loadOrders = async () => {
         setLoading(true);
         try {
-            await loadUnDeliveredOrders();
+            await loadDeliveredOrders(fechaActual);
         } finally {
             setLoading(false);
         }
@@ -29,7 +29,7 @@ function DeliveredOrdersPage() {
     const onDatePickerChange = async (date, dateString) => {
         setLoading(true);
         try {
-            await (dateString ? loadCollectedOrders(dateString) : loadCollectedOrders(fechaActual));
+            await (dateString ? loadDeliveredOrders(dateString) : loadDeliveredOrders(fechaActual));
             console.log(dateString)
         } finally {
             setLoading(false);
@@ -58,8 +58,7 @@ function DeliveredOrdersPage() {
         if (orders.length === 0) {
             return <h1>No hay pedidos entregados de esa fecha</h1>;
         }
-
-        return filteredOrders.map((order) => <OrderDeliveryCard order={order} key={order.id} />);
+        return filteredOrders.map((order) => <OrderDeliveredCard order={order} key={order.id} />);
     }
 
     return (
