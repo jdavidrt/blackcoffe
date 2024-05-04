@@ -54,11 +54,6 @@ function DepositedOrdersPage() {
     return { totalUnilago, totalAltaTec, totalOtros, totalCF };
   }
 
-  const filteredOrders = orders.filter((order) =>
-    (order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.premises.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    (filterType === '' || order.mall === filterType)
-  );
 
   useEffect(() => {
     loadOrdersS(); // Iniciar carga al montar el componente
@@ -77,13 +72,13 @@ function DepositedOrdersPage() {
       return <h1>No hay órdenes con cobros del día seleccionado</h1>;
     }
 
-    return filteredOrders.map((order) => <OrderCollectCard order={order} key={order.id} />);
+    return orders.map((order) => <OrderCollectCard order={order} key={order.id} />);
   }
 
   return (
     <div className="bg-slate-200 h-dvh rounded-md">
       <div className="flex py-2">
-        <h4 className="text-xl text-black font-bold text-center">Ordenes con cobros ({filteredOrders.length}) </h4>
+        <h4 className="text-xl text-black font-bold text-center">Ordenes con cobros ({orders.length}) </h4>
         <div className="ml-auto flex">
           <button
             type="button"
