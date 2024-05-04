@@ -52,7 +52,8 @@ export const getDeliveredOrders = async (req, res) => {
         JOIN 
             clients ON orders.clientId = clients.id 
         WHERE 
-            orders.items LIKE '%"delivered":true%'
+            orders.items LIKE '%"delivered":true%' AND 
+            orders.items LIKE '%"deliveredAt":'?'';
         ORDER BY 
         CAST(clients.premises AS SIGNED), 
             clients.clientname ASC, 

@@ -17,7 +17,7 @@ router.get('/orders/', getOrders);
 
 router.get('/notDeliveredOrders/', getNotDeliveredOrders);
 
-router.get('/deliveredOrders/', getDeliveredOrders);
+router.get('/deliveredOrders/:date', getDeliveredOrders);
 
 router.get('/collectedOrders/:date', getCollectedOrders);
 
