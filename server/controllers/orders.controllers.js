@@ -35,32 +35,33 @@ export const getNotDeliveredOrders = async (req, res) => {
 
 export const getDeliveredOrders = async (req, res) => {
     const [result] = await pool.query(`
-    SELECT 
-    orders.id, 
-    orders.deposit, 
-    CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt, 
-    orders.clientId, 
-    orders.paid, 
-    orders.collectedBy, 
-    orders.items, 
-    DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, 
-    clients.premises, 
-    clients.clientName, 
-    clients.mall 
-FROM 
-    orders 
-JOIN 
-    clients ON orders.clientId = clients.id 
-WHERE 
-    orders.items LIKE '%"delivered":true%' AND 
-    orders.items LIKE CONCAT('%"deliveredAt":"?"%')
-ORDER BY 
-    CAST(clients.premises AS SIGNED), 
-    clients.clientname ASC, 
-    orders.createdAt ASC
-    `, req.params.date);
+        SELECT 
+            orders.id, 
+            orders.deposit, 
+            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt, 
+            orders.clientId, 
+            orders.paid, 
+            orders.collectedBy, 
+            orders.items, 
+            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, 
+            clients.premises, 
+            clients.clientName, 
+            clients.mall 
+        FROM 
+            orders 
+        JOIN 
+            clients ON orders.clientId = clients.id 
+        WHERE 
+            orders.items LIKE '%"delivered":true%' AND 
+            orders.items LIKE CONCAT('%"deliveredAt":"', ?, '"%')
+        ORDER BY 
+            CAST(clients.premises AS SIGNED), 
+            clients.clientname ASC, 
+            orders.createdAt ASC
+    `, [req.params.date]);
     res.json(result);
 }
+
 
 
 export const getUnPaidOrders = async (req, res) => {
