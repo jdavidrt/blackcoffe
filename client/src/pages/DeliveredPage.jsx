@@ -17,15 +17,6 @@ function DeliveredOrdersPage() {
     const dateFormat = 'YYYY-MM-DD';
     const fechaActual = dayjs().format('YYYY-MM-DD');
 
-    const loadOrders = async () => {
-        setLoading(true);
-        try {
-            await loadDeliveredOrders(fechaActual);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const onDatePickerChange = async (date, dateString) => {
         setLoading(true);
         try {
@@ -35,6 +26,17 @@ function DeliveredOrdersPage() {
             setLoading(false);
         }
     };
+
+    const loadOrders = async () => {
+        setLoading(true);
+        try {
+            await loadDeliveredOrders(fechaActual);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
 
     const filteredOrders = orders.filter((order) =>
         (order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||

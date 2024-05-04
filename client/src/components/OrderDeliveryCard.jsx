@@ -8,7 +8,7 @@ function OrderDeliveryCard({ order }) {
   const navigate = useNavigate();
   const { updateOrder } = useOrders();
   const [cart, setCart] = useState([]);
-  const deliveryDate = dayjs().format('HH:mm DD/MM/YY');
+  const deliveryDate = dayjs().format('YYYY-MM-DD');
 
   const handleCheckboxChange = async (itemId) => {
     setCart((prevCart) => {
