@@ -9,6 +9,8 @@ function OrdersPage() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [clave, setClave] = useState('');
+  const [mostrarContenido, setMostrarContenido] = useState(false);
   const { orders, loadOrders } = useOrders();
 
   const loadOrdersS = async (value, dateString) => {
@@ -27,8 +29,40 @@ function OrdersPage() {
   );
 
   useEffect(() => {
-    loadOrdersS(); // Iniciar carga al montar el componente
-  }, []);
+    if (mostrarContenido) {
+      loadOrdersS(); // Iniciar carga al montar el componente solo si se muestra el contenido
+    }
+  }, [mostrarContenido]);
+
+  // Función para manejar el cambio en el input de la clave
+  const handleChangeClave = event => {
+    setClave(event.target.value);
+  };
+
+  // Función para manejar el envío del formulario de la clave
+  const handleSubmit = event => {
+    event.preventDefault();
+    // Verificar si la clave ingresada es correcta
+    if (clave === '0114') { // Reemplaza 'tuclave' con la clave correcta
+      setMostrarContenido(true);
+    } else {
+      alert('Clave incorrecta. Por favor, inténtalo de nuevo.');
+      setClave('');
+    }
+  };
+
+  // Renderizar contenido solo si la clave es correcta y se debe mostrar
+  if (!mostrarContenido) {
+    return (
+      <form onSubmit={handleSubmit}>
+        <label>
+          Ingresa la clave:
+          <input type="password" value={clave} onChange={handleChangeClave} />
+        </label>
+        <button type="submit">Enviar</button>
+      </form>
+    );
+  }
 
   function renderMain() {
     if (loading) {
