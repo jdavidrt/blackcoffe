@@ -85,7 +85,7 @@ function OrderDeliveryCard({ order }) {
               <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
                 {item.id.slice(-14)}
               </p>
-              <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue}</p>
+              <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
             </div>
           )
         ))}

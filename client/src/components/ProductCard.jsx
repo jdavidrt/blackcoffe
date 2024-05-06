@@ -8,7 +8,7 @@ function productCard({ product }) {
 
   return (
     <div className="flex bg-stone-100 text-black rounded-md m-2">
-      <p className="p-2 flex items-center h-content font-bold">{product.productName} - ${product.unitValue}</p>
+      <p className="p-2 flex items-center h-content font-bold">{product.productName} - ${product.quantity * product.unitValue}</p>
       <p className="p-2 text-sm text-gray-500 flex items-center justify-center font-bold h-content">
         {product.dateAdded}
       </p>
