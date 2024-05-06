@@ -75,18 +75,19 @@ export const getDepositedOrdersByDate = async (req, res) => {
             deposits.newDeposit,
             orders.id,
             orders.createdAt,
-            orders.shopId,
             orders.clientId,
-            orders.paymentMethod,
-            orders.paid,
             orders.paidAt,
             orders.items,
             orders.deposit,
-            orders.collectedBy
+            clients.premises, 
+            clients.clientName, 
+            clients.mall 
         FROM 
             deposits
         JOIN 
             orders ON deposits.orderId = orders.id
+        JOIN 
+            clients ON order.clientId = client.id
         WHERE 
             DATE(deposits.depositCreatedAt) = ?        
         ORDER BY 
