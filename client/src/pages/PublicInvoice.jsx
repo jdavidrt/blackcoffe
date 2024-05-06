@@ -23,6 +23,7 @@ function PublicInvoice() {
                 const order = await getOrder(params.id);
                 setTimeout(() => {
                 }, 3000);
+                setCart(JSON.parse(order.items))
                 order.paid ?
                     setOrder({
                         orderId: order.id,
@@ -47,6 +48,8 @@ function PublicInvoice() {
                     })
             }
         };
+
+
         loadOrder();
     }, []);
     console.log(cart)

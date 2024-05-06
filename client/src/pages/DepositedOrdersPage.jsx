@@ -13,11 +13,34 @@ function DepositedOrdersPage() {
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
 
+  function sumarDepositos(arregloObjetos) {
+    const depositosSumados = {};
+
+    arregloObjetos.forEach(objeto => {
+      const id = objeto.id;
+      const depositValue = objeto.depositValue;
+
+      if (depositosSumados.hasOwnProperty(id)) {
+        depositosSumados[id].depositValue += depositValue;
+      } else {
+        depositosSumados[id] = { ...objeto };
+      }
+    });
+
+    const resultados = Object.values(depositosSumados);
+
+    return resultados;
+  }
+
+  const resultados = sumarDepositos(orders);
+  console.log('resultados', resultados);
+
+
   const onDatePickerChange = async (date, dateString) => {
     setLoading(true);
     try {
       await (dateString ? loadDepositedOrderByDate(dateString) : loadDepositedOrderByDate(fechaActual));
-      console.log(dateString)
+      console.log('ordeeers', orders)
     } finally {
       setLoading(false);
     }
@@ -28,34 +51,37 @@ function DepositedOrdersPage() {
     try {
       await loadDepositedOrderByDate(fechaActual);
     } finally {
+
       setLoading(false);
     }
   };
 
-  function calcularTotalesCollectedBy(orders) {
-    let totalUnilago = 0;
-    let totalAltaTec = 0;
-    let totalCF = 0;
-    let totalOtros = 0;
+  function sumarDepositosPorMall(arregloObjetos) {
+    const depositosPorMall = {
+      "Unilago": 0,
+      "Alta Tecnología": 0,
+      "Cliente Frecuente": 0,
+      "Otros": 0
+    };
 
-    orders.forEach(order => {
-      const subtotal = JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
-      if (order.collectedBy === "Unilago") {
-        totalUnilago += subtotal;
-      } else if (order.collectedBy === "Alta Tecnología") {
-        totalAltaTec += subtotal;
-      } else if (order.collectedBy === "Cliente Frecuente") {
-        totalCF += subtotal;
-      } else if (order.collectedBy === "Otros") {
-        totalOtros += subtotal;
+    arregloObjetos.forEach(objeto => {
+      const mall = objeto.mall;
+      const depositValue = objeto.depositValue;
+
+      if (depositosPorMall.hasOwnProperty(mall)) {
+        depositosPorMall[mall] += depositValue;
+      } else {
+        depositosPorMall["Otros"] += depositValue; // Si el mall no está en la lista, se suma en "Otros"
       }
     });
-
-    return { totalUnilago, totalAltaTec, totalOtros, totalCF };
+    console.log('8depos', depositosPorMall)
+    return depositosPorMall;
   }
 
 
+
   useEffect(() => {
+    sumarDepositosPorMall(orders)
     loadOrdersS(); // Iniciar carga al montar el componente
   }, []);
 
@@ -72,7 +98,7 @@ function DepositedOrdersPage() {
       return <h1>No hay órdenes con cobros del día seleccionado</h1>;
     }
 
-    return orders.map((order) => <OrderCollectCard order={order} key={order.id} />);
+    return sumarDepositos(orders).map((order) => <OrderCollectCard order={order} key={order.id} />);
   }
 
   return (
@@ -129,9 +155,10 @@ function DepositedOrdersPage() {
         </div>
       </div>
       <SearchBar onSearch={setSearchTerm} />
+
       {orders.length !== 0 ? (
         <div>
-          Total cobrado en Unilago: ${calcularTotalesCollectedBy(orders).totalUnilago} <br />AltaTec: ${calcularTotalesCollectedBy(orders).totalAltaTec} <br /> C.F: ${calcularTotalesCollectedBy(orders).totalCF} <br /> Otros: ${calcularTotalesCollectedBy(orders).totalOtros}
+          Total cobrado en Unilago: ${sumarDepositosPorMall(orders)["Unilago"]} <br />AltaTec: ${sumarDepositosPorMall(orders)["Alta Tecnología"]} <br /> C.F: ${sumarDepositosPorMall(orders)['Cliente Frecuente']} <br /> Otros: ${sumarDepositosPorMall(orders)["Otros"]}
         </div>
       ) : null}
       <div className="bg-yellow-500 rounded-md grid">{renderMain()}</div>

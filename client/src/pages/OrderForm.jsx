@@ -84,7 +84,7 @@ function OrderForm() {
   };
 
   const calculateTotal = () => {
-    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
+    return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
   };
 
 
