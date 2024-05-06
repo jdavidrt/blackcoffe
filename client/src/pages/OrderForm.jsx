@@ -40,7 +40,6 @@ function OrderForm() {
   }
 
   const handleAddToCart = (product) => {
-    console.log(product)
     const existingProduct = cart.find((item) => item.id === product.id);
 
     if (existingProduct) {
@@ -85,7 +84,7 @@ function OrderForm() {
   };
 
   const calculateTotal = () => {
-    return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
+    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
   };
 
 
