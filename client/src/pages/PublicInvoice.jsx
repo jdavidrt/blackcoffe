@@ -11,9 +11,6 @@ function PublicInvoice() {
     const { getOrder } = useOrders();
     const [cart, setCart] = useState([]);
     const [order, setOrder] = useState({
-        clientId: "",
-        shopId: "1",
-        items: ""
     });
 
     const calculateTotal = () => {
@@ -24,20 +21,30 @@ function PublicInvoice() {
         const loadOrder = async () => {
             if (params.id) {
                 const order = await getOrder(params.id);
-                setCart(JSON.parse(order.items))
-
-                setOrder({
-                    orderId: order.id,
-                    clientId: order.clientId,
-                    shopId: 1,
-                    items: cart,
-                    clientName: order.clientName,
-                    premises: order.premises,
-                    createdAt: order.createdAt.slice(0, 10),
-                    paid: order.paid,
-                    paidAt: order.paidAt.slice(0, 10),
-                    deposit: order.deposit
-                });
+                setTimeout(() => {
+                }, 3000);
+                order.paid ?
+                    setOrder({
+                        orderId: order.id,
+                        clientId: order.clientId,
+                        shopId: 1,
+                        items: cart,
+                        clientName: order.clientName,
+                        premises: order.premises,
+                        createdAt: order.createdAt.slice(0, 10),
+                        paid: order.paid,
+                        paidAt: order.paidAt.slice(0, 10),
+                        deposit: order.deposit
+                    }) : setOrder({
+                        orderId: order.id,
+                        clientId: order.clientId,
+                        shopId: 1,
+                        items: cart,
+                        clientName: order.clientName,
+                        premises: order.premises,
+                        createdAt: order.createdAt.slice(0, 10),
+                        deposit: order.deposit
+                    })
             }
         };
         loadOrder();
