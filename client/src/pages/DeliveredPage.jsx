@@ -9,18 +9,19 @@ import dayjs from "dayjs";
 
 function DeliveredOrdersPage() {
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterType, setFilterType] = useState(''); // Nuevo estado para el tipo de filtro
+    const [filterType, setFilterType] = useState('');
+    const [dateFilter, setDateFilter] = useState(''); // Nuevo estado para el tipo de filtro
     const params = useParams();
     const [loading, setLoading] = useState(false);
     const { orders, loadDeliveredOrders } = useOrders();
 
     const dateFormat = 'YYYY-MM-DD';
     const fechaActual = dayjs().format('YYYY-MM-DD');
-
     const onDatePickerChange = async (date, dateString) => {
         setLoading(true);
         try {
             await (dateString ? loadDeliveredOrders(dateString) : loadDeliveredOrders(fechaActual));
+            dateString ? localStorage.setItem('dateFilter', dateString) : localStorage.setItem('dateFilter', fechaActual)
             console.log(dateString)
         } finally {
             setLoading(false);
@@ -42,6 +43,7 @@ function DeliveredOrdersPage() {
         (order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             order.premises.toLowerCase().includes(searchTerm.toLowerCase())) &&
         (filterType === '' || order.mall === filterType)
+        && (order.items.toLowerCase().includes(localStorage.getItem('dateFilter')))
     );
 
     useEffect(() => {

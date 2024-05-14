@@ -71,8 +71,9 @@ function OrderDeliveredCard({ order }) {
         </div>
       </div>
       <div id='asd'>
-        {JSON.parse(order.items).map((item) => (
-          item.delivered && (
+        {JSON.parse(order.items)
+          .filter((item) => item.delivered && item.deliveredAt === localStorage.getItem('dateFilter'))
+          .map((item) => (
             <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
               <input
                 type="checkbox"
@@ -88,10 +89,10 @@ function OrderDeliveredCard({ order }) {
               <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
                 Entregado: {item.deliveredAt}
               </p>
-              <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue}</p>
+              <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
             </div>
-          )
-        ))}
+          ))}
+
       </div>
     </div>
 
