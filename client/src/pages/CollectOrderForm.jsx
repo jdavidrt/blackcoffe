@@ -18,12 +18,22 @@ function CollectOrderForm() {
     items: ""
   });
   const [deposits, setDeposits] = useState([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingFormData, setPendingFormData] = useState(null);
+  const [pendingActions, setPendingActions] = useState(null);
+  const [modalPaymentInfo, setModalPaymentInfo] = useState({
+    depositAmount: 0,
+    currentDebt: 0,
+    newDebt: 0
+  });
   const params = useParams();
   const navigate = useNavigate();
   const [platformPayment, setPlatformPayment] = useState(false);
   const fechaActual = dayjs().format('YYYY-MM-DD');
   const [depositedTotal, setDepositedTotal] = useState(false);
+
   console.log(cart)
+
   const handleCheckboxChange = async (itemId) => {
     setCart((prevCart) => {
       const updatedCart = prevCart.map((item) => {
@@ -37,12 +47,12 @@ function CollectOrderForm() {
         return item;
       });
 
-      console.log('cart', updatedCart); // Usa updatedCart en lugar de cart
+      console.log('cart', updatedCart); // Use updatedCart instead of cart
       var values = {};
       values.items = JSON.stringify(updatedCart);
       console.log('vals', values.items);
 
-      // Llama a tu función asíncrona aquí (en este caso, updateOrder)
+      // Call async function here (in this case, updateOrder)
       updateOrder(params.id, values);
 
       return updatedCart;
@@ -54,7 +64,7 @@ function CollectOrderForm() {
   };
 
   function togglePlatform() {
-    setPlatformPayment(!platformPayment); // Cambiar el valor de verdadero a falso y viceversa
+    setPlatformPayment(!platformPayment); // Change value from true to false and vice versa
   }
 
   function depositTotal() {
@@ -68,6 +78,134 @@ function CollectOrderForm() {
       window.location.reload();
     }, 3000);
   }
+
+  const calculateModalInfo = (values) => {
+    const totalAmount = calculateTotal();
+    const currentDebt = totalAmount - order.deposit;
+
+    // Calculate deposit amount based on whether it's total payment or partial
+    let depositAmount;
+    if (depositedTotal) {
+      depositAmount = deposit; // This is calculateTotal() - order.deposit
+    } else {
+      depositAmount = parseFloat(values.deposit) || 0;
+    }
+
+    const newDebt = Math.max(0, currentDebt - depositAmount);
+
+    return {
+      depositAmount,
+      currentDebt,
+      newDebt
+    };
+  };
+
+  const handleFormSubmit = async (values, actions) => {
+    // Validation: Check if there's a valid deposit amount
+    let hasValidDeposit = false;
+    let depositAmount = 0;
+
+    if (depositedTotal && deposit > 0) {
+      hasValidDeposit = true;
+      depositAmount = deposit;
+    } else if (!depositedTotal && values.deposit && parseFloat(values.deposit) > 0) {
+      hasValidDeposit = true;
+      depositAmount = parseFloat(values.deposit);
+    }
+
+    // Prevent modal from showing if there's no valid deposit
+    if (!hasValidDeposit) {
+      alert("Por favor, ingrese un valor válido para el depósito");
+      return;
+    }
+
+    // Calculate payment information for modal
+    const paymentInfo = calculateModalInfo(values);
+    setModalPaymentInfo(paymentInfo);
+
+    // Store the form data and actions for later use
+    setPendingFormData(values);
+    setPendingActions(actions);
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmPayment = async () => {
+    setShowConfirmModal(false);
+
+    if (!pendingFormData || !pendingActions) return;
+
+    const values = pendingFormData;
+    const actions = pendingActions;
+
+    // Original submission logic
+    values.shopId = 1;
+    values.clientId = client;
+    values.items = JSON.stringify(cart)
+    console.log('creating new deposit')
+    var neewDeposit = {};
+    neewDeposit.orderId = params.id;
+    neewDeposit.clientId = order.clientId;
+    { platformPayment ? neewDeposit.paymentMethod = 'Plataforma' : neewDeposit.paymentMethod = 'Efectivo' };
+    { depositedTotal ? neewDeposit.depositValue = deposit : neewDeposit.depositValue = values.deposit }
+    { order.deposit ? neewDeposit.lastDeposit = order.deposit : neewDeposit.lastDeposit = 0 };
+    { depositedTotal ? neewDeposit.newDeposit = order.deposit + deposit : neewDeposit.newDeposit = values.deposit + order.deposit }
+    neewDeposit.dueOnDeposit = (calculateTotal() - neewDeposit.newDeposit)
+    if (depositedTotal) {
+      values.deposit = order.deposit + deposit
+    } else {
+      values.deposit = values.deposit + order.deposit
+    }
+
+    if (values.deposit >= calculateTotal()) {
+      values.paid = 1;
+    } else {
+      values.paid = 0;
+    }
+
+    values.paidAt = fechaActual;
+    if (params.id) {
+      delete values.clientName;
+      delete values.premises;
+      delete values.createdAt;
+      delete values.clientId;
+      delete values.items;
+      delete values.shopId;
+      await createDeposit(neewDeposit)
+      await updateOrder(params.id, values);
+    }
+
+    // Reset form and states after successful transaction
+    setOrder({ order });
+    setDepositedTotal(false); // Reset total deposit flag
+    setDeposit(0); // Reset deposit amount
+
+    // Reset form field using Formik's resetForm
+    if (pendingActions && pendingActions.resetForm) {
+      pendingActions.resetForm({
+        values: {
+          ...pendingFormData,
+          deposit: "" // Clear the deposit field
+        }
+      });
+    }
+
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
+
+    // Clear pending data
+    setPendingFormData(null);
+    setPendingActions(null);
+  };
+
+  const handleCancelPayment = () => {
+    setShowConfirmModal(false);
+    setPendingFormData(null);
+    setPendingActions(null);
+    // Reset depositedTotal flag if user cancels
+    setDepositedTotal(false);
+    setDeposit(0);
+  };
 
   useEffect(() => {
     const loadOrder = async () => {
@@ -109,7 +247,11 @@ function CollectOrderForm() {
       }
     };
     loadOrder();
-  }, []);
+
+    // Reset states when component mounts to ensure clean state
+    setDepositedTotal(false);
+    setDeposit(0);
+  }, [params.id]); // Reset when navigating to different order
 
   return (
     <div>
@@ -121,66 +263,110 @@ function CollectOrderForm() {
       </h1>
 
       {order.paid ? <h1 className="text-xl font-bold uppercase text-center">Dia de pago: {order.paidAt}  </h1> : ''}
+
+      {/* Enhanced Confirmation Modal with Payment Details */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50">
+          <div
+            className="bg-white rounded-lg shadow-2xl absolute"
+            style={{
+              top: '80px', // Just below navbar
+              left: '16px',
+              right: '16px',
+              maxWidth: 'calc(100vw - 32px)',
+              maxHeight: 'calc(100vh - 96px)',
+              overflow: 'auto'
+            }}
+          >
+            <div className="p-4">
+              <h3 className="text-base font-bold text-center mb-3 text-gray-800">
+                Confirmar abono a cuenta?
+              </h3>
+
+              {/* Payment Information Display */}
+              <div className="bg-gray-50 rounded-lg p-3 mb-3 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 font-medium text-sm">Deuda actual:</span>
+                  <span className="text-red-600 font-bold text-sm">
+                    ${modalPaymentInfo.currentDebt.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 font-medium text-sm">Valor a depositar:</span>
+                  <span className="text-green-600 font-bold text-base">
+                    ${modalPaymentInfo.depositAmount > 0 ? modalPaymentInfo.depositAmount.toLocaleString() : '0'}
+                  </span>
+                </div>
+
+                <hr className="border-gray-300" />
+
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700 font-bold text-sm">Nueva deuda:</span>
+                  <span className={`font-bold text-base ${modalPaymentInfo.newDebt === 0 ? 'text-green-600' : 'text-orange-600'}`}>
+                    ${modalPaymentInfo.newDebt.toLocaleString()}
+                  </span>
+                </div>
+
+                {modalPaymentInfo.newDebt === 0 && (
+                  <div className="text-center mt-2">
+                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                      ¡Orden completamente pagada!
+                    </span>
+                  </div>
+                )}
+
+                {modalPaymentInfo.depositAmount === 0 && (
+                  <div className="text-center mt-2">
+                    <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium">
+                      ⚠️ No se ha ingresado un valor válido
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col space-y-2">
+                <button
+                  onClick={handleConfirmPayment}
+                  disabled={modalPaymentInfo.depositAmount === 0}
+                  className={`w-full px-4 py-2 rounded-md font-medium transition-colors text-sm ${modalPaymentInfo.depositAmount === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-green-500 hover:bg-green-600 text-white'
+                    }`}
+                >
+                  Confirmar
+                </button>
+                <button
+                  onClick={handleCancelPayment}
+                  className="w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md font-medium transition-colors text-sm"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Formik
-        initialValues={order}
+        initialValues={{ ...order, deposit: "" }} // Always start with empty deposit field
         enableReinitialize={true}
         validate={values => {
           const inputValue = parseFloat(values.deposit);
           const maxAllowed = calculateTotal() - order.deposit;
 
-          if (inputValue < 0) {
+          if (values.deposit !== "" && inputValue < 0) {
             alert("Por favor, ingrese un valor positivo.");
             return { deposit: "Por favor, ingrese un valor positivo." };
-          } else if (inputValue > maxAllowed) {
+          } else if (values.deposit !== "" && inputValue > maxAllowed) {
             alert(`El valor ingresado no puede ser mayor a ${maxAllowed}.`);
             return { deposit: `El valor ingresado no puede ser mayor a ${maxAllowed}.` };
           }
 
           return {};
         }}
-        onSubmit={async (values, actions) => {
-          values.shopId = 1;
-          values.clientId = client;
-          values.items = JSON.stringify(cart)
-          console.log('creating new deposit')
-          var neewDeposit = {};
-          neewDeposit.orderId = params.id;
-          neewDeposit.clientId = order.clientId;
-          { platformPayment ? neewDeposit.paymentMethod = 'Plataforma' : neewDeposit.paymentMethod = 'Efectivo' };
-          { depositedTotal ? neewDeposit.depositValue = deposit : neewDeposit.depositValue = values.deposit }
-          { order.deposit ? neewDeposit.lastDeposit = order.deposit : neewDeposit.lastDeposit = 0 };
-          { depositedTotal ? neewDeposit.newDeposit = order.deposit + deposit : neewDeposit.newDeposit = values.deposit + order.deposit }
-          neewDeposit.dueOnDeposit = (calculateTotal() - neewDeposit.newDeposit)
-          if (depositedTotal) {
-            values.deposit = order.deposit + deposit
-          } else {
-            values.deposit = values.deposit + order.deposit
-          }
-
-          if (values.deposit >= calculateTotal()) {
-            values.paid = 1;
-          } else {
-            values.paid = 0;
-          }
-
-          values.paidAt = fechaActual;
-          if (params.id) {
-            delete values.clientName;
-            delete values.premises;
-            delete values.createdAt;
-            delete values.clientId;
-            delete values.items;
-            delete values.shopId;
-            await createDeposit(neewDeposit)
-            await updateOrder(params.id, values);
-          }
-          setOrder({ order });
-          setTimeout(() => {
-            window.location.reload();
-          }, 2000);
-        }}
+        onSubmit={handleFormSubmit}
       >
-        {({ handleChange, handleSubmit, values, isSubmitting }) => (
+        {({ handleChange, handleSubmit, values, isSubmitting, setFieldValue }) => (
           <Form
             onSubmit={handleSubmit}
             className="bg-blue-400 rounded-md p-4 mx-auto mt-10">
@@ -225,16 +411,21 @@ function CollectOrderForm() {
                     type="number"
                     name="deposit"
                     placeholder="Ej: $10.000"
+                    value={values.deposit}
                     className="m-2 px-2 py-1 rounded-sm rounded"
                     onChange={handleChange}
                   />
-                  <button
+                  {/*<button
                     type="button"
-                    onClick={depositTotal}
+                    onClick={() => {
+                      depositTotal();
+                      // Clear the input field when using total payment
+                      setFieldValue('deposit', '');
+                    }}
                     disabled={isSubmitting}
                     className="block bg-indigo-500 my-1 px-2 py-1 text-white w-20% rounded-md ml-auto"  >
                     Cobrar Total
-                  </button>
+                  </button>*/}
                   <button
                     type="submit"
                     disabled={isSubmitting}
@@ -271,7 +462,7 @@ function CollectOrderForm() {
                     <th className="px-2 py-1">Nueva Deuda</th>
                     <th className="px-2 py-1">Fecha Abono</th>
                     <th className="px-2 py-1">Método de Pago</th>
-                    <th className="px-2 py-1">Borrar</th>
+                    {/*<th className="px-2 py-1">Borrar</th>*/}
                   </tr>
                 </thead>
                 <tbody>
