@@ -60,7 +60,7 @@ function PublicInvoice() {
                 <div>
                     <h1 className="text-2xl font-bold">BLACK COFFEE</h1>
                     <div>NIT: 80743330-5</div>
-                    <div>CR 15 77-05 LC 1 101 A</div>
+                    <div>CR 15 77-05 LC 1 121</div>
                     <div>Teléfono: 3505410817</div>
                     <div>R 99 PN NO APLICA OTROS</div>
                 </div>
