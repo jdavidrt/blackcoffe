@@ -8,7 +8,6 @@ function depositsCard({ order }) {
   const calculateTotal = () => {
     return JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
   };
-  //console.log(order)
   return (
     <div className="flex bg-stone-100 text-black rounded-md m-2">
       <span>{order.createAt}</span>

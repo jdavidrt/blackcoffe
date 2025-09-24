@@ -26,7 +26,6 @@ export const DepositContextProvider = ({ children }) => {
     }
 
     const createDeposit = async (deposits) => {
-        console.log(deposits)
         try {
             await createDepositRequest(deposits);
         } catch (error) {
@@ -54,7 +53,6 @@ export const DepositContextProvider = ({ children }) => {
     };
 
     async function getDepositsByDate(date) {
-        console.log('fecha', date)
         const response = await getDepositsByDateRequest(date);
         setDeposits(response.data);
     }

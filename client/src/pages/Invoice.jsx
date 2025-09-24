@@ -91,7 +91,6 @@ function Invoice() {
         };
         loadOrder();
     }, [order]);
-    console.log(cart, order)
 
     return (
 

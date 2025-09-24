@@ -11,13 +11,11 @@ function CollectedOrdersPage() {
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
   const [searchTerm, setSearchTerm] = useState(''); // Estado para el término de búsqueda
-  console.log('collected orders')
 
   const onDatePickerChange = async (date, dateString) => {
     setLoading(true);
     try {
       await (dateString ? loadCollectedOrders(dateString) : loadCollectedOrders(fechaActual));
-      console.log(dateString)
     } finally {
       setLoading(false);
     }

@@ -2,7 +2,6 @@ import pool from '../db.js'
 
 export const getAllClients = async (req, res) => {
     const [result] = await pool.query("SELECT * FROM clients ORDER BY CAST(premises AS SIGNED), clientname ASC")
-    //console.log(result);
     res.json(result)
 }
 
@@ -10,7 +9,6 @@ export const getClients = async (req, res) => {
     const [result] = await pool.query("SELECT id, premises, clientName,  phoneNumber FROM clients WHERE mall = ? ORDER BY CAST(premises AS SIGNED), clientname ASC", [
         req.params.mall,
     ]);
-    //console.log(result)
     res.json(result)
 }
 export const getClient = async (req, res) => {
@@ -43,7 +41,6 @@ export const createClient = async (req, res) => {
             mall,
             phoneNumber
         })
-        console.log(res);
     } catch (error) {
         return res.status(500).json({ message: error.message });
     }

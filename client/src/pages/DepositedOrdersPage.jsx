@@ -33,14 +33,12 @@ function DepositedOrdersPage() {
   }
 
   const resultados = sumarDepositos(orders);
-  console.log('resultados', resultados);
 
 
   const onDatePickerChange = async (date, dateString) => {
     setLoading(true);
     try {
       await (dateString ? loadDepositedOrderByDate(dateString) : loadDepositedOrderByDate(fechaActual));
-      console.log('ordeeers', orders)
     } finally {
       setLoading(false);
     }

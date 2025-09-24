@@ -2,7 +2,6 @@ import pool from '../db.js'
 
 export const getProducts = async (req, res) => {
     const [result] = await pool.query("SELECT id, productName , unitValue FROM products ORDER BY productName ASC")
-    //console.log(result);
     res.json(result)
 }
 export const getProduct = async (req, res) => {
@@ -30,7 +29,6 @@ export const createProduct = async (req, res) => {
             productName,
             unitValue
         })
-        console.log(res);
     } catch (error) {
         return res.status(500).json({ message: error.message });
     }

@@ -43,13 +43,11 @@ export const OrderContextProvider = ({ children }) => {
   }
 
   async function loadCollectedOrders(date) {
-    console.log('fecha', date)
     const response = await getCollectedOrders(date);
     setOrders(response.data);
   }
 
   async function loadDepositedOrderByDate(date) {
-    console.log('fecha', date)
     const response = await getDepositedOrdersByDate(date);
     setOrders(response.data);
   }
@@ -85,7 +83,6 @@ export const OrderContextProvider = ({ children }) => {
     } else {
       setUnPaidOrder(false)
     }
-    console.log('unpaidord', unPaidOrder)
   }
 
   const getOrder = async (id) => {
@@ -98,10 +95,8 @@ export const OrderContextProvider = ({ children }) => {
   };
 
   const updateOrder = async (id, newFields) => {
-    console.log('newFields', newFields)
     try {
       const response = await updateOrderRequest(id, newFields);
-      console.log(response);
     } catch (error) {
       console.error(error);
     }

@@ -23,10 +23,8 @@ function OrderDeliveryCard({ order }) {
         return item;
       });
 
-      console.log('cart', updatedCart); // Usa updatedCart en lugar de cart
       var values = {};
       values.items = JSON.stringify(updatedCart);
-      console.log('vals', values.items);
 
       // Llama a tu función asíncrona aquí (en este caso, updateOrder)
       updateOrder(order.id, values);

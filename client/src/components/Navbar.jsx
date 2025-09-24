@@ -15,12 +15,10 @@ function Navbar() {
     if (result == true) {
       // El usuario seleccionó "Aceptar"
       // Aquí puedes agregar la lógica para cerrar sesión
-      console.log("Sesión cerrada");
       localStorage.setItem('user', '');
       navigate("/iniciarSesion")
     } else {
       // El usuario seleccionó "Cancelar" o cerró la ventana de confirmación
-      console.log("Cierre de sesión cancelado");
     }
   }
 

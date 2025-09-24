@@ -5,7 +5,6 @@ import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 function productCard({ product }) {
   const { deleteProduct } = useProducts();
   const navigate = useNavigate();
-  console.log(product)
 
   return (
     <div className="flex bg-stone-100 text-black rounded-md m-2">

@@ -28,9 +28,7 @@ import './fonts/ShareTechMono-Regular.ttf';
 function App() {
   // Obtener el valor del usuario desde el localStorage
   const navigate = useNavigate();
-  //console.log('app', localStorage.getItem('user'));
   useEffect(() => {
-    console.log(localStorage.getItem('user'))
     if (!window.location.pathname.includes("/factura")) {
       if (!window.location.pathname.includes("/iniciarSesion") && localStorage.getItem('user') === "") {
         navigate("/iniciarSesion");

@@ -52,7 +52,6 @@ function PublicInvoice() {
 
         loadOrder();
     }, []);
-    console.log(cart)
 
     return (
         <div className="container mx-auto bg-white">

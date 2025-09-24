@@ -32,7 +32,6 @@ function CollectOrderForm() {
   const fechaActual = dayjs().format('YYYY-MM-DD');
   const [depositedTotal, setDepositedTotal] = useState(false);
 
-  console.log(cart)
 
   const handleCheckboxChange = async (itemId) => {
     setCart((prevCart) => {
@@ -47,10 +46,8 @@ function CollectOrderForm() {
         return item;
       });
 
-      console.log('cart', updatedCart); // Use updatedCart instead of cart
       var values = {};
       values.items = JSON.stringify(updatedCart);
-      console.log('vals', values.items);
 
       // Call async function here (in this case, updateOrder)
       updateOrder(params.id, values);
@@ -141,7 +138,6 @@ function CollectOrderForm() {
     values.shopId = 1;
     values.clientId = client;
     values.items = JSON.stringify(cart)
-    console.log('creating new deposit')
     var neewDeposit = {};
     neewDeposit.orderId = params.id;
     neewDeposit.clientId = order.clientId;

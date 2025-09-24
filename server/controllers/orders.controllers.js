@@ -147,13 +147,11 @@ export const createOrder = async (req, res) => {
             clientId,
             items,
         })
-        console.log(res);
     } catch (error) {
         return res.status(500).json({ message: error.message });
     }
 }
 export const updateOrder = async (req, res) => {
-    console.log(req.body)
     try {
         const result = await pool.query("UPDATE orders SET ? WHERE id = ?", [
             req.body,

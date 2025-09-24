@@ -15,7 +15,6 @@ function DepositsPage() {
     setLoading(true);
     try {
       await (dateString ? getDepositsByDate(dateString) : getDepositsByDate(fechaActual));
-      console.log(dateString)
     } finally {
       setLoading(false);
     }

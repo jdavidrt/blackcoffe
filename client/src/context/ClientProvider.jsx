@@ -56,7 +56,6 @@ export const ClientContextProvider = ({ children }) => {
   const updateClient = async (id, newFields) => {
     try {
       const response = await updateClientRequest(id, newFields);
-      console.log(response);
     } catch (error) {
       console.error(error);
     }

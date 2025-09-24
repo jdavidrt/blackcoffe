@@ -11,21 +11,5 @@ export const pool = await createPool({
         rejectUnauthorized: false
     }
 })
-console.log("Conectado a DigitalOcean DB")
-/*pool.query(`
-
-INSERT INTO users (userName, pass)
-VALUES ('Black coffe Unilago', '2024aromatica');
-
-
-
-
-
-`)
-    .then(results => {
-        console.log("Resultado de la consulta:", results);
-    })
-    .catch(error => {
-        console.error("Error al ejecutar la consulta:", error);
-    });*/
+console.log(`[${new Date().toISOString()}] Connected to DigitalOcean Database`);
 export default pool

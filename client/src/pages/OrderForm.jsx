@@ -29,7 +29,6 @@ function OrderForm() {
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
   const fechaProducto = dayjs().format('HH:mm DD/MM/YY');
-  console.log(fechaProducto)
   const filteredProducts = products.filter((product) =>
     product.productName.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -109,7 +108,6 @@ function OrderForm() {
     loadOrder();
     loadProducts();
   }, []);
-  console.log(cart)
 
   return (
     <div>
@@ -164,13 +162,11 @@ function OrderForm() {
           values.clientId = client;
           getUnPaidOrdersbyClient(client);
           values.items = JSON.stringify(cart)
-          //console.log('values', values);
           if (params.id) {
             delete values.clientName;
             delete values.premises;
             await updateOrder(params.id, values);
           } else if (unPaidOrder) {
-            console.log('unpaid order on this client')
             const array1 = JSON.parse(values.items);
             const array2 = JSON.parse(unPaidOrder.items);
             const mergedJson = array1.concat(array2);
@@ -186,7 +182,6 @@ function OrderForm() {
               }
             });
             const resultArray = Object.values(idMap);
-            console.log('merged items', resultArray)
             values.items = JSON.stringify(resultArray);
             setCart(JSON.parse(unPaidOrder.items))
             await updateOrder(unPaidOrder.id, values)

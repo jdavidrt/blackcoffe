@@ -13,10 +13,7 @@ const LoginForm = () => {
 
     const handleLogin = async (values, { setSubmitting }) => {
         // Aquí puedes manejar la lógica de autenticación con los valores del formulario (values)
-        console.log('Usuario:', values.username);
-        console.log('Contraseña:', values.pass);
         var response = await autenticateUser(values.username, values.pass);
-        console.log(response)
         if (response.success == false) {
             alert('Credenciales incorrectas')
             localStorage.setItem('user', '');
@@ -24,11 +21,9 @@ const LoginForm = () => {
             setTimeout(() => {
             }, 3000);
             localStorage.setItem('user', response.userName);
-            console.log('local', localStorage.getItem('user'))
             navigate("/");
         }
         setUser(await autenticateUser(values.username, values.pass));
-        console.log(user)
         setTimeout(() => {
             setSubmitting(false);
         }, 1000);

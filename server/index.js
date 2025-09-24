@@ -24,4 +24,4 @@ app.use(clientRoutes)
 app.use(userRoutes)
 app.use(express.static(join(__dirname, '../client/dist')))
 app.listen(PORT)
-console.log(`Servidor corriendo en puerto ` + PORT);
+console.log(`[${new Date().toISOString()}] BlackCoffe Server running on port ${PORT}`);

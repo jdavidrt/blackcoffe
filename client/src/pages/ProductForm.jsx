@@ -19,7 +19,6 @@ function ProductForm() {
         setLoading(true);
         if (params.id) {
           const product = await getProduct(params.id);
-          console.log(product);
           setProduct({
             productName: product.productName,
             unitValue: product.unitValue
@@ -39,7 +38,6 @@ function ProductForm() {
         initialValues={product}
         enableReinitialize={true}
         onSubmit={async (values, actions) => {
-          console.log(values);
           try {
             if (params.id) {
               await updateProduct(params.id, values);

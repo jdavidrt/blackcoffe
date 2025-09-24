@@ -56,7 +56,6 @@ export const ProductContextProvider = ({ children }) => {
   const updateProduct = async (id, newFields) => {
     try {
       const response = await updateProductRequest(id, newFields);
-      console.log(response);
     } catch (error) {
       console.error(error);
     }

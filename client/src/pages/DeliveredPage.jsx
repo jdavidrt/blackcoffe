@@ -22,7 +22,6 @@ function DeliveredOrdersPage() {
         try {
             await (dateString ? loadDeliveredOrders(dateString) : loadDeliveredOrders(fechaActual));
             dateString ? localStorage.setItem('dateFilter', dateString) : localStorage.setItem('dateFilter', fechaActual)
-            console.log(dateString)
         } finally {
             setLoading(false);
         }
