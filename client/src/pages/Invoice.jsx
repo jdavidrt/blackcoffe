@@ -9,6 +9,7 @@ import dayjs from "dayjs"; import {
     Image,
     View,
 } from "@react-pdf/renderer";
+import { safeJSONParse } from '../utils/jsonUtils';
 
 const styles = StyleSheet.create({
     page: {
@@ -84,7 +85,7 @@ function Invoice() {
                         createdAt: order.createdAt.slice(0, 10),
                         deposit: order.deposit
                     })
-                setCart(JSON.parse(order.items))
+                setCart(safeJSONParse(order.items, []))
 
 
             }

@@ -4,6 +4,7 @@ import { useDeposits } from "../context/DepositsProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
+import { safeJSONParse } from '../utils/jsonUtils';
 
 function CollectOrderForm() {
 
@@ -209,7 +210,7 @@ function CollectOrderForm() {
         const order = await getOrder(params.id);
         const depositsRequest = await getDepositsByOrderId(params.id);
         setDeposits(depositsRequest);
-        setCart(JSON.parse(order.items))
+        setCart(safeJSONParse(order.items, []))
         if (order.paymentMethod == "Plataforma") {
           togglePlatform(true)
         }

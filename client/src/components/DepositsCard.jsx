@@ -1,12 +1,14 @@
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { DollarOutlined } from '@ant-design/icons';
+import { getOrderItems } from '../utils/jsonUtils';
 
 function depositsCard({ order }) {
   const navigate = useNavigate();
 
   const calculateTotal = () => {
-    return JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
+    const items = getOrderItems(order);
+    return items.reduce((total, item) => total + (item.unitValue || 0) * (item.quantity || 0), 0);
   };
   return (
     <div className="flex bg-stone-100 text-black rounded-md m-2">

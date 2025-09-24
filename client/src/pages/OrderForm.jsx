@@ -8,6 +8,7 @@ import { PlusCircleOutlined, MinusCircleOutlined } from "@ant-design/icons";
 import { Select } from "antd"
 import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
+import { safeJSONParse } from '../utils/jsonUtils';
 
 function OrderForm() {
   const { unPaidOrder, createOrder, getOrder, updateOrder, getUnPaidOrdersbyClient } = useOrders();
@@ -95,7 +96,7 @@ function OrderForm() {
         loadClients([])
         setMall(order.mall)
         setClient(order.clientId)
-        setCart(JSON.parse(order.items))
+        setCart(safeJSONParse(order.items, []))
         setOrder({
           clientId: order.clientId,
           shopId: 1,
@@ -167,8 +168,8 @@ function OrderForm() {
             delete values.premises;
             await updateOrder(params.id, values);
           } else if (unPaidOrder) {
-            const array1 = JSON.parse(values.items);
-            const array2 = JSON.parse(unPaidOrder.items);
+            const array1 = safeJSONParse(values.items, []);
+            const array2 = safeJSONParse(unPaidOrder.items, []);
             const mergedJson = array1.concat(array2);
             const idMap = {};
             mergedJson.forEach((item) => {
@@ -183,7 +184,7 @@ function OrderForm() {
             });
             const resultArray = Object.values(idMap);
             values.items = JSON.stringify(resultArray);
-            setCart(JSON.parse(unPaidOrder.items))
+            setCart(safeJSONParse(unPaidOrder.items, []))
             await updateOrder(unPaidOrder.id, values)
           } else {
             await createOrder(values);

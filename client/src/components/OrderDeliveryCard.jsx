@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { LoginOutlined } from '@ant-design/icons';
 import dayjs from "dayjs";
+import { getOrderItems } from '../utils/jsonUtils';
 
 function OrderDeliveryCard({ order }) {
   const navigate = useNavigate();
@@ -36,11 +37,12 @@ function OrderDeliveryCard({ order }) {
   };
 
   const calculateTotal = () => {
-    return JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
+    const items = getOrderItems(order);
+    return items.reduce((total, item) => total + (item.unitValue || 0) * (item.quantity || 0), 0);
   };
 
   useEffect(() => {
-    setCart(JSON.parse(order.items))
+    setCart(getOrderItems(order))
   }, [])
 
   return (
@@ -69,7 +71,7 @@ function OrderDeliveryCard({ order }) {
         </div>
       </div>
       <div id='asd'>
-        {JSON.parse(order.items).map((item) => (
+        {getOrderItems(order).map((item) => (
           !item.delivered && (
             <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
               <input

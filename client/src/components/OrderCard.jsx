@@ -1,13 +1,15 @@
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { EditOutlined } from '@ant-design/icons';
+import { getOrderItems } from '../utils/jsonUtils';
 
 function orderCard({ order }) {
   const { deleteOrder, toggleorderDone } = useOrders();
   const navigate = useNavigate();
 
   const calculateTotal = () => {
-    return JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
+    const items = getOrderItems(order);
+    return items.reduce((total, item) => total + (item.unitValue || 0) * (item.quantity || 0), 0);
   };
 
   return (

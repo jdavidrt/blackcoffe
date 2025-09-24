@@ -4,6 +4,7 @@ import OrderCollectCard from "../components/OrderCollectCard";
 import { useOrders } from "../context/OrderProvider";
 import { DatePicker } from "antd";
 import SearchBar from "../components/SearchBar"; // Importa el componente SearchBar
+import { getOrderItems } from '../utils/jsonUtils';
 
 function CollectedOrdersPage() {
   const [loading, setLoading] = useState(false);
@@ -52,7 +53,8 @@ function CollectedOrdersPage() {
     let totalOtros = 0;
 
     orders.forEach(order => {
-      const subtotal = JSON.parse(order.items).reduce((total, item) => total + item.unitValue * item.quantity, 0);
+      const items = getOrderItems(order);
+      const subtotal = items.reduce((total, item) => total + (item.unitValue || 0) * (item.quantity || 0), 0);
       if (order.collectedBy === "Unilago") {
         totalUnilago += subtotal;
       } else if (order.collectedBy === "Alta Tecnología") {

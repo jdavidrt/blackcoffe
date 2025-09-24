@@ -1,6 +1,7 @@
 import { useOrders } from "../context/OrderProvider";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { safeJSONParse } from '../utils/jsonUtils';
 
 function PublicInvoice() {
     const params = useParams();
@@ -23,7 +24,7 @@ function PublicInvoice() {
                 const order = await getOrder(params.id);
                 setTimeout(() => {
                 }, 3000);
-                setCart(JSON.parse(order.items))
+                setCart(safeJSONParse(order.items, []))
                 order.paid ?
                     setOrder({
                         orderId: order.id,
