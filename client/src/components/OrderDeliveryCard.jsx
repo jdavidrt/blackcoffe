@@ -2,14 +2,16 @@ import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { LoginOutlined } from '@ant-design/icons';
-import dayjs from "dayjs";
 import { getOrderItems } from '../utils/jsonUtils';
+import { calculateOrderTotal } from '../utils/orderUtils';
+import { getCurrentDate } from '../utils/dateUtils';
+import { getMallCardStyle } from '../utils/mallUtils';
 
 function OrderDeliveryCard({ order }) {
   const navigate = useNavigate();
   const { updateOrder } = useOrders();
   const [cart, setCart] = useState([]);
-  const deliveryDate = dayjs().format('YYYY-MM-DD');
+  const deliveryDate = getCurrentDate();
 
   const handleCheckboxChange = async (itemId) => {
     setCart((prevCart) => {
@@ -36,17 +38,13 @@ function OrderDeliveryCard({ order }) {
     });
   };
 
-  const calculateTotal = () => {
-    const items = getOrderItems(order);
-    return items.reduce((total, item) => total + (item.unitValue || 0) * (item.quantity || 0), 0);
-  };
 
   useEffect(() => {
     setCart(getOrderItems(order))
   }, [])
 
   return (
-    <div className={`flex flex-col rounded-md m-2 ${order.mall === 'Unilago' ? 'bg-amberx -300' : order.mall === 'Alta Tecnología' ? 'bg-teal-500' : order.mall === 'Otros' ? 'bg-stone-500' : 'bg-stone-100'} text-black`}>
+    <div className={getMallCardStyle(order.mall)}>
       <div className="flex">
         <span>{order.createAt}</span>
         <b>
@@ -56,10 +54,10 @@ function OrderDeliveryCard({ order }) {
           <b>
             {order.deposit ? (
               <>
-                <p>Abono: ${order.deposit} <p className="text-red-500">Debe: ${calculateTotal() - order.deposit}</p></p>
+                <p>Abono: ${order.deposit} <p className="text-red-500">Debe: ${calculateOrderTotal(order) - order.deposit}</p></p>
               </>
             ) : (
-              <p className="text-zinc-950 px-2"> Total: ${calculateTotal()}</p>
+              <p className="text-zinc-950 px-2"> Total: ${calculateOrderTotal(order)}</p>
             )}
           </b>
           <button

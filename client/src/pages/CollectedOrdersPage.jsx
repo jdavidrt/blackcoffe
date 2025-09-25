@@ -4,13 +4,14 @@ import OrderCollectCard from "../components/OrderCollectCard";
 import { useOrders } from "../context/OrderProvider";
 import { DatePicker } from "antd";
 import SearchBar from "../components/SearchBar"; // Importa el componente SearchBar
-import { getOrderItems } from '../utils/jsonUtils';
+import { calculateOrderTotal } from '../utils/orderUtils';
+import { getCurrentDate, formatDate } from '../utils/dateUtils';
 
 function CollectedOrdersPage() {
   const [loading, setLoading] = useState(false);
   const { orders, loadCollectedOrders } = useOrders();
   const dateFormat = 'YYYY-MM-DD';
-  const fechaActual = dayjs().format('YYYY-MM-DD');
+  const fechaActual = getCurrentDate();
   const [searchTerm, setSearchTerm] = useState(''); // Estado para el término de búsqueda
 
   const onDatePickerChange = async (date, dateString) => {
@@ -53,8 +54,7 @@ function CollectedOrdersPage() {
     let totalOtros = 0;
 
     orders.forEach(order => {
-      const items = getOrderItems(order);
-      const subtotal = items.reduce((total, item) => total + (item.unitValue || 0) * (item.quantity || 0), 0);
+      const subtotal = calculateOrderTotal(order);
       if (order.collectedBy === "Unilago") {
         totalUnilago += subtotal;
       } else if (order.collectedBy === "Alta Tecnología") {

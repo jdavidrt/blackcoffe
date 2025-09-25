@@ -1,5 +1,4 @@
 import axios from "axios";
-var renderServer = 'https://coffeserver.onrender.com'
-var localHost = 'http://localhost:4000'
+import { API_CONFIG } from '../utils/config';
 export const autenticateUserRequest = async (userName, pass) =>
-    await axios.get(`${renderServer}/users/${userName}/${pass}`);
+    await axios.get(`${API_CONFIG.RENDER_SERVER}/users/${userName}/${pass}`);
