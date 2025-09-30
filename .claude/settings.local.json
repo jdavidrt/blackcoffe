@@ -5,7 +5,8 @@
       "Bash(npm run build:*)",
       "Bash(mkdir:*)",
       "Bash(npx eslint:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

@@ -54,6 +54,396 @@ Orders are the central entity with complex state tracking:
 - **Date-Based Queries**: Many operations filter by date with timezone conversion
 - **Payment Tracking**: Supports partial payments through deposits system
 
+### Deposits and Payment System
+The BlackCoffe system implements a comprehensive payment tracking system that supports both partial payments (deposits) and full order payments. This system allows café managers to handle complex payment scenarios where customers may pay in installments or make partial payments over time.
+
+#### Database Structure
+The payment system is built around two main tables:
+
+**Orders Table** (`orders`):
+- `id`: Unique order identifier
+- `deposit`: Current total amount deposited for this order
+- `paid`: Boolean flag (0=unpaid, 1=fully paid)
+- `paidAt`: Timestamp when order was fully paid
+- `paymentMethod`: Payment method ("Efectivo", "Plataforma", etc.)
+
+**Deposits Table** (`deposits`):
+- `depositId`: Unique deposit record identifier
+- `orderId`: Foreign key linking to the order
+- `clientId`: Foreign key linking to the client
+- `depositValue`: Total amount paid after this deposit
+- `lastDeposit`: Previous deposit total before this transaction
+- `newDeposit`: Amount of this specific deposit transaction
+- `paymentMethod`: Method used for this specific deposit
+- `depositCreatedAt`: Timestamp of deposit creation
+
+#### Core Payment Functions
+
+**Backend Controllers** (`server/controllers/deposits.controllers.js`):
+- `getDeposits()`: Retrieves all deposits with order information
+- `getDepositsByOrder(orderId)`: Gets all deposits for a specific order
+- `getDepositsByDate(date)`: Retrieves deposits made on a specific date
+- `createDeposit(depositData)`: Creates a new deposit record
+- `deleteDeposit(depositId)`: Removes a deposit record DEPRECATED NOT WORKING
+
+**Frontend Context** (`client/src/context/DepositsProvider.jsx`):
+- `createDeposit(deposits)`: Creates new deposit via API
+- `getDepositsByOrderId(id)`: Fetches deposits for an order
+- `getDepositsByDate(date)`: Retrieves daily deposits
+- `loadDeposits()`: Loads all deposits into state
+
+#### Payment Processing Workflow
+
+**Step 1: Partial Payment (Deposit)**
+1. Navigate to `/cobrarOrden/:id` to access payment form
+2. System loads order details via `getOrder(id)` in `CollectOrderForm.jsx:210`
+3. System loads existing deposits via `getDepositsByOrderId(id)` in `CollectOrderForm.jsx:211`
+4. User enters deposit amount in the payment form
+5. System calculates payment details:
+   - `calculateTotal()`: Calculates order total from items
+   - `currentDebt = calculateTotal() - order.deposit`: Remaining balance
+   - `newDebt = currentDebt - depositAmount`: Balance after payment
+6. Payment confirmation modal displays payment breakdown
+7. On confirmation, system creates deposit record:
+   ```javascript
+   const newDeposit = {
+     orderId: params.id,
+     clientId: order.clientId,
+     paymentMethod: platformPayment ? "Plataforma" : "Efectivo",
+     depositValue: order.deposit + deposit, // Total after payment
+     lastDeposit: order.deposit, // Previous total
+     newDeposit: deposit // This payment amount
+   }
+   ```
+8. System updates order deposit total via `updateOrder()` in `CollectOrderForm.jsx:171`
+9. If total deposits >= order total, order.paid is set to 1
+
+**Step 2: Full Payment**
+1. When `depositedTotal` flag is true, system processes full payment
+2. Calculates remaining balance: `remainingAmount = calculateTotal() - order.deposit`
+3. Creates deposit for exact remaining amount
+4. Sets `order.paid = 1` and `order.paidAt = currentDate`
+5. Order moves to "fully paid" status
+
+**Step 3: Payment Tracking and History**
+- `/abonos/` route displays payment history via `DepositsPage.jsx`
+- `/cobrosHoy/` shows today's collections via `DepositedOrdersPage.jsx`
+- Each deposit maintains complete audit trail with timestamps and amounts
+
+#### Key Payment Functions by File
+
+**CollectOrderForm.jsx**:
+- `handleConfirmPayment()`: Processes payment confirmation (lines 150-196)
+- `calculateTotal()`: Computes order total from items
+- `loadOrder()`: Initializes order and deposit data (lines 207-249)
+
+**DepositsProvider.jsx**:
+- `createDeposit()`: API wrapper for creating deposits (lines 28-34)
+- `getDepositsByOrderId()`: Fetches order-specific deposits (lines 36-43)
+
+**deposits.controllers.js**:
+- `createDeposit()`: Backend deposit creation (lines 27-34)
+- `getDepositsByOrder()`: Retrieves deposits with order JOIN (lines 7-18)
+
+#### Payment Method Support
+The system supports multiple payment methods:
+- **"Efectivo"**: Cash payments (default)
+- **"Plataforma"**: Digital platform payments
+- Payment method is tracked per deposit and can vary between payments for the same order
+
+#### Real-time Payment Updates
+- After payment processing, system refreshes via `window.location.reload()` in `CollectOrderForm.jsx:190`
+- Context providers maintain synchronized state across components
+- Payment status updates are immediately reflected in order lists and collection views
+
+#### Complete Order Payment Process (Full Charge)
+
+**Scenario**: Customer wants to pay the complete order balance in one transaction
+
+**Step-by-Step Process**:
+
+1. **Access Payment Interface**
+   - Navigate to `/cobrarOrden/:orderId`
+   - Example: `/cobrarOrden/123` for order ID 123
+   - System calls `loadOrder()` function in `CollectOrderForm.jsx:207-249`
+
+2. **Order Data Loading**
+   ```javascript
+   // CollectOrderForm.jsx:210-213
+   const order = await getOrder(params.id);
+   const depositsRequest = await getDepositsByOrderId(params.id);
+   setDeposits(depositsRequest);
+   setCart(safeJSONParse(order.items, []))
+   ```
+
+3. **Calculate Outstanding Balance**
+   - System calculates total via `calculateTotal()` function
+   - Current debt = `calculateTotal() - order.deposit`
+   - Displays current balance to user
+
+4. **Full Payment Selection**
+   - User clicks "Cobrar Total" (Charge Full) button
+   - Sets `depositedTotal = true` flag in `CollectOrderForm.jsx:34`
+   - System automatically calculates exact remaining amount
+
+5. **Payment Confirmation Modal**
+   - Displays payment breakdown:
+     - Order total: `calculateTotal()`
+     - Previously paid: `order.deposit`
+     - Amount to pay: `calculateTotal() - order.deposit`
+   - Shows payment method selection (Efectivo/Plataforma)
+
+6. **Payment Processing** (`handleConfirmPayment()` in `CollectOrderForm.jsx:150-196`):
+   ```javascript
+   // Calculate final deposit amount
+   if (depositedTotal) {
+     values.deposit = order.deposit + deposit // Full remaining amount
+   }
+
+   // Mark as fully paid
+   if (values.deposit >= calculateTotal()) {
+     values.paid = 1;
+     values.paidAt = fechaActual;
+   }
+   ```
+
+7. **Database Updates**
+   - Creates deposit record via `createDeposit(newDeposit)` in `CollectOrderForm.jsx:170`
+   - Updates order via `updateOrder(params.id, values)` in `CollectOrderForm.jsx:171`
+   - Deposit record includes:
+     ```javascript
+     const newDeposit = {
+       orderId: params.id,
+       clientId: order.clientId,
+       paymentMethod: platformPayment ? "Plataforma" : "Efectivo",
+       depositValue: calculateTotal(), // Final total
+       lastDeposit: order.deposit, // Previous amount
+       newDeposit: remainingAmount // This payment
+     }
+     ```
+
+8. **Order Status Update**
+   - Order `paid` field set to `1`
+   - Order `paidAt` field set to current timestamp
+   - Order moves from "pending payment" to "fully paid" status
+
+9. **Post-Payment Actions**
+   - System reloads page via `window.location.reload()` in `CollectOrderForm.jsx:190`
+   - Order appears in "Collected Orders" view (`/ordenesPagas`)
+   - Payment recorded in daily collections (`/cobrosHoy`)
+
+#### Partial Payment Process (Deposit)
+
+**Scenario**: Customer makes a partial payment towards their order
+
+**Step-by-Step Process**:
+
+1. **Access Payment Interface** (same as full payment)
+   - Navigate to `/cobrarOrden/:orderId`
+   - System loads order and existing deposits
+
+2. **Enter Partial Amount**
+   - User enters specific amount in deposit field
+   - System validates amount doesn't exceed remaining balance
+   - `depositedTotal` flag remains `false`
+
+3. **Payment Calculation** (`CollectOrderForm.jsx:152-154`):
+   ```javascript
+   // For partial payments
+   values.deposit = values.deposit + order.deposit
+
+   // Check if this payment completes the order
+   if (values.deposit >= calculateTotal()) {
+     values.paid = 1; // Mark as fully paid
+   } else {
+     values.paid = 0; // Remains partially paid
+   }
+   ```
+
+4. **Deposit Record Creation**
+   - Creates partial payment record in deposits table
+   - Maintains payment history for audit trail
+   - Updates order's total deposit amount
+
+5. **Remaining Balance**
+   - Order remains in "pending payment" status if balance > 0
+   - Customer can make additional payments later
+   - System tracks cumulative payment total
+
+#### Payment History and Reporting
+
+**Daily Collections** (`/cobrosHoy` - `DepositedOrdersPage.jsx`):
+- Shows all payments made on specific date
+- Calls `getDepositsByDate(date)` via `DepositsProvider.jsx:55-58`
+- Displays: client info, payment amounts, payment methods
+
+**Payment History** (`/abonos` - `DepositsPage.jsx`):
+- Complete payment audit trail
+- Shows all deposits with timestamps
+- Filterable by date, client, or order
+
+**Order Collection Views**:
+- `/cobrarOrdenes/:mall` - Orders pending payment by location
+- `/ordenesPagas` - Fully paid orders ready for collection
+- Real-time status updates based on payment completion
+
+#### Practical Usage Examples
+
+**Example 1: Processing a $50,000 COP Order with Partial Payments**
+
+```javascript
+// Order Details
+Order ID: 123
+Client: "Juan Pérez" (Premises: "Local 15", Mall: "Centro Comercial Norte")
+Items: [
+  { productName: "Café Americano", quantity: 2, unitValue: 8000 },
+  { productName: "Croissant", quantity: 3, unitValue: 12000 }
+]
+Total: 52,000 COP
+Current Deposit: 0 COP
+```
+
+**Step 1: First Partial Payment (20,000 COP)**
+1. Navigate to `/cobrarOrden/123`
+2. System loads via `CollectOrderForm.jsx:loadOrder()`
+3. Enter 20,000 in deposit field
+4. Confirm payment - creates deposit record:
+   ```sql
+   INSERT INTO deposits (orderId, clientId, paymentMethod, depositValue, lastDeposit, newDeposit)
+   VALUES (123, 45, 'Efectivo', 20000, 0, 20000)
+   ```
+5. Updates order: `deposit = 20000, paid = 0`
+6. Remaining balance: 32,000 COP
+
+**Step 2: Second Partial Payment (15,000 COP)**
+1. Same process, enter 15,000 COP
+2. Creates new deposit record:
+   ```sql
+   INSERT INTO deposits (orderId, clientId, paymentMethod, depositValue, lastDeposit, newDeposit)
+   VALUES (123, 45, 'Plataforma', 35000, 20000, 15000)
+   ```
+3. Updates order: `deposit = 35000, paid = 0`
+4. Remaining balance: 17,000 COP
+
+**Step 3: Final Payment (Complete Order)**
+1. Click "Cobrar Total" button (`depositedTotal = true`)
+2. System calculates remaining: 52,000 - 35,000 = 17,000 COP
+3. Creates final deposit:
+   ```sql
+   INSERT INTO deposits (orderId, clientId, paymentMethod, depositValue, lastDeposit, newDeposit)
+   VALUES (123, 45, 'Efectivo', 52000, 35000, 17000)
+   ```
+4. Updates order: `deposit = 52000, paid = 1, paidAt = '2024-01-15'`
+5. Order moves to fully paid status
+
+**Example 2: Single Full Payment (25,000 COP Order)**
+
+```javascript
+// Order Details
+Order ID: 124
+Client: "María González"
+Items: [{ productName: "Combo Desayuno", quantity: 1, unitValue: 25000 }]
+Total: 25,000 COP
+Current Deposit: 0 COP
+```
+
+**Single Payment Process**:
+1. Navigate to `/cobrarOrden/124`
+2. Click "Cobrar Total" for full payment
+3. Confirm 25,000 COP payment
+4. System creates single deposit record:
+   ```sql
+   INSERT INTO deposits (orderId, clientId, paymentMethod, depositValue, lastDeposit, newDeposit)
+   VALUES (124, 67, 'Efectivo', 25000, 0, 25000)
+   ```
+5. Updates order: `deposit = 25000, paid = 1, paidAt = CURRENT_TIMESTAMP`
+6. Order immediately moves to collected status
+
+**Example 3: Daily Collections Report**
+
+Accessing `/cobrosHoy/` on date 2024-01-15 shows:
+
+```javascript
+// Query executed: getDepositsByDate('2024-01-15')
+// Results from deposits.controllers.js:20-25
+
+[
+  {
+    orderId: 123,
+    clientName: "Juan Pérez",
+    premises: "Local 15",
+    mall: "Centro Comercial Norte",
+    depositValue: 20000,
+    newDeposit: 20000,
+    paymentMethod: "Efectivo",
+    depositCreatedAt: "2024-01-15 09:30:00"
+  },
+  {
+    orderId: 123,
+    clientName: "Juan Pérez",
+    premises: "Local 15",
+    depositValue: 35000,
+    newDeposit: 15000,
+    paymentMethod: "Plataforma",
+    depositCreatedAt: "2024-01-15 14:20:00"
+  },
+  {
+    orderId: 124,
+    clientName: "María González",
+    depositValue: 25000,
+    newDeposit: 25000,
+    paymentMethod: "Efectivo",
+    depositCreatedAt: "2024-01-15 16:45:00"
+  }
+]
+```
+
+**Daily Summary**:
+- Total Collections: 60,000 COP
+- Cash Payments: 45,000 COP
+- Platform Payments: 15,000 COP
+- Orders Completed: 2
+- Partial Payments: 2
+
+**Example 4: Error Handling and Validation**
+
+**Invalid Payment Scenarios**:
+1. **Overpayment Prevention**:
+   ```javascript
+   // In CollectOrderForm.jsx payment validation
+   const remainingBalance = calculateTotal() - order.deposit;
+   if (enteredAmount > remainingBalance) {
+     // System prevents overpayment
+     alert("Amount exceeds remaining balance");
+   }
+   ```
+
+2. **Database Transaction Safety**:
+   ```javascript
+   // deposits.controllers.js:27-34 with error handling
+   try {
+     const result = await pool.query("INSERT INTO deposits SET ?", req.body);
+     res.json(result);
+   } catch (error) {
+     return res.status(500).json({ message: error.message });
+   }
+   ```
+
+3. **Network Error Recovery**:
+   ```javascript
+   // DepositsProvider.jsx:28-34 with error handling
+   const createDeposit = async (deposits) => {
+     try {
+       await createDepositRequest(deposits);
+     } catch (error) {
+       console.error(error);
+       // System maintains state consistency
+     }
+   };
+   ```
+
+These examples demonstrate the complete payment lifecycle from order creation through final collection, showing how the system maintains data integrity and provides comprehensive audit trails for all financial transactions.
+
 ### Route Organization
 Frontend routes are organized by functionality:
 - **Public Routes**: `/factura/:id` (no auth required)

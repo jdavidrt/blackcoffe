@@ -126,10 +126,10 @@ blackcoffe/
 │
 ├── 💰 Order Processing & Payments
 │   ├── `/cobrarOrdenes/:mall` - Orders to Collect by Location
-│   ├── `/cobrarOrden/:id` - Process Order Payment
-│   ├── `/ordenesPagas` - Completed Orders
-│   ├── `/abonos/` - Payment History & Deposits
-│   └── `/cobrosHoy/` - Today's Collections
+│   ├── `/cobrarOrden/:id` - Process Order Payment (Partial/Full)
+│   ├── `/ordenesPagas` - Completed Orders (Fully Paid)
+│   ├── `/abonos/` - Payment History & Deposits Audit Trail
+│   └── `/cobrosHoy/` - Today's Collections & Financial Reports
 │
 ├── 🚚 Delivery Management
 │   ├── `/recorrido/` - Delivery Routes
@@ -158,9 +158,12 @@ The system elegantly orchestrates five primary entities:
    - Tracks the journey of each customer's culinary desires
 
 4. **Payments/Deposits** 💸
-   - Registers and records payments for each order
-   - Provides transparent financial tracking mechanism
-   - Supports partial and full payments
+   - **Flexible Payment System**: Supports both partial payments (deposits) and full order payments
+   - **Payment Methods**: Cash ("Efectivo") and digital platform ("Plataforma") payments
+   - **Complete Audit Trail**: Every payment transaction is recorded with timestamps and amounts
+   - **Multi-Payment Support**: Customers can make multiple partial payments until order is fully paid
+   - **Real-time Balance Tracking**: System automatically calculates remaining balances and payment status
+   - **Daily Collections**: Comprehensive reporting for daily payment collections and financial tracking
 
 5. **User Management** 🔐
    - Authentication and authorization system
@@ -171,6 +174,10 @@ The system elegantly orchestrates five primary entities:
 1. **Order Creation**: Create an order for a specific customer
 2. **Product Addition**: Add products to the order dynamically
 3. **Payment Processing**: Record partial or full payments (deposits)
+   - **Partial Payments**: Customers can pay any amount towards their order total
+   - **Payment Tracking**: System maintains running balance and payment history
+   - **Full Payment**: Complete remaining balance with single transaction
+   - **Multiple Methods**: Support for cash and digital platform payments
 4. **Order Fulfillment**: Track order status through collection and delivery
 5. **Invoice Generation**: Generate PDF invoices for completed orders
 6. **Order Archiving**: Automatically manage completed orders
@@ -178,7 +185,11 @@ The system elegantly orchestrates five primary entities:
 ## 🌈 Key Features
 
 - **Dynamic Order Management**: Real-time order creation and modification
-- **Flexible Payment System**: Support for partial payments and deposits
+- **Advanced Payment System**:
+  - Support for partial payments and deposits with complete audit trail
+  - Multiple payment methods (Cash/Digital Platform) per order
+  - Automatic balance calculation and payment status tracking
+  - Daily collections reporting and financial analytics
 - **Multi-location Support**: Manage orders across different mall locations
 - **Delivery Tracking**: Complete delivery route management
 - **PDF Invoice Generation**: Professional invoice creation
