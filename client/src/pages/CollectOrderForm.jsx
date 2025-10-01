@@ -36,6 +36,7 @@ function CollectOrderForm() {
   const fechaActual = dayjs().format('YYYY-MM-DD');
   const [depositedTotal, setDepositedTotal] = useState(false);
   const [isDeletingDeposit, setIsDeletingDeposit] = useState(false);
+  const [showDeposits, setShowDeposits] = useState(false);
 
 
   const handleCheckboxChange = async (itemId) => {
@@ -487,71 +488,84 @@ function CollectOrderForm() {
                 </div>
               )}
             />
-            {deposits ? <>
-              <h3 className="font-bold text-lg mt-4 mb-2">Abonos de esta orden:</h3>
-              <table className="border-collapse w-full border-2 border-gray-500 m-2">
-                <thead>
-                  <tr className="bg-stone-200 text-gray-700 font-bold">
-                    <th className="px-2 py-1">Valor de Abono</th>
-                    <th className="px-2 py-1">Valor Abonado Anterior</th>
-                    <th className="px-2 py-1">Abono de la Orden</th>
-                    <th className="px-2 py-1">Nueva Deuda</th>
-                    <th className="px-2 py-1">Fecha Abono</th>
-                    <th className="px-2 py-1">Método de Pago</th>
-                    <th className="px-2 py-1">Eliminar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {deposits.map((deposit) => (
-                    <tr
-                      key={deposit.depositId}
-                      className={
-                        deposit.isDeleted
-                          ? "bg-red-50 opacity-60 line-through"
-                          : "bg-stone-100 text-gray-700 hover:bg-gray-200"
-                      }
-                    >
-                      <td className="text-green-400 px-2 py-1 text-center">
-                        +${deposit.depositValue?.toLocaleString()}
-                      </td>
-                      <td className="px-2 py-1 text-center">
-                        ${deposit.lastDeposit?.toLocaleString()}
-                      </td>
-                      <td className="px-2 py-1 text-center">
-                        ${deposit.newDeposit?.toLocaleString()}
-                      </td>
-                      <td className="px-2 py-1 text-center">
-                        ${deposit.dueOnDeposit?.toLocaleString()}
-                      </td>
-                      <td className="px-2 py-1 text-center">
-                        {deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}
-                      </td>
-                      <td className="px-2 py-1 text-center">{deposit.paymentMeethd}</td>
-                      <td className="px-2 py-1 text-center">
-                        {deposit.isDeleted ? (
-                          <span className="text-red-500 text-sm font-bold">[ELIMINADO]</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                            onClick={() =>
-                              handleDeleteDeposit(deposit.depositId, deposit.depositValue)
-                            }
-                            disabled={isDeletingDeposit || order.paid === 1}
-                            title={
-                              order.paid === 1
-                                ? "No se puede eliminar - Orden pagada"
-                                : "Eliminar depósito"
-                            }
-                          >
-                            <DeleteOutlined />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {deposits && deposits.length > 0 ? <>
+              <div className="flex justify-center mt-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeposits(!showDeposits)}
+                  className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap"
+                >
+                  {showDeposits ? 'Ocultar Abonos' : `Mostrar Abonos (${deposits.length})`}
+                </button>
+              </div>
+              {showDeposits && (
+                <>
+                  <h3 className="font-bold text-lg mb-2">Abonos de esta orden:</h3>
+                  <table className="border-collapse w-full border-2 border-gray-500 m-2">
+                    <thead>
+                      <tr className="bg-stone-200 text-gray-700 font-bold">
+                        <th className="px-2 py-1">Valor de Abono</th>
+                        <th className="px-2 py-1">Valor Abonado Anterior</th>
+                        <th className="px-2 py-1">Abono de la Orden</th>
+                        <th className="px-2 py-1">Nueva Deuda</th>
+                        <th className="px-2 py-1">Fecha Abono</th>
+                        <th className="px-2 py-1">Método de Pago</th>
+                        <th className="px-2 py-1">Eliminar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deposits.map((deposit) => (
+                        <tr
+                          key={deposit.depositId}
+                          className={
+                            deposit.isDeleted
+                              ? "bg-red-50 opacity-60 line-through"
+                              : "bg-stone-100 text-gray-700 hover:bg-gray-200"
+                          }
+                        >
+                          <td className="text-green-400 px-2 py-1 text-center">
+                            +${deposit.depositValue?.toLocaleString()}
+                          </td>
+                          <td className="px-2 py-1 text-center">
+                            ${deposit.lastDeposit?.toLocaleString()}
+                          </td>
+                          <td className="px-2 py-1 text-center">
+                            ${deposit.newDeposit?.toLocaleString()}
+                          </td>
+                          <td className="px-2 py-1 text-center">
+                            ${deposit.dueOnDeposit?.toLocaleString()}
+                          </td>
+                          <td className="px-2 py-1 text-center">
+                            {deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}
+                          </td>
+                          <td className="px-2 py-1 text-center">{deposit.paymentMeethd}</td>
+                          <td className="px-2 py-1 text-center">
+                            {deposit.isDeleted ? (
+                              <span className="text-red-500 text-sm font-bold">[ELIMINADO]</span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() =>
+                                  handleDeleteDeposit(deposit.depositId, deposit.depositValue)
+                                }
+                                disabled={isDeletingDeposit || order.paid === 1}
+                                title={
+                                  order.paid === 1
+                                    ? "No se puede eliminar - Orden pagada"
+                                    : "Eliminar depósito"
+                                }
+                              >
+                                <DeleteOutlined />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
             </>
               : ''}
           </Form>

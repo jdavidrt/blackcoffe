@@ -294,11 +294,75 @@ If needed, progressive reveal could be added to other components:
 
 ---
 
-**Document Version**: 5.0 (Universal Implementation)
+## 💰 Deposits Table Collapsible Implementation
+
+### Overview
+The deposits table in `CollectOrderForm.jsx` is now collapsible by default to reduce clutter on the payment form interface. Users must click a button to reveal the deposit history table.
+
+### Implementation Details
+
+**File Modified**: `client/src/pages/CollectOrderForm.jsx`
+
+**State Added**:
+```javascript
+const [showDeposits, setShowDeposits] = useState(false); // Line 39
+```
+
+**Button Implementation** (Lines 492-500):
+```javascript
+<div className="flex justify-center mt-2 mb-2">
+  <button
+    type="button"
+    onClick={() => setShowDeposits(!showDeposits)}
+    className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap"
+  >
+    {showDeposits ? 'Ocultar Abonos' : `Mostrar Abonos (${deposits.length})`}
+  </button>
+</div>
+```
+
+**Table Conditional Rendering** (Lines 501-568):
+- Deposits table wrapped in `{showDeposits && (...)}`
+- Table only renders when `showDeposits === true`
+- Button shows deposit count when collapsed
+
+### Button Styling Features
+- **Auto-sizing**: Button width adapts to content (no fixed width)
+- **No text wrapping**: `whitespace-nowrap` prevents text from breaking into multiple lines
+- **Mobile-friendly**: Text stays within button boundaries on all screen sizes
+- **Consistent styling**: Matches other buttons in the form (indigo color scheme)
+- **Toggle text**: Shows "Mostrar Abonos (X)" when collapsed, "Ocultar Abonos" when expanded
+
+### User Flow
+1. **Default State**: Deposits table is hidden, button shows "Mostrar Abonos (X)"
+2. **Click Button**: Table expands, button text changes to "Ocultar Abonos"
+3. **Click Again**: Table collapses, returns to default state
+
+### Location
+- **Route**: `/cobrarOrden/:id`
+- **Component**: `CollectOrderForm.jsx`
+- **Position**: Below product list, above form close tag
+
+### Why This Improvement?
+- **Reduces clutter**: Payment form is cleaner by default
+- **On-demand information**: Users can view deposit history when needed
+- **Better mobile UX**: Shorter scroll on mobile devices
+- **Maintains audit trail**: All deposits still accessible with one click
+
+### Consistency with Product List Button
+The "Mostrar Abonos" button uses the same auto-sizing approach as the "Mostrar más" button for products:
+- Both buttons in `ProgressiveProductList.jsx` and deposits toggle have no fixed width
+- Both use `whitespace-nowrap` to prevent text wrapping
+- Both are centered with `flex justify-center`
+- Both adapt to content size automatically for mobile responsiveness
+
+---
+
+**Document Version**: 6.0 (Universal Implementation + Deposits Collapse)
 **Created**: 2025-10-01
-**Updated**: 2025-10-01 (Universal Rollout)
+**Updated**: 2025-10-01 (Universal Rollout + Deposits Collapse)
 **Implementation Status**: ✅ Complete & Tested Across All Views
-**Scope**: ALL product list views (OrderForm, CollectOrderForm, OrderDeliveryCard, OrderDeliveredCard)
+**Scope**: ALL product list views (OrderForm, CollectOrderForm, OrderDeliveryCard, OrderDeliveredCard) + Deposits table collapse
 
 ## 📊 Final Implementation Summary
 

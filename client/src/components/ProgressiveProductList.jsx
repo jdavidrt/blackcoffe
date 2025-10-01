@@ -70,7 +70,7 @@ function ProgressiveProductList({
           <button
             type="button"
             onClick={handleShowMore}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md flex items-center gap-2 font-medium transition-colors"
+            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md flex items-center justify-center gap-2 font-medium transition-colors whitespace-nowrap"
           >
             <DownOutlined className="text-xs" />
             <span>Mostrar más ({remainingCount} producto{remainingCount !== 1 ? 's' : ''})</span>
