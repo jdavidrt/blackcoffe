@@ -6,7 +6,8 @@
       "Bash(mkdir:*)",
       "Bash(npx eslint:*)",
       "Bash(node:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []
