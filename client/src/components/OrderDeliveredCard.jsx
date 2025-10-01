@@ -6,6 +6,7 @@ import { getOrderItems } from '../utils/jsonUtils';
 import { calculateOrderTotal } from '../utils/orderUtils';
 import { getCurrentDate } from '../utils/dateUtils';
 import { getMallCardStyle } from '../utils/mallUtils';
+import ProgressiveProductList from './ProgressiveProductList';
 
 function OrderDeliveredCard({ order }) {
   const navigate = useNavigate();
@@ -68,30 +69,30 @@ function OrderDeliveredCard({ order }) {
           </button>
         </div>
       </div>
-      <div id='asd'>
-        {getOrderItems(order)
+      <ProgressiveProductList
+        products={getOrderItems(order)
           .filter((item) => item.delivered && item.deliveredAt === localStorage.getItem('dateFilter'))
-          .map((item) => (
-            <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
-              <input
-                type="checkbox"
-                className="ml-2"
-                value={item.delivered}
-                checked={item.delivered}
-                onChange={() => handleCheckboxChange(item.id)}
-              />
-              <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
-              <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                {item.id.slice(-14)}
-              </p>
-              <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                Entregado: {item.deliveredAt}
-              </p>
-              <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
-            </div>
-          ))}
-
-      </div>
+          .reverse()}
+        renderProduct={(item) => (
+          <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
+            <input
+              type="checkbox"
+              className="ml-2"
+              value={item.delivered}
+              checked={item.delivered}
+              onChange={() => handleCheckboxChange(item.id)}
+            />
+            <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+            <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
+              {item.id.slice(-14)}
+            </p>
+            <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
+              Entregado: {item.deliveredAt}
+            </p>
+            <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
+          </div>
+        )}
+      />
     </div>
 
   );

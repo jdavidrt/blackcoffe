@@ -625,6 +625,7 @@ Frontend routes are organized by functionality:
 - **Form Handling**: Formik for complex forms
 - **PDF Generation**: React-PDF for invoice generation
 - **Authentication**: localStorage-based session management with route protection
+- **Button Types**: ⚠️ **CRITICAL** - Always use `type="button"` for buttons inside forms that should NOT submit the form. Only buttons intended to submit should omit the type attribute or use `type="submit"`. This prevents accidental form submissions when interacting with UI elements like "Mostrar más", "+/-" quantity controls, delete buttons, etc.
 
 ### Database Query Patterns
 - **Timezone Awareness**: All datetime queries use CONVERT_TZ for Colombia timezone

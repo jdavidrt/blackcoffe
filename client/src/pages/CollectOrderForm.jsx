@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
 import { DeleteOutlined } from "@ant-design/icons";
 import { Modal, message } from "antd";
+import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function CollectOrderForm() {
 
@@ -467,22 +468,25 @@ function CollectOrderForm() {
               }
 
             </div>
-            {cart.map((item) => (
-              <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
-                <input
-                  type="checkbox"
-                  className="ml-2"
-                  value={item.delivered}
-                  checked={item.delivered}
-                  onChange={() => handleCheckboxChange(item.id)}
-                />
-                <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
-                <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                  {item.id.slice(-14)}
-                </p>
-                <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
-              </div>
-            ))}
+            <ProgressiveProductList
+              products={[...cart].reverse()}
+              renderProduct={(item) => (
+                <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
+                  <input
+                    type="checkbox"
+                    className="ml-2"
+                    value={item.delivered}
+                    checked={item.delivered}
+                    onChange={() => handleCheckboxChange(item.id)}
+                  />
+                  <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                  <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
+                    {item.id.slice(-14)}
+                  </p>
+                  <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
+                </div>
+              )}
+            />
             {deposits ? <>
               <h3 className="font-bold text-lg mt-4 mb-2">Abonos de esta orden:</h3>
               <table className="border-collapse w-full border-2 border-gray-500 m-2">

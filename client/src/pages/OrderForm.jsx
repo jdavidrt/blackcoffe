@@ -9,6 +9,7 @@ import { Select } from "antd"
 import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
+import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function OrderForm() {
   const { unPaidOrder, createOrder, getOrder, updateOrder, getUnPaidOrdersbyClient } = useOrders();
@@ -214,24 +215,27 @@ function OrderForm() {
                 {params.id && isSubmitting ? "Modificando Orden..." : params.id ? "Modificar Orden" : isSubmitting ? "Creando Orden..." : "Crear Orden"}
               </button>
             </div>
-            {cart.map((item) => (
-              <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
-                <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
-                <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                  {item.id.slice(-14)}
-                </p>
-                <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue * item.quantity}</p>
+            <ProgressiveProductList
+              products={[...cart].reverse()}
+              renderProduct={(item) => (
+                <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
+                  <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                  <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
+                    {item.id.slice(-14)}
+                  </p>
+                  <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue * item.quantity}</p>
 
-                <p className="">
-                  <button className="px-2" type="button" onClick={() => handleRemoveFromCart(item.id)}><MinusCircleOutlined style={{
-                    verticalAlign: 'middle'
-                  }} /></button>
-                  <button className="px-2" type="button" onClick={() => handleAddOneToCart(item.id)}><PlusCircleOutlined style={{
-                    verticalAlign: 'middle'
-                  }} /></button>
-                </p>
-              </div>
-            ))}
+                  <p className="">
+                    <button className="px-2" type="button" onClick={() => handleRemoveFromCart(item.id)}><MinusCircleOutlined style={{
+                      verticalAlign: 'middle'
+                    }} /></button>
+                    <button className="px-2" type="button" onClick={() => handleAddOneToCart(item.id)}><PlusCircleOutlined style={{
+                      verticalAlign: 'middle'
+                    }} /></button>
+                  </p>
+                </div>
+              )}
+            />
           </Form>
         )
         }
