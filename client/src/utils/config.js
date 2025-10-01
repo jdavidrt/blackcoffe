@@ -1,5 +1,5 @@
 export const API_CONFIG = {
-  RENDER_SERVER: 'http://https://coffeserver.onrender.com',
+  RENDER_SERVER: 'https://coffeserver.onrender.com',
   LOCAL_HOST: 'http://localhost:25060'
 };
 
