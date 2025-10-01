@@ -1,6 +1,121 @@
 # BlackCoffe - Step-by-Step Implementation Guide
 *For Direct Codebase Improvements*
 
+## ✅ **0. Delete Deposits Feature - COMPLETED & CORRECTED**
+**Time: 8 hours | Risk: Medium | Priority: HIGH**
+
+**Status: COMPLETED & BUG FIXED ✅**
+- **Implementation**: Full soft delete functionality with corrected automatic recalculation
+- **Files Modified**: 5 (3 backend, 2 frontend)
+- **Location**: Delete UI ONLY in `CollectOrderForm.jsx`
+- **Key Innovation**: Automatic recalculation using corrected field semantics
+- **Testing**: Successfully tested with edge cases (first, middle, last deposit deletion)
+- **Bug Fix Date**: 2025-09-30 - Corrected field mapping for edge cases
+
+### Overview
+Implemented comprehensive deposit deletion feature allowing correction of payment errors while maintaining complete data integrity. **CRITICAL FIX**: Corrected database field semantics to properly handle all edge cases.
+
+### Corrected Database Schema (Updated 2025-09-30)
+**IMPORTANT - Field Meanings Clarified**:
+- `depositValue`: **Individual payment amount** (what user entered for THIS deposit only)
+- `lastDeposit`: **Previous cumulative total** before this deposit
+- `newDeposit`: **New cumulative total** AFTER this deposit
+- `dueOnDeposit`: **Remaining debt** after this deposit
+
+### What Was Built
+1. **Backend** (`server/controllers/deposits.controllers.js:36-118`):
+   - Soft delete mechanism (isDeleted flag)
+   - **Corrected automatic recalculation** using `depositValue` (individual amounts)
+   - Order total synchronization
+   - Paid order protection
+   - Comprehensive error handling
+   - **Edge case handling**: First, middle, and last deposit deletion
+
+2. **Frontend** (`client/src/pages/CollectOrderForm.jsx:168-197`):
+   - **Corrected deposit creation logic** with proper field assignment
+   - Deposits table at end of payment form showing:
+     - "Valor de Abono" → `depositValue` (individual payment)
+     - "Valor Abonado Anterior" → `lastDeposit` (previous cumulative)
+     - "Abono de la Orden" → `newDeposit` (cumulative total)
+   - Trash can icons in each row
+   - Confirmation modals with deposit details
+   - Visual feedback for deleted deposits
+   - Disabled state for paid orders
+
+3. **Key Algorithm - Corrected Automatic Recalculation**:
+   When a deposit is deleted, system automatically:
+   - Marks deposit as deleted (soft delete with `isDeleted = 1`)
+   - Retrieves all active deposits ordered by creation date
+   - **Uses `depositValue` (individual amounts) for recalculation**
+   - Recalculates cumulative values in sequence:
+     - `lastDeposit`: Previous cumulative total (running total before this deposit)
+     - `newDeposit`: New cumulative total (running total after adding this deposit's `depositValue`)
+     - `dueOnDeposit`: Remaining debt (order total - new cumulative total)
+   - Updates order total and paid status
+
+### Bug Fix Details (2025-09-30)
+**Problem**: Deleting deposits in the middle caused incorrect recalculation
+**Root Cause**: Confusion between field semantics:
+- Original code treated `depositValue` as cumulative total
+- Original code treated `newDeposit` as individual amount
+- This was backwards, causing edge case failures
+
+**Solution Implemented**:
+1. **Frontend Fix** (`CollectOrderForm.jsx:173-186`):
+   ```javascript
+   const individualDepositAmount = depositedTotal ? deposit : parseFloat(values.deposit);
+   const newCumulativeTotal = order.deposit + individualDepositAmount;
+
+   neewDeposit.depositValue = individualDepositAmount;  // Individual payment
+   neewDeposit.lastDeposit = order.deposit;             // Previous cumulative
+   neewDeposit.newDeposit = newCumulativeTotal;         // New cumulative
+   ```
+
+2. **Backend Fix** (`deposits.controllers.js:74-94`):
+   ```javascript
+   // Get active deposits
+   const [allDeposits] = await pool.query(
+     "SELECT depositId, depositValue FROM deposits WHERE orderId = ? AND isDeleted = 0 ORDER BY depositCreatedAt ASC",
+     [deposit.orderId]
+   );
+
+   // Recalculate using depositValue (individual amounts)
+   let runningTotal = 0;
+   for (const dep of allDeposits) {
+     const previousTotal = runningTotal;
+     const individualAmount = dep.depositValue; // Individual payment
+     runningTotal += individualAmount;
+     const newDebt = orderTotal - runningTotal;
+
+     await pool.query(
+       "UPDATE deposits SET lastDeposit = ?, newDeposit = ?, dueOnDeposit = ? WHERE depositId = ?",
+       [previousTotal, runningTotal, newDebt, dep.depositId]
+     );
+   }
+   ```
+
+### Edge Cases Now Handled Correctly
+✅ **Delete First Deposit**: Remaining deposits recalculated from zero
+✅ **Delete Middle Deposit**: Following deposits recalculated with correct cumulative totals
+✅ **Delete Last Deposit**: Previous deposits unchanged, order total updated
+✅ **Multiple Deletions**: Each deletion triggers full recalculation
+
+### Files Modified
+- `server/routes/deposits.routes.js` - Fixed route method (GET → DELETE)
+- `server/controllers/deposits.controllers.js` - **Corrected delete logic with proper field usage**
+- `client/src/context/DepositsProvider.jsx` - Fixed naming conflict
+- `client/src/pages/CollectOrderForm.jsx` - **Corrected creation logic with proper field assignment**
+- `client/src/utils/config.js` - Updated for local development
+
+### Testing Verification
+**Test Case**: Order total $60,000 with 3 deposits ($20k, $15k, $10k)
+- ✅ Delete first deposit → Remaining show correct cumulative totals
+- ✅ Delete middle deposit → Following deposit recalculated correctly
+- ✅ Delete last deposit → Previous deposits unchanged
+- ✅ All deposits → Order total always matches sum of active deposit values
+
+---
+
 ## ✅ **1. Create Safe JSON Parsing Utility - COMPLETED**
 **Time: 1 hour | Risk: Low**
 

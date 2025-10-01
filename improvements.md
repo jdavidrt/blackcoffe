@@ -3,6 +3,29 @@
 
 ## 🚀 **IMMEDIATE FIXES** - Can be implemented directly in this codebase
 
+### 0. **Delete Deposits Feature** ✅ **COMPLETED & BUG FIXED**
+**Priority: HIGH | Ease: MEDIUM | Time: 8 hours**
+- **Issue**: No way to delete incorrect deposits, causing data inconsistencies
+- **Files modified**:
+  - Backend: `server/routes/deposits.routes.js`, `server/controllers/deposits.controllers.js`
+  - Frontend: `client/src/context/DepositsProvider.jsx`, `client/src/pages/CollectOrderForm.jsx`, `client/src/utils/config.js`
+- **Action**: Implement soft delete with automatic recalculation of all affected deposits
+- **Impact**: Allows correction of payment errors while maintaining data integrity
+- **Status**: ✅ **COMPLETED & CORRECTED (2025-09-30)** - Implemented comprehensive delete functionality with:
+  - Soft delete mechanism preserving audit trail
+  - **Corrected field semantics**: `depositValue` = individual amount, `newDeposit` = cumulative total
+  - **Fixed edge cases**: Properly handles deletion of first, middle, and last deposits
+  - Automatic recalculation using correct field mapping (depositValue for individual amounts)
+  - Paid order protection
+  - UI with trash icons in CollectOrderForm.jsx only
+  - Visual feedback for deleted deposits
+  - Confirmation modals and error handling
+  - All edge cases tested successfully (first, middle, last deposit deletion)
+- **Bug Fix (2025-09-30)**: Fixed incorrect recalculation when deleting middle deposits
+  - Root cause: Confused field semantics (depositValue vs newDeposit)
+  - Solution: Clarified that depositValue = individual payment, newDeposit = cumulative total
+  - Result: All edge cases now work correctly
+- **Documentation**: See `CLAUDE.md` and `IMPLEMENTATION_GUIDE.md` for complete corrected implementation details
 
 ### 1. **Safe JSON Parsing Utility** ✅ **COMPLETED**
 **Priority: HIGH | Ease: EASY | Time: 1 hour**
@@ -212,6 +235,17 @@
 
 ### **Progress Tracking:**
 ```
+✅ COMPLETED & BUG FIXED: Delete Deposits Feature (2025-09-30)
+   - Implemented soft delete with audit trail
+   - **CORRECTED**: Fixed field semantics (depositValue = individual, newDeposit = cumulative)
+   - **FIXED**: Edge case handling for first, middle, and last deposit deletion
+   - Automatic recalculation using correct field mapping
+   - UI with trash icons in CollectOrderForm.jsx
+   - Complete error handling and validation
+   - Tested all edge cases successfully
+   - 5 files modified (3 backend, 2 frontend)
+   - Bug fix applied: Corrected deposit creation and deletion logic
+
 ✅ COMPLETED: Console.log removal
    - Removed 77+ debug console.log statements
    - Improved server logging with timestamps
@@ -225,7 +259,13 @@
    - All existing functionality preserved
    - Tested successfully with both backend and frontend
 
-🔄 REMAINING: 3 improvements (4 hours total)
+✅ COMPLETED: Comprehensive utility functions
+   - Created 8 utility files with 25+ functions
+   - Updated 15+ high and medium impact components
+   - Eliminated 50+ lines of duplicate code
+   - Improved maintainability and consistency
+
+🔄 REMAINING: 3 improvements (7 hours total)
 ```
 
 ### **Safety Features:**

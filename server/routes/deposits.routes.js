@@ -12,11 +12,9 @@ router.get('/deposits', getDeposits);
 
 router.get('/deposits/:id', getDepositsByOrder);
 
-router.get('/deposits/:id', deleteDeposit);
+router.delete('/deposits/:id', deleteDeposit);
 
 router.get('/depositsByDate/:date', getDepositsByDate);
-
-router.get('/deposits', getDeposits);
 
 router.post('/deposits', createDeposit);
 

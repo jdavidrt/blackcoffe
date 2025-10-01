@@ -3,7 +3,7 @@ import {
     getDepositsRequest,
     getDepositByOrderIdRequest,
     createDepositRequest,
-    deleteDepositById,
+    deleteDepositById as deleteDepositByIdRequest,
     getDepositsByDateRequest
 } from "../api/deposits.api";
 import { DepositContext } from "./DepositsContext.jsx";
@@ -44,7 +44,7 @@ export const DepositContextProvider = ({ children }) => {
 
     const deleteDepositById = async (id) => {
         try {
-            const response = await deleteDepositById(id);
+            const response = await deleteDepositByIdRequest(id);
             return response.data;
         } catch (error) {
             console.error(error);

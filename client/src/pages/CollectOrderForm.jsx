@@ -5,11 +5,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
+import { DeleteOutlined } from "@ant-design/icons";
+import { Modal, message } from "antd";
 
 function CollectOrderForm() {
 
   const { getOrder, updateOrder } = useOrders();
-  const { getDepositsByOrderId, createDeposit, deleteDeposit } = useDeposits();
+  const { getDepositsByOrderId, createDeposit, deleteDepositById } = useDeposits();
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
   const [deposit, setDeposit] = useState(0);
@@ -32,6 +34,7 @@ function CollectOrderForm() {
   const [platformPayment, setPlatformPayment] = useState(false);
   const fechaActual = dayjs().format('YYYY-MM-DD');
   const [depositedTotal, setDepositedTotal] = useState(false);
+  const [isDeletingDeposit, setIsDeletingDeposit] = useState(false);
 
 
   const handleCheckboxChange = async (itemId) => {
@@ -70,12 +73,39 @@ function CollectOrderForm() {
     setDeposit(calculateTotal() - order.deposit)
   }
 
-  async function deleteDepositt(id) {
-    await deleteDeposit(id);
-    setTimeout(() => {
-      window.location.reload();
-    }, 3000);
-  }
+  const handleDeleteDeposit = async (depositId, depositValue) => {
+    // Check if order is paid
+    if (order.paid === 1) {
+      message.error(
+        "No se puede eliminar un depósito de una orden que ya está pagada completamente"
+      );
+      return;
+    }
+
+    Modal.confirm({
+      title: "¿Está seguro de eliminar este depósito?",
+      content: `Depósito de $${depositValue.toLocaleString()} - Esta acción no se puede deshacer.`,
+      okText: "Eliminar",
+      okType: "danger",
+      cancelText: "Cancelar",
+      onOk: async () => {
+        setIsDeletingDeposit(true);
+        try {
+          await deleteDepositById(depositId);
+          message.success("Depósito eliminado correctamente");
+          // Reload the page to refresh order and deposits data
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        } catch (error) {
+          message.error("Error al eliminar el depósito");
+          console.error(error);
+        } finally {
+          setIsDeletingDeposit(false);
+        }
+      },
+    });
+  };
 
   const calculateModalInfo = (values) => {
     const totalAmount = calculateTotal();
@@ -139,19 +169,24 @@ function CollectOrderForm() {
     values.shopId = 1;
     values.clientId = client;
     values.items = JSON.stringify(cart)
+
+    // Calculate the individual deposit amount (not cumulative)
+    const individualDepositAmount = depositedTotal ? deposit : parseFloat(values.deposit);
+
+    // Calculate new cumulative total after this deposit
+    const newCumulativeTotal = order.deposit + individualDepositAmount;
+
     var neewDeposit = {};
     neewDeposit.orderId = params.id;
     neewDeposit.clientId = order.clientId;
-    { platformPayment ? neewDeposit.paymentMethod = 'Plataforma' : neewDeposit.paymentMethod = 'Efectivo' };
-    { depositedTotal ? neewDeposit.depositValue = deposit : neewDeposit.depositValue = values.deposit }
-    { order.deposit ? neewDeposit.lastDeposit = order.deposit : neewDeposit.lastDeposit = 0 };
-    { depositedTotal ? neewDeposit.newDeposit = order.deposit + deposit : neewDeposit.newDeposit = values.deposit + order.deposit }
-    neewDeposit.dueOnDeposit = (calculateTotal() - neewDeposit.newDeposit)
-    if (depositedTotal) {
-      values.deposit = order.deposit + deposit
-    } else {
-      values.deposit = values.deposit + order.deposit
-    }
+    neewDeposit.paymentMethod = platformPayment ? 'Plataforma' : 'Efectivo';
+    neewDeposit.lastDeposit = order.deposit; // Previous cumulative total
+    neewDeposit.depositValue = individualDepositAmount; // Individual payment amount (what user entered)
+    neewDeposit.newDeposit = newCumulativeTotal; // New cumulative total after this deposit
+    neewDeposit.dueOnDeposit = calculateTotal() - newCumulativeTotal; // Remaining debt
+
+    // Update order deposit total
+    values.deposit = newCumulativeTotal;
 
     if (values.deposit >= calculateTotal()) {
       values.paid = 1;
@@ -449,28 +484,66 @@ function CollectOrderForm() {
               </div>
             ))}
             {deposits ? <>
-              <h3>Abonos de esta orden:</h3>
-              <table className="border-collapse w-100 border-2 border-gray-500 m-2">
+              <h3 className="font-bold text-lg mt-4 mb-2">Abonos de esta orden:</h3>
+              <table className="border-collapse w-full border-2 border-gray-500 m-2">
                 <thead>
                   <tr className="bg-stone-200 text-gray-700 font-bold">
                     <th className="px-2 py-1">Valor de Abono</th>
                     <th className="px-2 py-1">Valor Abonado Anterior</th>
-                    <th className="px-2 py-1">Nuevo Abono de la Orden</th>
+                    <th className="px-2 py-1">Abono de la Orden</th>
                     <th className="px-2 py-1">Nueva Deuda</th>
                     <th className="px-2 py-1">Fecha Abono</th>
                     <th className="px-2 py-1">Método de Pago</th>
-                    {/*<th className="px-2 py-1">Borrar</th>*/}
+                    <th className="px-2 py-1">Eliminar</th>
                   </tr>
                 </thead>
                 <tbody>
                   {deposits.map((deposit) => (
-                    <tr key={deposit.depositId} className="bg-stone-100 text-gray-700">
-                      <td className="text-green-400 px-2 py-1 text-center">+${deposit.depositValue}</td>
-                      <td className="px-2 py-1 text-center">${deposit.lastDeposit}</td>
-                      <td className="px-2 py-1 text-center">${deposit.newDeposit}</td>
-                      <td className="px-2 py-1 text-center">${deposit.dueOnDeposit}</td>
-                      <td className="px-2 py-1 text-center">{deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}</td>
+                    <tr
+                      key={deposit.depositId}
+                      className={
+                        deposit.isDeleted
+                          ? "bg-red-50 opacity-60 line-through"
+                          : "bg-stone-100 text-gray-700 hover:bg-gray-200"
+                      }
+                    >
+                      <td className="text-green-400 px-2 py-1 text-center">
+                        +${deposit.depositValue?.toLocaleString()}
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        ${deposit.lastDeposit?.toLocaleString()}
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        ${deposit.newDeposit?.toLocaleString()}
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        ${deposit.dueOnDeposit?.toLocaleString()}
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        {deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}
+                      </td>
                       <td className="px-2 py-1 text-center">{deposit.paymentMeethd}</td>
+                      <td className="px-2 py-1 text-center">
+                        {deposit.isDeleted ? (
+                          <span className="text-red-500 text-sm font-bold">[ELIMINADO]</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="bg-red-400 hover:bg-red-500 text-white px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() =>
+                              handleDeleteDeposit(deposit.depositId, deposit.depositValue)
+                            }
+                            disabled={isDeletingDeposit || order.paid === 1}
+                            title={
+                              order.paid === 1
+                                ? "No se puede eliminar - Orden pagada"
+                                : "Eliminar depósito"
+                            }
+                          >
+                            <DeleteOutlined />
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
