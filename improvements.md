@@ -3,29 +3,48 @@
 
 ## 🚀 **IMMEDIATE FIXES** - Can be implemented directly in this codebase
 
-### 0. **Delete Deposits Feature** ✅ **COMPLETED & BUG FIXED**
-**Priority: HIGH | Ease: MEDIUM | Time: 8 hours**
-- **Issue**: No way to delete incorrect deposits, causing data inconsistencies
+### 0. **Delete Deposits Feature** ✅ **COMPLETED & FULLY CORRECTED**
+**Priority: HIGH | Ease: MEDIUM | Time: 10 hours total**
+- **Issue**: No way to delete incorrect deposits, causing data inconsistencies; UI inconsistencies across views
 - **Files modified**:
-  - Backend: `server/routes/deposits.routes.js`, `server/controllers/deposits.controllers.js`
-  - Frontend: `client/src/context/DepositsProvider.jsx`, `client/src/pages/CollectOrderForm.jsx`, `client/src/utils/config.js`
-- **Action**: Implement soft delete with automatic recalculation of all affected deposits
-- **Impact**: Allows correction of payment errors while maintaining data integrity
-- **Status**: ✅ **COMPLETED & CORRECTED (2025-09-30)** - Implemented comprehensive delete functionality with:
+  - **Backend** (2025-09-30):
+    - `server/routes/deposits.routes.js`
+    - `server/controllers/deposits.controllers.js`
+  - **Backend** (2025-10-01):
+    - `server/controllers/orders.controllers.js` (added `isDeleted`, `deletedAt` to query)
+  - **Frontend** (2025-09-30):
+    - `client/src/context/DepositsProvider.jsx`
+    - `client/src/pages/CollectOrderForm.jsx`
+  - **Frontend** (2025-10-01):
+    - `client/src/pages/DepositedOrdersPage.jsx` (filter deleted deposits in calculations)
+    - `client/src/pages/DepositsPage.jsx` (show deleted deposits with grey styling)
+    - `client/src/components/DepositsCard.jsx` (visual styling for deleted deposits)
+    - `client/src/components/OrderCollectCard.jsx` (context-aware deposit display)
+- **Action**: Implement soft delete with automatic recalculation and consistent UI across all views
+- **Impact**: Allows correction of payment errors while maintaining full audit trail and data integrity
+- **Status**: ✅ **COMPLETED & FULLY CORRECTED (2025-10-01)** - Comprehensive implementation with:
   - Soft delete mechanism preserving audit trail
   - **Corrected field semantics**: `depositValue` = individual amount, `newDeposit` = cumulative total
   - **Fixed edge cases**: Properly handles deletion of first, middle, and last deposits
   - Automatic recalculation using correct field mapping (depositValue for individual amounts)
   - Paid order protection
   - UI with trash icons in CollectOrderForm.jsx only
-  - Visual feedback for deleted deposits
+  - Visual feedback for deleted deposits (grey, strikethrough, disabled) in all views
   - Confirmation modals and error handling
-  - All edge cases tested successfully (first, middle, last deposit deletion)
-- **Bug Fix (2025-09-30)**: Fixed incorrect recalculation when deleting middle deposits
-  - Root cause: Confused field semantics (depositValue vs newDeposit)
-  - Solution: Clarified that depositValue = individual payment, newDeposit = cumulative total
-  - Result: All edge cases now work correctly
-- **Documentation**: See `CLAUDE.md` and `IMPLEMENTATION_GUIDE.md` for complete corrected implementation details
+  - All edge cases tested successfully
+  - **UI Consistency across all views**: `/abonos`, `/cobrosHoy`, `/cobrarOrden/:id`
+  - **Accurate calculations**: Deleted deposits excluded from daily totals and mall summaries
+- **Bug Fixes**:
+  - **2025-09-30**: Fixed incorrect recalculation when deleting middle deposits
+    - Root cause: Confused field semantics (depositValue vs newDeposit)
+    - Solution: Clarified that depositValue = individual payment, newDeposit = cumulative total
+    - Result: All edge cases now work correctly
+  - **2025-10-01**: Fixed UI inconsistencies and calculation errors across all views
+    - Issue 1: "Abonado este día" not showing on `/cobrosHoy` - Fixed with context-aware display
+    - Issue 2: Deleted deposits included in totals - Fixed by filtering `isDeleted === 1`
+    - Issue 3: No visual indicator for deleted deposits in `/abonos` - Added grey styling
+    - Issue 4: Backend missing `isDeleted` field - Added to query
+- **Documentation**: See `CLAUDE.md` for complete implementation details with all corrections
 
 ### 1. **Safe JSON Parsing Utility** ✅ **COMPLETED**
 **Priority: HIGH | Ease: EASY | Time: 1 hour**

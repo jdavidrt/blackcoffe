@@ -449,9 +449,9 @@ Accessing `/cobrosHoy/` on date 2024-01-15 shows:
 
 These examples demonstrate the complete payment lifecycle from order creation through final collection, showing how the system maintains data integrity and provides comprehensive audit trails for all financial transactions.
 
-####Delete Deposits Feature ✅ IMPLEMENTED & CORRECTED
+####Delete Deposits Feature ✅ IMPLEMENTED & CORRECTED (Updated 2025-10-01)
 
-The system now supports deleting incorrect deposits while maintaining data integrity through automatic recalculation. **IMPORTANT**: The field mapping has been corrected to properly handle edge cases.
+The system now supports deleting incorrect deposits while maintaining data integrity through automatic recalculation. **IMPORTANT**: The field mapping has been corrected to properly handle edge cases, and UI consistency has been improved across all views.
 
 **Location**: Delete functionality is ONLY available in `CollectOrderForm.jsx` (`/cobrarOrden/:id` route)
 
@@ -463,14 +463,40 @@ The deposit fields have been clarified for proper handling:
 - `dueOnDeposit`: **Remaining debt** after this deposit
 
 **UI Implementation**:
+
+*CollectOrderForm (`/cobrarOrden/:id`)*:
 - Deposits table displayed at end of payment form with columns:
   - "Valor de Abono" displays `depositValue` (individual payment)
   - "Valor Abonado Anterior" displays `lastDeposit` (previous cumulative)
   - "Abono de la Orden" displays `newDeposit` (cumulative total)
   - "Nueva Deuda" displays `dueOnDeposit` (remaining debt)
 - Trash can icon in "Eliminar" column for each active deposit
-- Deleted deposits marked with [ELIMINADO] label and crossed-out styling
+- Deleted deposits marked with [ELIMINADO] label and crossed-out styling with red background
 - Trash icon disabled for paid orders
+
+*DepositsPage (`/abonos`)* ✅ **UPDATED 2025-10-01**:
+- Shows ALL deposits including deleted ones for audit trail
+- **Deleted deposits visual styling**:
+  - Grey background (`bg-gray-300`)
+  - Greyed out text (`text-gray-500`)
+  - Reduced opacity (`opacity-60`)
+  - Strike-through text (`line-through`)
+  - Red `[ELIMINADO]` label prefix
+  - Disabled button with grey background and `cursor-not-allowed`
+- Active deposits count shown in header (excludes deleted)
+- Maintains full audit trail visibility
+
+*DepositedOrdersPage (`/cobrosHoy`)* ✅ **UPDATED 2025-10-01**:
+- **Fixed deposit value calculation**: Now correctly filters out deleted deposits
+- `sumarDepositos()` function skips deposits where `isDeleted === 1`
+- `sumarDepositosPorMall()` function excludes deleted deposits from mall totals
+- Displays accurate "Abonado este día" values per order
+
+*OrderCollectCard Component* ✅ **UPDATED 2025-10-01**:
+- Context-aware display logic:
+  - On `/cobrosHoy`: Shows "Abonado este día: $[depositValue]" (only that day's deposits)
+  - On `/cobrarOrdenes/:mall`: Shows "Abono total: $[deposit]" (cumulative total)
+  - Orders with no deposits: Shows "Total: $[orderTotal]" in green
 
 **Backend Logic** (`deleteDeposit` in `deposits.controllers.js:36-118`):
 1. Validates deposit exists and is not already deleted
@@ -551,15 +577,38 @@ Order Deposit: 30000 ✅ UPDATED (was 45000)
 - **Protection**: Cannot delete deposits from fully paid orders
 - **Edge Case Safety**: Properly handles deletion of deposits in any position
 
-**Files Modified** (Corrected 2025-09-30):
-- Backend: `server/routes/deposits.routes.js`, `server/controllers/deposits.controllers.js`
-- Frontend: `client/src/context/DepositsProvider.jsx`, `client/src/pages/CollectOrderForm.jsx`
+**Files Modified**:
+- **2025-09-30 (Initial Implementation)**:
+  - Backend: `server/routes/deposits.routes.js`, `server/controllers/deposits.controllers.js`
+  - Frontend: `client/src/context/DepositsProvider.jsx`, `client/src/pages/CollectOrderForm.jsx`
 
-**Bug Fix History**:
+- **2025-10-01 (UI Consistency & Calculation Fixes)**:
+  - Backend: `server/controllers/orders.controllers.js` (added `isDeleted`, `deletedAt` to `getDepositedOrdersByDate`)
+  - Frontend:
+    - `client/src/pages/DepositedOrdersPage.jsx` (filter deleted deposits in calculations)
+    - `client/src/pages/DepositsPage.jsx` (show deleted deposits with grey styling)
+    - `client/src/components/DepositsCard.jsx` (visual styling for deleted deposits)
+    - `client/src/components/OrderCollectCard.jsx` (context-aware deposit display)
+
+**Bug Fix & Enhancement History**:
 - **2025-09-30**: Fixed edge case where deleting middle deposit caused incorrect recalculation
   - Root cause: Confusion between `depositValue` (individual) and `newDeposit` (cumulative)
   - Solution: Clarified field semantics and corrected creation/deletion logic
   - Result: All edge cases now handled correctly (first, middle, last deposit deletion)
+
+- **2025-10-01**: Fixed inconsistencies in deposit display and calculation across all views
+  - **Issue 1**: "Abonado este día" not showing values on `/cobrosHoy`
+    - Root cause: `OrderCollectCard` not handling `depositValue` field properly
+    - Solution: Added context-aware logic to display different values based on route
+  - **Issue 2**: Deleted deposits included in daily totals
+    - Root cause: `sumarDepositos()` and `sumarDepositosPorMall()` not filtering deleted deposits
+    - Solution: Added `if (objeto.isDeleted === 1) return;` checks in both functions
+  - **Issue 3**: Deleted deposits not visible in `/abonos` audit trail
+    - Root cause: Filter was excluding deleted deposits completely
+    - Solution: Show all deposits with visual styling for deleted ones (grey, strikethrough, disabled)
+  - **Issue 4**: Backend query missing `isDeleted` field
+    - Root cause: `getDepositedOrdersByDate` didn't include deletion status fields
+    - Solution: Added `deposits.isDeleted, deposits.deletedAt` to SELECT statement
 
 ### Route Organization
 Frontend routes are organized by functionality:
