@@ -164,6 +164,29 @@ export const updateOrder = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 }
+export const getOrphanedOrders = async (req, res) => {
+    const [result] = await pool.query(`
+        SELECT
+            orders.id,
+            orders.deposit,
+            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
+            orders.clientId,
+            orders.paid,
+            orders.collectedBy,
+            orders.items,
+            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt
+        FROM
+            orders
+        LEFT JOIN
+            clients ON orders.clientId = clients.id
+        WHERE
+            clients.id IS NULL AND orders.paid = 0
+        ORDER BY
+            orders.createdAt ASC
+    `);
+    res.json(result);
+}
+
 export const deleteOrder = async (req, res) => {
     try {
         const [result] = await pool.query("DELETE FROM orders WHERE id = ?", [

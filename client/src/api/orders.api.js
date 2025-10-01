@@ -4,6 +4,9 @@ import { API_CONFIG } from '../utils/config';
 export const getOrdersRequest = async () =>
   await axios.get(`${API_CONFIG.RENDER_SERVER}/orders/`,);
 
+export const getOrphanedOrdersRequest = async () =>
+  await axios.get(`${API_CONFIG.RENDER_SERVER}/orphanedOrders/`,);
+
 export const getNotDeliveredOrdersRequest = async () =>
   await axios.get(`${API_CONFIG.RENDER_SERVER}/notDeliveredOrders/`,);
 
