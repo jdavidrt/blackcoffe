@@ -17,6 +17,11 @@ function DepositedOrdersPage() {
     const depositosSumados = {};
 
     arregloObjetos.forEach(objeto => {
+      // Skip deleted deposits
+      if (objeto.isDeleted === 1) {
+        return;
+      }
+
       const id = objeto.id;
       const depositValue = objeto.depositValue;
 
@@ -63,6 +68,11 @@ function DepositedOrdersPage() {
     };
 
     arregloObjetos.forEach(objeto => {
+      // Skip deleted deposits
+      if (objeto.isDeleted === 1) {
+        return;
+      }
+
       const mall = objeto.mall;
       const depositValue = objeto.depositValue;
 

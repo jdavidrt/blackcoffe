@@ -73,24 +73,26 @@ export const getDepositedOrdersByDate = async (req, res) => {
             deposits.depositValue,
             deposits.lastDeposit,
             deposits.newDeposit,
+            deposits.isDeleted,
+            deposits.deletedAt,
             orders.id,
             orders.createdAt,
             orders.clientId,
             orders.paidAt,
             orders.items,
             orders.deposit,
-            clients.premises, 
-            clients.clientName, 
-            clients.mall 
-        FROM 
+            clients.premises,
+            clients.clientName,
+            clients.mall
+        FROM
             deposits
-        JOIN 
+        JOIN
             orders ON deposits.orderId = orders.id
-        JOIN 
+        JOIN
             clients ON orders.clientId = clients.id
-        WHERE 
-            DATE(deposits.depositCreatedAt) = ?        
-        ORDER BY 
+        WHERE
+            DATE(deposits.depositCreatedAt) = ?
+        ORDER BY
             orders.createdAt ASC
     `, [req.params.date]);
     res.json(result);

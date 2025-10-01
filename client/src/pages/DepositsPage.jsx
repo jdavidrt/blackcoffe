@@ -21,10 +21,14 @@ function DepositsPage() {
   };
 
   const filteredDeposits = deposits.filter((deposit) =>
+    // Include all deposits (even deleted ones), just filter by search term
     deposit.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     deposit.premises.toLowerCase().includes(searchTerm.toLowerCase()) ||
     deposit.mall.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Count only active deposits for the header
+  const activeDepositsCount = filteredDeposits.filter(d => d.isDeleted !== 1).length;
 
   useEffect(() => {
     onDatePickerChange(); // Iniciar carga al montar el componente
@@ -49,7 +53,7 @@ function DepositsPage() {
   return (
     <div className="bg-slate-200 h-dvh rounded-md">
       <div className="flex py-2">
-        <h4 className="text-xl text-black font-bold text-center">Abonos de este dia ({deposits.length}) </h4>
+        <h4 className="text-xl text-black font-bold text-center">Abonos de este dia ({activeDepositsCount}) </h4>
         <div className="ml-auto">
           <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
         </div>
