@@ -10,6 +10,7 @@ import dayjs from "dayjs"; import {
     View,
 } from "@react-pdf/renderer";
 import { safeJSONParse } from '../utils/jsonUtils';
+import { sortProductsByDateDesc } from '../utils/orderUtils';
 
 const styles = StyleSheet.create({
     page: {
@@ -116,7 +117,7 @@ function Invoice() {
                 <td>CANTIDAD</td>
                 <td>VALUR UNI.</td>
                 <td>VALOR TOT.</td>
-                {[...cart].reverse().map((product) => (
+                {sortProductsByDateDesc(cart).map((product) => (
                     <tr key={product.id}>
                         <td>{product.productName}</td>
                         <td>{product.quantity}</td>

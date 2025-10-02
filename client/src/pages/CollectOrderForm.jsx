@@ -5,6 +5,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
+import { sortProductsByDateDesc } from '../utils/orderUtils';
 import { DeleteOutlined } from "@ant-design/icons";
 import { Modal, message } from "antd";
 import ProgressiveProductList from '../components/ProgressiveProductList';
@@ -470,7 +471,7 @@ function CollectOrderForm() {
 
             </div>
             <ProgressiveProductList
-              products={[...cart].reverse()}
+              products={sortProductsByDateDesc(cart)}
               renderProduct={(item) => (
                 <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
                   <input

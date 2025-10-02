@@ -9,6 +9,7 @@ import { Select } from "antd"
 import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
+import { sortProductsByDateDesc } from '../utils/orderUtils';
 import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function OrderForm() {
@@ -216,7 +217,7 @@ function OrderForm() {
               </button>
             </div>
             <ProgressiveProductList
-              products={[...cart].reverse()}
+              products={sortProductsByDateDesc(cart)}
               renderProduct={(item) => (
                 <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
                   <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>

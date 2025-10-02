@@ -2,6 +2,7 @@ import { useOrders } from "../context/OrderProvider";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { safeJSONParse } from '../utils/jsonUtils';
+import { sortProductsByDateDesc } from '../utils/orderUtils';
 
 function PublicInvoice() {
     const params = useParams();
@@ -85,7 +86,7 @@ function PublicInvoice() {
                         </tr>
                     </thead>
                     <tbody>
-                        {[...cart].reverse().map((product) => (
+                        {sortProductsByDateDesc(cart).map((product) => (
                             <tr key={product.id}>
                                 <td className="py-2 border border-black text-center">{product.productName} ({product.quantity})</td>
                                 <td className="py-2 border border-black text-center">${product.quantity * product.unitValue}</td>
