@@ -99,6 +99,9 @@ function Navbar() {
             <Link onClick={toggleMenu} to="/ordenesPagas" className="text-white hover:text-black bg-gray-500 rounded px-3 py-2">Cuentas al día</Link>
           </li>
           <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/ordenesSinCliente" className="text-white hover:text-black bg-red-600 rounded px-3 py-2">Sin Usuario</Link>
+          </li>
+          <li className="mb-1 flex items-center">
             <Link onClick={toggleMenu} to="/productos" className="text-white hover:text-black bg-sky-800 rounded px-3 py-2">Productos</Link>
           </li>
           <li className="mb-1 flex items-center">

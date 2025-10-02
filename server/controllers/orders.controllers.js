@@ -182,7 +182,7 @@ export const getOrphanedOrders = async (req, res) => {
         WHERE
             clients.id IS NULL AND orders.paid = 0
         ORDER BY
-            orders.createdAt ASC
+            orders.createdAt DESC
     `);
     res.json(result);
 }

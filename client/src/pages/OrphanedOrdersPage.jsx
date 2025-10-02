@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
-import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
 import { calculateOrderTotal } from '../utils/orderUtils';
+import { safeJSONParse } from '../utils/jsonUtils';
 import SearchBar from "../components/SearchBar";
+import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function OrphanedOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [expandedOrders, setExpandedOrders] = useState({});
   const { orders, loadOrphanedOrders, deleteOrder } = useOrders();
   const navigate = useNavigate();
 
@@ -20,9 +23,9 @@ function OrphanedOrdersPage() {
     }
   };
 
-  const filteredOrders = orders.filter((order) =>
-    order.id.toString().includes(searchTerm)
-  );
+  const filteredOrders = orders
+    .filter((order) => order.id.toString().includes(searchTerm))
+    .sort((a, b) => b.id - a.id);
 
   useEffect(() => {
     loadOrders();
@@ -32,6 +35,13 @@ function OrphanedOrdersPage() {
     if (window.confirm('¿Está seguro de eliminar esta orden sin cliente asociado?')) {
       await deleteOrder(id);
     }
+  };
+
+  const toggleExpand = (orderId) => {
+    setExpandedOrders(prev => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
   };
 
   function renderMain() {
@@ -53,31 +63,55 @@ function OrphanedOrdersPage() {
       );
     }
 
-    return filteredOrders.map((order) => (
-      <div key={order.id} className="flex bg-red-100 text-black rounded-md m-2 border-2 border-red-300">
-        <div className="p-2 flex-1">
-          <p className="font-bold text-red-700">⚠️ Orden sin cliente (Cliente ID: {order.clientId})</p>
-          <p className="text-sm text-gray-600">Orden #{order.id} - Creada: {order.createdAt}</p>
+    return filteredOrders.map((order) => {
+      const items = safeJSONParse(order.items, []);
+      const isExpanded = expandedOrders[order.id];
+
+      return (
+        <div key={order.id} className="bg-red-100 text-black rounded-md m-2 border-2 border-red-300">
+          <div className="flex">
+            <div className="p-2 flex-1">
+              <p className="font-bold text-red-700">⚠️ Orden sin cliente (Cliente ID: {order.clientId})</p>
+              <p className="text-sm text-gray-600">Orden #{order.id} - Creada: {order.createdAt}</p>
+            </div>
+            <div className="flex p-2 items-center gap-2">
+              <b><p className="text-green-500 px-2">${calculateOrderTotal(order)}</p></b>
+              <button
+                type="button"
+                className="flex bg-purple-500 hover:bg-purple-600 px-3 py-2 text-white rounded"
+                onClick={() => toggleExpand(order.id)}
+              >
+                {isExpanded ? <UpOutlined /> : <DownOutlined />}
+              </button>
+              <button
+                type="button"
+                className="flex bg-red-500 hover:bg-red-600 px-3 py-2 text-white rounded"
+                onClick={() => handleDelete(order.id)}
+              >
+                <DeleteOutlined />
+              </button>
+            </div>
+          </div>
+
+          {isExpanded && items.length > 0 && (
+            <div className="px-2 pb-2">
+              <ProgressiveProductList
+                products={[...items].reverse()}
+                renderProduct={(item) => (
+                  <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
+                    <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                    <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
+                      {item.id.slice(-14)}
+                    </p>
+                    <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${(item.quantity * item.unitValue)?.toLocaleString()}</p>
+                  </div>
+                )}
+              />
+            </div>
+          )}
         </div>
-        <div className="flex p-2 items-center gap-2">
-          <b><p className="text-green-500 px-2">${calculateOrderTotal(order)}</p></b>
-          <button
-            type="button"
-            className="flex bg-blue-400 hover:bg-blue-500 px-3 py-2 text-white rounded"
-            onClick={() => navigate(`/editarOrden/${order.id}`)}
-          >
-            <EditOutlined />
-          </button>
-          <button
-            type="button"
-            className="flex bg-red-500 hover:bg-red-600 px-3 py-2 text-white rounded"
-            onClick={() => handleDelete(order.id)}
-          >
-            <DeleteOutlined />
-          </button>
-        </div>
-      </div>
-    ));
+      );
+    });
   }
 
   return (
