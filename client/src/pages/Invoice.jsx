@@ -116,7 +116,7 @@ function Invoice() {
                 <td>CANTIDAD</td>
                 <td>VALUR UNI.</td>
                 <td>VALOR TOT.</td>
-                {cart.map((product) => (
+                {[...cart].reverse().map((product) => (
                     <tr key={product.id}>
                         <td>{product.productName}</td>
                         <td>{product.quantity}</td>

@@ -85,7 +85,7 @@ function PublicInvoice() {
                         </tr>
                     </thead>
                     <tbody>
-                        {cart.map((product) => (
+                        {[...cart].reverse().map((product) => (
                             <tr key={product.id}>
                                 <td className="py-2 border border-black text-center">{product.productName} ({product.quantity})</td>
                                 <td className="py-2 border border-black text-center">${product.quantity * product.unitValue}</td>
