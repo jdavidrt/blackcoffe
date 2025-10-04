@@ -10,7 +10,8 @@
       "Bash(taskkill:*)",
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Read(//c/Users/jdk_l/OneDrive/Escritorio/BlackCoffe/**)"
     ],
     "deny": [],
     "ask": []

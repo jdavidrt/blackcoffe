@@ -106,8 +106,8 @@ function DepositedOrdersPage() {
   const aggregatedFilteredOrders = sumarDepositos(filteredOrders);
 
   // DEBUG: Check if paid field exists
-  console.log('First aggregated order:', aggregatedFilteredOrders[0]);
-  console.log('Paid values:', aggregatedFilteredOrders.map(o => ({ id: o.id, paid: o.paid, depositValue: o.depositValue })));
+  //console.log('First aggregated order:', aggregatedFilteredOrders[0]);
+  //console.log('Paid values:', aggregatedFilteredOrders.map(o => ({ id: o.id, paid: o.paid, depositValue: o.depositValue })));
 
   function renderMain() {
     if (loading) {

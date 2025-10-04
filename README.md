@@ -452,6 +452,29 @@ The application is configured for deployment with:
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build
 
+## 📚 Additional Documentation
+
+### System Documentation
+- **[CLAUDE.md](CLAUDE.md)** - Complete system documentation for Claude Code development
+  - Development commands and workflows
+  - Architecture overview and database integration
+  - Complete deposits and payment system documentation
+  - Navigation menu and page documentation
+  - Code improvements and implementation progress
+
+### Feature Documentation
+- **[INVOICES.md](INVOICES.md)** - Invoice payment information enhancement documentation
+  - Implementation plan for adding payment information to invoices
+  - Payment display specifications (total paid, remaining debt, payment history)
+  - Frontend and backend integration guide
+  - Testing checklist and edge cases
+  - Visual design considerations for thermal and web invoices
+
+### Project History
+- **[MERGE.md](MERGE.md)** - Page merge history and implementation details
+  - Cobros del día enhancement (2025-10-04)
+  - Feature consolidation documentation
+
 ## 📄 License
 
 Developed by jdavidrt in Bogotá Colombia

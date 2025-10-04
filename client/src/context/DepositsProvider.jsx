@@ -27,9 +27,14 @@ export const DepositContextProvider = ({ children }) => {
 
     const createDeposit = async (deposits) => {
         try {
-            await createDepositRequest(deposits);
+            console.log('[DepositsProvider] Creating deposit:', deposits);
+            const response = await createDepositRequest(deposits);
+            console.log('[DepositsProvider] Deposit created successfully:', response.data);
+            return response.data;
         } catch (error) {
-            console.error(error);
+            console.error('[DepositsProvider] ERROR creating deposit:', error);
+            console.error('[DepositsProvider] Error details:', error.response?.data);
+            throw error; // Re-throw to allow caller to handle
         }
     };
 

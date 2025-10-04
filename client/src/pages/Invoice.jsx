@@ -1,4 +1,5 @@
 import { useOrders } from "../context/OrderProvider";
+import { useDeposits } from "../context/DepositsProvider";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import dayjs from "dayjs"; import {
@@ -50,7 +51,9 @@ function Invoice() {
     const params = useParams();
 
     const { getOrder } = useOrders();
+    const { getDepositsByOrderId } = useDeposits();
     const [cart, setCart] = useState([]);
+    const [deposits, setDeposits] = useState([]);
     const [order, setOrder] = useState({
     });
 
@@ -58,12 +61,26 @@ function Invoice() {
         return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
     };
 
+    const calculateRemainingDebt = () => {
+        return calculateTotal() - (order.deposit || 0);
+    };
+
+    const getPaymentStatus = () => {
+        const debt = calculateRemainingDebt();
+        if (debt <= 0) return "PAGADO COMPLETAMENTE";
+        if (order.deposit > 0) return "PAGO PARCIAL";
+        return "NO PAGADO";
+    };
+
     useEffect(() => {
         const loadOrder = async () => {
             if (params.id) {
                 const order = await getOrder(params.id);
-                setTimeout(() => {
-                }, 3000);
+                const depositsData = await getDepositsByOrderId(params.id);
+
+                setDeposits(depositsData || []);
+                setCart(safeJSONParse(order.items, []))
+
                 order.paid ?
                     setOrder({
                         orderId: order.id,
@@ -86,13 +103,10 @@ function Invoice() {
                         createdAt: order.createdAt.slice(0, 10),
                         deposit: order.deposit
                     })
-                setCart(safeJSONParse(order.items, []))
-
-
             }
         };
         loadOrder();
-    }, [order]);
+    }, [params.id]);
 
     return (
 
@@ -163,6 +177,48 @@ function Invoice() {
                         </tr>
                     </tbody>
                 </table>
+                <br />
+                <table>
+                    <tbody className="w-full">
+                        <tr>
+                            <td className="font-bold">ESTADO DE PAGO:</td>
+                            <td className="font-bold">{getPaymentStatus()}</td>
+                        </tr>
+                        <tr>
+                            <td>TOTAL ABONADO:</td>
+                            <td>${order.deposit || 0}</td>
+                        </tr>
+                        <tr>
+                            <td>DEUDA RESTANTE:</td>
+                            <td>${calculateRemainingDebt()}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                {deposits.length > 0 ? (
+                    <>
+                        <br />
+                        <div className="font-bold">HISTORIAL DE PAGOS:</div>
+                        <table>
+                            <tbody>
+                                {deposits.map((deposit, index) => (
+                                    <tr key={deposit.depositId}>
+                                        <td>{index + 1}.</td>
+                                        <td>{deposit.depositCreatedAt.slice(0, 10)}</td>
+                                        <td>{deposit.paymentMethod}</td>
+                                        <td>${deposit.depositValue}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </>
+                ) : (order.deposit > 0 && (
+                    <>
+                        <br />
+                        <div className="text-sm">
+                            Nota: Abono de ${order.deposit} sin historial detallado (pago legacy).
+                        </div>
+                    </>
+                ))}
                 <br />
                 CODIGO CIIU: 5613 / 4711
             </div>

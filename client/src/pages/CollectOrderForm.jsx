@@ -70,7 +70,7 @@ function CollectOrderForm() {
   function togglePlatform() {
     setPlatformPayment(!platformPayment); // Change value from true to false and vice versa
   }
-  console.log(order)
+
 
   function depositTotal() {
     setDepositedTotal(true);
@@ -206,8 +206,20 @@ function CollectOrderForm() {
       delete values.clientId;
       delete values.items;
       delete values.shopId;
-      await createDeposit(neewDeposit)
-      await updateOrder(params.id, values);
+
+      try {
+        console.log('[CollectOrderForm] Creating deposit:', neewDeposit);
+        await createDeposit(neewDeposit);
+        console.log('[CollectOrderForm] Deposit created successfully');
+
+        console.log('[CollectOrderForm] Updating order:', values);
+        await updateOrder(params.id, values);
+        console.log('[CollectOrderForm] Order updated successfully');
+      } catch (error) {
+        console.error('[CollectOrderForm] ERROR during payment processing:', error);
+        alert(`Error al procesar el pago: ${error.message || 'Error desconocido'}. Por favor, verifique si el pago fue registrado correctamente.`);
+        return; // Don't reload if there was an error
+      }
     }
 
     // Reset form and states after successful transaction

@@ -1403,3 +1403,20 @@ All unsafe `JSON.parse(order.items)` calls have been successfully replaced with 
 - **Database Credentials Security**: Hardcoded password in `server/db.js` (requires environment variables)
 - **Environment Configuration**: Hardcoded URLs in API files (requires Vite env vars)
 - **Authentication Security**: Plain text passwords in database (requires bcrypt + DB migration)
+
+## 📚 Additional Documentation
+
+### Feature Implementation Guides
+- **[INVOICES.md](INVOICES.md)** - Invoice Payment Information Enhancement
+  - Implementation plan for adding payment details to both invoice views
+  - Payment display specifications: total paid, remaining debt, payment history
+  - Frontend and backend integration using existing infrastructure
+  - Visual design for thermal printer (Invoice.jsx) and web display (PublicInvoice.jsx)
+  - Testing checklist with edge cases and scenarios
+  - **Status**: 📝 Documentation Complete - Ready for Implementation
+  - **Complexity**: 🟢 Low (leverages existing code, minimal new functionality)
+  - **Estimated Time**: 3-4 hours
+
+### Project Documentation
+- **[README.md](README.md)** - Project overview, setup instructions, and architecture
+- **[MERGE.md](MERGE.md)** - Page merge history (Cobros del día enhancement)
