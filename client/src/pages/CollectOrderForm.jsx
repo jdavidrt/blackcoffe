@@ -70,6 +70,7 @@ function CollectOrderForm() {
   function togglePlatform() {
     setPlatformPayment(!platformPayment); // Change value from true to false and vice versa
   }
+  console.log(order)
 
   function depositTotal() {
     setDepositedTotal(true);

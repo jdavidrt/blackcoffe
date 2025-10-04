@@ -26,8 +26,15 @@ function DepositedOrdersPage() {
       const depositValue = objeto.depositValue;
 
       if (depositosSumados.hasOwnProperty(id)) {
+        // If order already exists, sum the depositValue
         depositosSumados[id].depositValue += depositValue;
+        // Always keep the most recent 'paid' status (orders.paid should be consistent for same order)
+        // Use the current objeto's paid status if it exists
+        if (objeto.paid !== undefined) {
+          depositosSumados[id].paid = objeto.paid;
+        }
       } else {
+        // First time seeing this order, store all fields
         depositosSumados[id] = { ...objeto };
       }
     });
@@ -36,9 +43,6 @@ function DepositedOrdersPage() {
 
     return resultados;
   }
-
-  const resultados = sumarDepositos(orders);
-
 
   const onDatePickerChange = async (date, dateString) => {
     setLoading(true);
@@ -98,6 +102,13 @@ function DepositedOrdersPage() {
     (filterType === '' || order.mall === filterType)
   );
 
+  // Aggregate deposits by order ID for filtered orders
+  const aggregatedFilteredOrders = sumarDepositos(filteredOrders);
+
+  // DEBUG: Check if paid field exists
+  console.log('First aggregated order:', aggregatedFilteredOrders[0]);
+  console.log('Paid values:', aggregatedFilteredOrders.map(o => ({ id: o.id, paid: o.paid, depositValue: o.depositValue })));
+
   function renderMain() {
     if (loading) {
       return (
@@ -111,13 +122,21 @@ function DepositedOrdersPage() {
       return <h1>No hay órdenes con cobros del día seleccionado</h1>;
     }
 
-    return sumarDepositos(filteredOrders).map((order) => <OrderCollectCard order={order} key={order.id} />);
+    return aggregatedFilteredOrders.map((order) => <OrderCollectCard order={order} key={order.id} />);
   }
+  //console.log(aggregatedFilteredOrders)
+
+  // Calculate statistics from aggregated filtered orders
+  const fullyPaidToday = aggregatedFilteredOrders.filter(order => order.paid === 1).length;
+  const partialPayments = aggregatedFilteredOrders.filter(order => order.paid === 0).length;
+  const depositTotals = sumarDepositosPorMall(orders);
+
+  const totalGeneral = Object.values(depositTotals).reduce((sum, val) => sum + val, 0);
 
   return (
-    <div className="bg-slate-200 h-dvh rounded-md">
-      <div className="flex py-2">
-        <h4 className="text-xl text-black font-bold text-center">Ordenes con cobros ({filteredOrders.length}) </h4>
+    <div className="bg-slate-200 h-dvh rounded-md overflow-y-auto">
+      <div className="flex py-2 px-2">
+        <h4 className="text-xl text-black font-bold text-center">Cobros del día ({filteredOrders.length} órdenes) </h4>
         <div className="ml-auto flex">
           <button
             type="button"
@@ -170,11 +189,46 @@ function DepositedOrdersPage() {
       <SearchBar onSearch={setSearchTerm} />
 
       {orders.length !== 0 ? (
-        <div>
-          Total cobrado en Unilago: ${sumarDepositosPorMall(orders)["Unilago"]} <br />AltaTec: ${sumarDepositosPorMall(orders)["Alta Tecnología"]} <br /> C.F: ${sumarDepositosPorMall(orders)['Cliente Frecuente']} <br /> Otros: ${sumarDepositosPorMall(orders)["Otros"]}
+        <div className="mx-2">
+          {/* Order Statistics */}
+          <div className="bg-blue-100 p-3 rounded-md mb-2 shadow-sm">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div><span className="font-semibold">Órdenes pagadas completamente:</span> {fullyPaidToday}</div>
+              <div><span className="font-semibold">Órdenes con abonos parciales:</span> {partialPayments}</div>
+            </div>
+          </div>
+
+          {/* Total Cobrado Section */}
+          <div className="bg-white p-4 rounded-md shadow-md mb-3">
+            <h3 className="text-lg font-bold mb-3 text-gray-700 border-b pb-2">💰 Total Cobrado</h3>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="flex justify-between">
+                <span>Unilago:</span>
+                <span className="font-bold text-blue-700">${depositTotals["Unilago"].toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Alta Tecnología:</span>
+                <span className="font-bold text-blue-700">${depositTotals["Alta Tecnología"].toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>C.F:</span>
+                <span className="font-bold text-blue-700">${depositTotals['Cliente Frecuente'].toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Otros:</span>
+                <span className="font-bold text-blue-700">${depositTotals["Otros"].toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t-2 border-gray-300">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-bold text-gray-700">Total General:</span>
+                <span className="text-2xl font-bold text-green-600">${totalGeneral.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
-      <div className="bg-yellow-500 rounded-md grid">{renderMain()}</div>
+      <div className="bg-yellow-500 rounded-md grid px-2">{renderMain()}</div>
     </div>
   );
 }

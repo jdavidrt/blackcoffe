@@ -99,7 +99,7 @@ blackcoffe/
 └── README.md                    # Project documentation
 ```
 
-## 🗺️ Application Site Map
+## 🗺️ Application Site Map & Navigation Guide
 
 ### Public Routes
 - `/factura/:id` - Public invoice view (no authentication required)
@@ -139,6 +139,198 @@ blackcoffe/
     ├── `/pdfOrden/:id` - Generate Order Invoice (PDF)
     └── `/factura/:id` - Public Invoice View
 ```
+
+---
+
+## 📖 Comprehensive Page Documentation
+
+### 🔐 Authentication & Security
+
+#### Login Page (`/iniciarSesion`)
+**Component**: `LoginForm.jsx`
+
+User authentication gateway with role-based access control. The system differentiates between "Black coffe Unilago" users (limited menu access) and admin users (full access). Session persists via localStorage and redirects authenticated users to the main dashboard.
+
+---
+
+### 📊 Dashboard & Order Management
+
+#### Main Dashboard - Cuentas por Cobrar (`/`)
+**Component**: `OrdersPage.jsx` | **Navigation**: Yellow "Cuentas por cobrar" button
+
+Central hub displaying all unpaid orders across all mall locations. Features comprehensive search, mall-based filtering, and quick actions for editing, payment processing, and invoice generation. Shows order status indicators for payment, delivery, and collection states.
+
+**Key Actions**: View orders, Search by client/premises, Edit orders, Process payments, Generate invoices
+
+#### Create New Order (`/nuevaOrden`)
+**Component**: `OrderForm.jsx` | **Navigation**: Green "Nueva Orden" button
+
+Interactive order creation interface with client selection, dynamic product cart, quantity adjustments, and delivery details. Uses Formik for form handling and Context API for state management. Orders are created with initial status of unpaid, undelivered, and uncollected.
+
+**Workflow**: Select client → Add products → Adjust quantities → Add delivery details → Submit
+
+#### Edit Order (`/editarOrden/:id`)
+**Component**: `OrderForm.jsx` | **Access**: Via "Editar" button on order cards
+
+Modify existing unpaid orders including client selection, product cart updates, and delivery details. Includes confirmation modals to prevent accidental modifications. Cannot edit fully paid orders.
+
+---
+
+### 💰 Payment & Collection Management
+
+#### Today's Collections (`/cobrosHoy`)
+**Component**: `DepositedOrdersPage.jsx` | **Navigation**: Light grey "Cobros del día" button
+
+Daily financial reporting tool showing all payments collected on a specific date. Features date selector, payment summaries by mall location, payment method breakdown (Cash vs Platform), and detailed payment lists. Excludes deleted deposits from calculations (fixed 2025-10-01).
+
+**Use Cases**: Daily financial reconciliation, Cash register balancing, Payment audit trail, Financial reporting
+
+#### Collect by Location (`/cobrarOrdenes/:mall`)
+**Component**: `CollectOrdersPage.jsx` | **Navigation**: Grey "Cobrar" buttons
+
+Location-filtered order collection views for efficient payment processing:
+- **Cobrar Uni.** → Unilago location
+- **Cobrar Alta T.** → Alta Tecnología mall
+- **Cobrar C. F.** → Cliente Frecuente (frequent customers)
+- **Cobrar Otros** → Other locations
+
+Displays orders with client details, order items, total amounts, current deposits, and remaining balances. Click any order to navigate to payment interface.
+
+#### Process Order Payment (`/cobrarOrden/:id`)
+**Component**: `CollectOrderForm.jsx` | **Access**: Via order cards in collection pages
+
+Comprehensive payment processing interface supporting both partial and full payments. Features order summary, payment method selection (Cash/Platform), payment history table with deposit details, and **delete deposit functionality** with automatic recalculation.
+
+**Payment Options**:
+- **Partial Payment**: Enter specific amount
+- **Full Payment**: "Cobrar Total" button pays remaining balance
+
+**Delete Deposit** ✅: Soft delete with trash icon, confirmation modal, automatic recalculation of subsequent deposits, and audit trail preservation. Cannot delete from fully paid orders.
+
+#### Payment History (`/abonos`)
+**Component**: `DepositsPage.jsx` | **Navigation**: Light grey "Abonos" button
+
+Complete financial audit trail showing ALL deposits including deleted ones. Deleted deposits displayed with grey background, strikethrough text, and [ELIMINADO] label. Active deposits counter in header. Search and filter by client, date, payment method, or mall location.
+
+**Data Integrity**: Maintains complete audit trail with soft delete support
+
+#### Fully Paid Orders (`/ordenesPagas`)
+**Component**: `CollectedOrdersPage.jsx` | **Navigation**: Dark grey "Cuentas al día" button
+
+Lists all orders with complete payment (`paid = 1`). Displays client details, order items, total amount paid, payment completion date, and delivery status. Features date filtering and search functionality. Orders move here after full payment completion.
+
+---
+
+### 🚚 Delivery Management
+
+#### Delivery Routes (`/recorrido`)
+**Component**: `DeliveryOrdersPage.jsx` | **Navigation**: Orange "Recorrido" button
+
+Delivery route management and order fulfillment tracking. Lists all orders ready for delivery, organized by location and premises for efficient routing. Supports marking individual items as delivered and tracking delivery timestamps.
+
+**Features**: Route planning, Partial deliveries, Delivery status updates, Real-time tracking
+
+#### Delivered Orders (`/entregados`)
+**Component**: `DeliveredOrdersPage.jsx` | **Access**: Direct link (not in main menu)
+
+Historical view of completed deliveries with date filtering, delivery verification, and delivery timestamp tracking. Distinguishes between fully delivered and partially delivered orders.
+
+---
+
+### 👥 Customer & Product Management
+
+#### Customer Management (`/clientes`)
+**Component**: `ClientsPage.jsx` | **Navigation**: Sky blue "Clientes" button
+
+Complete customer database with contact information, premises assignments, and mall associations. Search by name, premises, or phone. Create, edit, or delete customers with validation preventing deletion of customers with active orders.
+
+**Customer Data**: Name, Phone, Premises number, Mall location, Email, Customer ID
+
+#### Create New Customer (`/nuevoCliente`)
+**Component**: `ClientForm.jsx` | **Access**: "Nuevo Cliente" button on Clientes page
+
+Customer registration form with required fields (name, phone, premises, mall) and optional email. Includes validation for required fields, phone format, and duplicate detection.
+
+#### Edit Customer (`/editarCliente/:id`)
+**Component**: `ClientForm.jsx` | **Access**: "Editar" button on customer cards
+
+Update existing customer information with pre-populated form and validation. Cannot change customer ID.
+
+#### Product Catalog (`/productos`)
+**Component**: `ProductsPage.jsx` | **Navigation**: Sky blue "Productos" button
+
+Product inventory management displaying all available products with names, prices, descriptions, and availability status. Search products and perform CRUD operations. Validation prevents deletion of products used in active orders.
+
+#### Create New Product (`/nuevoProducto`)
+**Component**: `ProductForm.jsx` | **Access**: "Nuevo Producto" button on Productos page
+
+Add products to catalog with name, price, description, and category. Formatted currency input with validation for required fields and duplicate detection.
+
+#### Edit Product (`/editarProducto/:id`)
+**Component**: `ProductForm.jsx` | **Access**: "Editar" button on product cards
+
+Update product information including name, price, and description with validation and confirmation.
+
+---
+
+### 🔧 Utility & Special Pages
+
+#### Orphaned Orders (`/ordenesSinCliente`)
+**Component**: `OrphanedOrdersPage.jsx` | **Navigation**: Red "Sin Usuario" button
+
+Data integrity management tool for orders without assigned customers. Features client assignment, order details display, and resolution actions (assign customer, create new customer, delete order). Helps maintain database consistency.
+
+#### Public Invoice View (`/factura/:id`)
+**Component**: `PublicInvoice.jsx` | **Access**: Public (no authentication)
+
+Customer-facing invoice view accessible via link or QR code. Professional display with company branding, customer information, itemized products, prices, totals, and payment status. Optimized for printing.
+
+#### PDF Invoice Generation (`/pdfOrden/:id`)
+**Component**: `Invoice.jsx` | **Access**: "Factura" button on order cards
+
+Generate professional PDF invoices using React-PDF library. Features company header, invoice number, customer details, itemized products, and payment information. Formatted for thermal/standard printers with download support.
+
+---
+
+## 🎯 Navigation Menu Overview
+
+### Standard User Menu (Full Access)
+1. **Cuentas por cobrar** (Yellow) - Unpaid orders dashboard
+2. **Cobros del día** (Light grey) - Today's collections
+3. **Nueva Orden** (Green) - Create new order
+4. **Recorrido** (Orange) - Delivery routes
+5. **Cobrar Uni./Alta T./C.F./Otros** (Grey) - Payment collection by location
+6. **Abonos** (Light grey) - Payment history
+7. **Cuentas al día** (Dark grey) - Fully paid orders
+8. **Sin Usuario** (Red) - Orphaned orders
+9. **Productos** (Sky blue) - Product catalog
+10. **Clientes** (Sky blue) - Customer management
+11. **Salir** (Dark red) - Logout
+
+### Limited User Menu ("Black coffe Unilago")
+1. **Nueva Orden** (Green) - Create order
+2. **Recorrido** (Orange) - Delivery routes
+3. **Cobrar Uni.** (Grey) - Collect Unilago only
+4. **Salir** (Dark red) - Logout
+
+---
+
+## 🔄 Workflow Examples
+
+### Complete Order Lifecycle
+1. **Create** → `/nuevaOrden` (Order created, unpaid)
+2. **Dashboard** → `/` (View in accounts receivable)
+3. **Collect** → `/cobrarOrdenes/:mall` → `/cobrarOrden/:id` (Process payment)
+4. **Track** → `/abonos` & `/cobrosHoy` (Monitor payments)
+5. **Paid** → `/ordenesPagas` (Fully paid orders)
+6. **Deliver** → `/recorrido` (Delivery management)
+7. **Complete** → `/entregados` (Delivery history)
+
+### Daily Financial Reconciliation
+1. View daily collections → `/cobrosHoy`
+2. Review payment audit → `/abonos`
+3. Check outstanding → `/`
+4. Verify fully paid → `/ordenesPagas`
 
 ## 📦 Key Components
 

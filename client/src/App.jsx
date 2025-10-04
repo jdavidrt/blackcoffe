@@ -1,4 +1,4 @@
-import { Route, Routes, useNavigate } from "react-router-dom";
+import { Route, Routes, useNavigate, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import Invoice from "./pages/Invoice";
 import PublicInvoice from "./pages/PublicInvoice";
@@ -10,7 +10,6 @@ import ClientsPage from "./pages/ClientsPage";
 import ProductsPage from "./pages/ProductsPage";
 import CollectOrdersPage from "./pages/CollectOrdersPage";
 import CollectOrderForm from "./pages/CollectOrderForm";
-import CollectedOrdersPage from "./pages/CollectedOrdersPage";
 import DepositsPage from "./pages/DepositsPage";
 import DeliveryOrdersPage from "./pages/DeliveryPage";
 import DeliveredOrdersPage from "./pages/DeliveredPage";
@@ -52,7 +51,8 @@ function App() {
                     <Route path="/iniciarSesion" element={<LoginForm />} />
                     <Route path="/productos" element={<ProductsPage />} />
                     <Route path="/cobrarOrdenes/:mall" element={<CollectOrdersPage />} />
-                    <Route path="/ordenesPagas" element={<CollectedOrdersPage />} />
+                    {/* Redirect old "Cuentas al día" route to new unified "Cobros del día" page */}
+                    <Route path="/ordenesPagas" element={<Navigate to="/cobrosHoy" replace />} />
                     <Route path="/clientes" element={<ClientsPage />} />
                     <Route path="/editarProducto/:id" element={<ProductForm />} />
                     <Route path="/editarCliente/:id" element={<ClientForm />} />

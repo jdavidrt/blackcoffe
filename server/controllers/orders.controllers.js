@@ -81,6 +81,7 @@ export const getDepositedOrdersByDate = async (req, res) => {
             orders.paidAt,
             orders.items,
             orders.deposit,
+            orders.paid,
             clients.premises,
             clients.clientName,
             clients.mall
@@ -95,6 +96,10 @@ export const getDepositedOrdersByDate = async (req, res) => {
         ORDER BY
             orders.createdAt ASC
     `, [req.params.date]);
+    console.log(`[${new Date().toISOString()}] getDepositedOrdersByDate - Results: ${result.length}`);
+    if (result.length > 0) {
+        console.log('First result paid field:', result[0].paid);
+    }
     res.json(result);
 }
 
@@ -199,3 +204,4 @@ export const deleteOrder = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 };
+
