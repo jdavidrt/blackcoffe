@@ -11,7 +11,10 @@ import {
   getNotDeliveredOrdersRequest,
   getDeliveredOrdersRequest,
   getDepositedOrdersByDate,
-  getOrphanedOrdersRequest
+  getOrphanedOrdersRequest,
+  getAbandonedOrdersRequest,
+  markOrderAsAbandonedRequest,
+  unmarkOrderAsAbandonedRequest
 } from "../api/orders.api";
 import { OrderContext } from "./OrderContext";
 
@@ -27,6 +30,7 @@ export const useOrders = () => {
 export const OrderContextProvider = ({ children }) => {
   const [orders, setOrders] = useState([]);
   var [unPaidOrder, setUnPaidOrder] = useState([]);
+  const [abandonedOrders, setAbandonedOrders] = useState([]);
 
   async function loadOrders() {
     const response = await getOrdersRequest();
@@ -107,11 +111,43 @@ export const OrderContextProvider = ({ children }) => {
       console.error(error);
     }
   };
+
+  const getAbandonedOrders = async () => {
+    try {
+      const res = await getAbandonedOrdersRequest();
+      setAbandonedOrders(res.data);
+      return res.data;
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const markOrderAsAbandoned = async (id, abandonData) => {
+    try {
+      await markOrderAsAbandonedRequest(id, abandonData);
+      await loadOrders();
+      await getAbandonedOrders();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const unmarkOrderAsAbandoned = async (id) => {
+    try {
+      await unmarkOrderAsAbandonedRequest(id);
+      await loadOrders();
+      await getAbandonedOrders();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   return (
     <OrderContext.Provider
       value={{
         orders,
         unPaidOrder,
+        abandonedOrders,
         loadOrders,
         loadCollectedOrders,
         deleteOrder,
@@ -123,7 +159,10 @@ export const OrderContextProvider = ({ children }) => {
         loadUnDeliveredOrders,
         loadDeliveredOrders,
         loadDepositedOrderByDate,
-        loadOrphanedOrders
+        loadOrphanedOrders,
+        getAbandonedOrders,
+        markOrderAsAbandoned,
+        unmarkOrderAsAbandoned
       }}
     >
       {children}

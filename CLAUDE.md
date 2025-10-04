@@ -48,11 +48,12 @@ Each major entity uses React Context for state management:
 
 ### Order Management System
 Orders are the central entity with complex state tracking:
-- **Order States**: unpaid/paid, delivered/not delivered, collected/not collected
+- **Order States**: unpaid/paid, delivered/not delivered, collected/not collected, abandoned/active
 - **Items Structure**: Orders contain JSON items with product details and delivery status
 - **Location-Based**: Orders are filtered by mall and premises (numbered locations)
 - **Date-Based Queries**: Many operations filter by date with timezone conversion
 - **Payment Tracking**: Supports partial payments through deposits system
+- **Abandoned Orders** 🆕: Orders can be marked as abandoned with reason tracking, excluded from active lists, and reactivated if needed
 
 ### Deposits and Payment System
 The BlackCoffe system implements a comprehensive payment tracking system that supports both partial payments (deposits) and full order payments. This system allows café managers to handle complex payment scenarios where customers may pay in installments or make partial payments over time.
@@ -66,6 +67,10 @@ The payment system is built around two main tables:
 - `paid`: Boolean flag (0=unpaid, 1=fully paid)
 - `paidAt`: Timestamp when order was fully paid
 - `paymentMethod`: Payment method ("Efectivo", "Plataforma", etc.)
+- `isAbandoned`: Boolean flag (0=active, 1=abandoned) 🆕
+- `abandonedAt`: Timestamp when order was abandoned 🆕
+- `abandonedBy`: User who marked order as abandoned 🆕
+- `abandonReason`: Reason for abandonment (optional text) 🆕
 
 **Deposits Table** (`deposits`):
 - `depositId`: Unique deposit record identifier
@@ -1275,11 +1280,14 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 8. **Cobrar Otros** (Grey) - Collect Others `/cobrarOrdenes/Otros`
 9. **Abonos** (Light grey) - Payment history `/abonos`
 10. **Sin Usuario** (Red) - Orphaned orders `/ordenesSinCliente`
-11. **Productos** (Sky blue) - Product catalog `/productos`
-12. **Clientes** (Sky blue) - Customer management `/clientes`
-13. **Salir** (Dark red) - Logout
+11. **Abandonadas** (Orange) - Abandoned orders `/ordenesAbandonadas` 🆕
+12. **Productos** (Sky blue) - Product catalog `/productos`
+13. **Clientes** (Sky blue) - Customer management `/clientes`
+14. **Salir** (Dark red) - Logout
 
-**Note**: "Cuentas al día" removed - functionality merged into "Cobros del día" (item #2)
+**Notes**:
+- "Cuentas al día" removed - functionality merged into "Cobros del día" (item #2)
+- "Abandonadas" added (2025-10-04) - Track and manage abandoned orders
 
 **Limited User Menu** ("Black coffe Unilago" - Lines 54-68 in Navbar.jsx):
 1. **Nueva Orden** (Green) - Create order `/nuevaOrden`

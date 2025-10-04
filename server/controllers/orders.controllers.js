@@ -1,7 +1,7 @@
 import pool from '../db.js'
 
 export const getOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
+    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 AND orders.isAbandoned = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
     res.json(result)
 }
 
@@ -93,9 +93,10 @@ export const getDepositedOrdersByDate = async (req, res) => {
             clients ON orders.clientId = clients.id
         WHERE
             DATE(deposits.depositCreatedAt) = ?
+            OR DATE(orders.paidAt) = ?
         ORDER BY
             orders.createdAt ASC
-    `, [req.params.date]);
+    `, [req.params.date, req.params.date]);
     console.log(`[${new Date().toISOString()}] getDepositedOrdersByDate - Results: ${result.length}`);
     if (result.length > 0) {
         console.log('First result paid field:', result[0].paid);
@@ -106,7 +107,7 @@ export const getDepositedOrdersByDate = async (req, res) => {
 
 
 export const getUnPaidOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? and orders.paid = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? and orders.paid = 0 AND orders.isAbandoned = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
         req.params.mall,
     ]);
     res.json(result)
@@ -129,7 +130,7 @@ export const getCollectedOrders = async (req, res) => {
 
 export const getOrder = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT orders.id, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod, orders.paidAt, orders.items, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
+        const [result] = await pool.query("SELECT orders.id, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod, orders.paidAt, orders.items, orders.isAbandoned, orders.abandonedAt, orders.abandonedBy, orders.abandonReason, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
             req.params.id,
         ]);
 
@@ -201,6 +202,96 @@ export const deleteOrder = async (req, res) => {
             return res.status(404).json({ message: "Order not found" });
         return res.sendStatus(204);
     } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+// Mark order as abandoned
+export const markOrderAsAbandoned = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { abandonReason, abandonedBy } = req.body;
+
+        // Validate order exists and is not already paid
+        const [order] = await pool.query('SELECT * FROM orders WHERE id = ?', [id]);
+
+        if (!order || order.length === 0) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        if (order[0].paid === 1) {
+            return res.status(400).json({
+                message: 'Cannot abandon a paid order'
+            });
+        }
+
+        // Update order as abandoned
+        const result = await pool.query(
+            `UPDATE orders
+             SET isAbandoned = 1,
+                 abandonedAt = NOW(),
+                 abandonedBy = ?,
+                 abandonReason = ?
+             WHERE id = ?`,
+            [abandonedBy, abandonReason, id]
+        );
+
+        res.json({
+            message: 'Order marked as abandoned',
+            orderId: id
+        });
+    } catch (error) {
+        console.error('Error marking order as abandoned:', error);
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+// Unmark order as abandoned (reactivate)
+export const unmarkOrderAsAbandoned = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Reset abandoned fields
+        const result = await pool.query(
+            `UPDATE orders
+             SET isAbandoned = 0,
+                 abandonedAt = NULL,
+                 abandonedBy = NULL,
+                 abandonReason = NULL
+             WHERE id = ?`,
+            [id]
+        );
+
+        res.json({
+            message: 'Order reactivated',
+            orderId: id
+        });
+    } catch (error) {
+        console.error('Error reactivating order:', error);
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+// Get all abandoned orders
+export const getAbandonedOrders = async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT
+                orders.*,
+                clients.clientName AS clientName,
+                clients.premises AS premises,
+                clients.mall AS mall,
+                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') AS createdAt,
+                CONVERT_TZ(orders.abandonedAt, '+00:00', '-05:00') AS abandonedAt
+            FROM orders
+            LEFT JOIN clients ON orders.clientId = clients.id
+            WHERE orders.isAbandoned = 1
+            ORDER BY orders.abandonedAt DESC`
+        );
+
+        res.json(rows);
+    } catch (error) {
+        console.error('Error getting abandoned orders:', error);
         return res.status(500).json({ message: error.message });
     }
 };

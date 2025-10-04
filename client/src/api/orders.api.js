@@ -41,3 +41,12 @@ export const toggleOrderDoneRequest = async (id, done) =>
   await axios.put(`${API_CONFIG.RENDER_SERVER}/order/${id}`, {
     done,
   });
+
+export const getAbandonedOrdersRequest = async () =>
+  await axios.get(`${API_CONFIG.RENDER_SERVER}/abandonedOrders`);
+
+export const markOrderAsAbandonedRequest = async (id, data) =>
+  await axios.put(`${API_CONFIG.RENDER_SERVER}/order/${id}/abandon`, data);
+
+export const unmarkOrderAsAbandonedRequest = async (id) =>
+  await axios.put(`${API_CONFIG.RENDER_SERVER}/order/${id}/reactivate`);

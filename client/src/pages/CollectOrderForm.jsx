@@ -12,7 +12,7 @@ import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function CollectOrderForm() {
 
-  const { getOrder, updateOrder } = useOrders();
+  const { getOrder, updateOrder, markOrderAsAbandoned } = useOrders();
   const { getDepositsByOrderId, createDeposit, deleteDepositById } = useDeposits();
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
@@ -70,7 +70,7 @@ function CollectOrderForm() {
   function togglePlatform() {
     setPlatformPayment(!platformPayment); // Change value from true to false and vice versa
   }
-
+  console.log(order)
 
   function depositTotal() {
     setDepositedTotal(true);
@@ -311,6 +311,28 @@ function CollectOrderForm() {
       </h1>
 
       {order.paid ? <h1 className="text-xl font-bold uppercase text-center">Dia de pago: {order.paidAt}  </h1> : ''}
+
+      {/* Abandoned Order Warning Banner */}
+      {order.isAbandoned === 1 && (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 mt-4" role="alert">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-bold">⚠️ ORDEN ABANDONADA</p>
+              {order.abandonReason && (
+                <p className="text-xs mt-1">Razón: {order.abandonReason}</p>
+              )}
+              {order.abandonedAt && (
+                <p className="text-xs">Abandonada: {dayjs(order.abandonedAt).format('DD/MM/YYYY HH:mm')}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Enhanced Confirmation Modal with Payment Details */}
       {showConfirmModal && (
@@ -582,6 +604,56 @@ function CollectOrderForm() {
               )}
             </>
               : ''}
+
+            {/* Mark as Abandoned Section */}
+            {!order.paid && !order.isAbandoned && (
+              <div className="mt-4 pt-4 border-t-2 border-gray-300">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const abandonReason = prompt(
+                      "¿Por qué se abandona esta orden? (Opcional)\n\nEjemplos: Cliente canceló, No respondió llamadas, etc."
+                    );
+
+                    Modal.confirm({
+                      title: '¿Marcar esta orden como abandonada?',
+                      content: (
+                        <div>
+                          <p>La orden dejará de aparecer en "Cuentas por cobrar"</p>
+                          {abandonReason && (
+                            <p className="mt-2">
+                              <strong>Razón:</strong> {abandonReason}
+                            </p>
+                          )}
+                        </div>
+                      ),
+                      okText: 'Marcar como abandonada',
+                      okType: 'danger',
+                      cancelText: 'Cancelar',
+                      onOk: async () => {
+                        try {
+                          const userData = JSON.parse(localStorage.getItem('user'));
+                          await markOrderAsAbandoned(params.id, {
+                            abandonReason: abandonReason || 'Sin razón especificada',
+                            abandonedBy: userData?.name || 'Unknown'
+                          });
+                          message.success('Orden marcada como abandonada');
+                          setTimeout(() => {
+                            navigate('/');
+                          }, 1500);
+                        } catch (error) {
+                          message.error('Error al marcar orden como abandonada');
+                          console.error(error);
+                        }
+                      },
+                    });
+                  }}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md font-medium transition-colors"
+                >
+                  Marcar como Abandonada
+                </button>
+              </div>
+            )}
           </Form>
         )
         }
