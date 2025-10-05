@@ -105,7 +105,7 @@ export const getDepositedOrdersByDate = async (req, res) => {
     `, [req.params.date, req.params.date]);
     console.log(`[${new Date().toISOString()}] getDepositedOrdersByDate - Date: ${req.params.date}, Results: ${result.length}`);
     if (result.length > 0) {
-        console.log('Sample: orderId=${result[0].id}, paid=${result[0].paid}, depositValue=${result[0].depositValue || 'NULL'}, paidAt=${result[0].paidAt}`);
+        console.log(`[${new Date().toISOString()}] Sample result - orderId: ${result[0].id}, paid: ${result[0].paid}, depositValue: ${result[0].depositValue || 'NULL'}, paidAt: ${result[0].paidAt}`);
     }
     res.json(result);
 }

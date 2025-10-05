@@ -20,6 +20,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. Start frontend: `cd client && npm run dev` (new terminal)
 3. Backend runs on port 25060, frontend typically on port 5173
 
+### ⚠️ CRITICAL: Build Testing Requirement
+**ALWAYS test builds after making code changes to catch syntax errors before deployment:**
+
+**Backend Testing:**
+```bash
+# Test backend syntax (fast check)
+node --check server/index.js
+
+# Test full backend startup
+npm run dev
+```
+
+**Frontend Testing:**
+```bash
+# Test frontend build (required before deployment)
+cd client && npm run build
+
+# Expected output: Should complete with "✓ modules transformed" and output dist files
+# Warnings about 'use client' and chunk size are normal - only fail on actual errors
+```
+
+**When to Test:**
+- ✅ After modifying any `.js` or `.jsx` files
+- ✅ Before committing changes
+- ✅ Before deploying to production
+- ✅ After merging branches
+
+**Common Syntax Errors to Watch For:**
+- Mixed quote types in template literals (use backticks for template strings)
+- Missing closing parentheses or brackets
+- Incorrect arrow function syntax
+- Import/export statement errors
+
 ## Architecture Overview
 
 ### Full-Stack Structure

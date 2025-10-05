@@ -7,14 +7,18 @@ function orderCard({ order }) {
   const navigate = useNavigate();
   const isCobrosHoy = window.location.pathname.includes("/cobrosHoy");
 
+  // Calculate if order is truly fully paid based on deposit amount (NOT paid flag)
+  const orderTotal = calculateOrderTotal(order);
+  const isFullyPaid = order.deposit >= orderTotal;
+
   return (
     <div className="flex bg-stone-100 text-black rounded-md m-2">
       <span>{order.createAt}</span>
       <b>
         <p className="p-2 flex items-center h-content">
           {order.premises} {order.clientName} - {order.mall}
-          {/* Add PAGADO badge for fully paid orders */}
-          {order.paid === 1 && (
+          {/* Add PAGADO badge only for truly fully paid orders */}
+          {isFullyPaid && (
             <span className="ml-2 bg-green-500 text-white text-xs px-2 py-1 rounded font-bold">PAGADO</span>
           )}
         </p>
@@ -24,18 +28,42 @@ function orderCard({ order }) {
           {/* Show deposit info for orders with deposits */}
           {order.deposit > 0 ? (
             <>
-              {/* If viewing cobros hoy page and depositValue exists, show it */}
+              {/* If viewing cobros hoy page and depositValue exists, show deposits from that day */}
               {isCobrosHoy && order.depositValue !== undefined && order.depositValue !== null ? (
-                <p>Abonado este día: ${order.depositValue.toLocaleString()} <p className="text-red-500">Debe: ${(calculateOrderTotal(order) - order.deposit).toLocaleString()}</p></p>
+                /* Case 1: Has actual deposit records from selected date */
+                /* depositValue already contains sum of deposits from that specific day (aggregated by sumarDepositos) */
+                <p>Abonado este día: ${order.depositValue.toLocaleString()}
+                  {/* Show remaining debt based on cumulative deposits */}
+                  {order.deposit < orderTotal && (
+                    <p className="text-red-500">Debe: ${(orderTotal - order.deposit).toLocaleString()}</p>
+                  )}
+                </p>
               ) : (
-                /* Otherwise show total deposit amount */
-                <p>Abono total: ${order.deposit.toLocaleString()} <p className="text-red-500">Debe: ${(calculateOrderTotal(order) - order.deposit).toLocaleString()}</p></p>
+                /* Otherwise show total deposit amount from order.deposit field */
+                <>
+                  {isCobrosHoy ? (
+                    /* Case 2: On cobrosHoy but no depositValue - order shown due to paidAt, not actual deposits that day */
+                    /* Show order.deposit as "Abonado este día" since we have no way to figure out previous deposit value */
+                    <p>Abonado este día: ${order.deposit.toLocaleString()}
+                      {order.deposit < orderTotal && (
+                        <p className="text-red-500">Debe: ${(orderTotal - order.deposit).toLocaleString()}</p>
+                      )}
+                    </p>
+                  ) : (
+                    /* Regular view - show total accumulated deposit */
+                    <p>Abono total: ${order.deposit.toLocaleString()}
+                      {order.deposit < orderTotal && (
+                        <p className="text-red-500">Debe: ${(orderTotal - order.deposit).toLocaleString()}</p>
+                      )}
+                    </p>
+                  )}
+                </>
               )}
             </>
           ) : (
-            /* No deposits, show total - if on cobrosHoy and order is paid, show full order total */
+            /* No deposits at all, show total */
             <p className="text-green-500 px-2">
-              {isCobrosHoy && order.paid === 1 ? `Abonado este día: $${calculateOrderTotal(order).toLocaleString()}` : `Total: $${calculateOrderTotal(order).toLocaleString()}`}
+              Total: ${orderTotal.toLocaleString()}
             </p>
           )}
         </b>
