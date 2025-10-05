@@ -1,7 +1,7 @@
 import pool from '../db.js'
 
 export const getOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 AND orders.isAbandoned = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
+    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
     res.json(result)
 }
 
@@ -107,7 +107,7 @@ export const getDepositedOrdersByDate = async (req, res) => {
 
 
 export const getUnPaidOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? and orders.paid = 0 AND orders.isAbandoned = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? and orders.paid = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
         req.params.mall,
     ]);
     res.json(result)
@@ -130,7 +130,7 @@ export const getCollectedOrders = async (req, res) => {
 
 export const getOrder = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT orders.id, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod, orders.paidAt, orders.items, orders.isAbandoned, orders.abandonedAt, orders.abandonedBy, orders.abandonReason, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
+        const [result] = await pool.query("SELECT orders.id, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod, orders.paidAt, orders.items, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
             req.params.id,
         ]);
 
@@ -161,13 +161,32 @@ export const createOrder = async (req, res) => {
 }
 export const updateOrder = async (req, res) => {
     try {
+        console.log(`[${new Date().toISOString()}] updateOrder - Order ID: ${req.params.id}`);
+        console.log(`[${new Date().toISOString()}] updateOrder - Update data:`, req.body);
+
         const result = await pool.query("UPDATE orders SET ? WHERE id = ?", [
             req.body,
             req.params.id,
         ]);
+
+        console.log(`[${new Date().toISOString()}] updateOrder - Update result:`, {
+            affectedRows: result[0].affectedRows,
+            changedRows: result[0].changedRows
+        });
+
         res.json(result);
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        console.error(`[${new Date().toISOString()}] updateOrder - ERROR:`, error);
+        console.error(`[${new Date().toISOString()}] updateOrder - Error details:`, {
+            message: error.message,
+            code: error.code,
+            errno: error.errno,
+            sqlMessage: error.sqlMessage
+        });
+        return res.status(500).json({
+            message: error.message,
+            sqlMessage: error.sqlMessage
+        });
     }
 }
 export const getOrphanedOrders = async (req, res) => {
@@ -206,7 +225,8 @@ export const deleteOrder = async (req, res) => {
     }
 };
 
-// Mark order as abandoned
+// Mark order as abandoned - DISABLED (database missing isAbandoned columns)
+/*
 export const markOrderAsAbandoned = async (req, res) => {
     try {
         const { id } = req.params;
@@ -245,8 +265,10 @@ export const markOrderAsAbandoned = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 };
+*/
 
-// Unmark order as abandoned (reactivate)
+// Unmark order as abandoned (reactivate) - DISABLED (database missing isAbandoned columns)
+/*
 export const unmarkOrderAsAbandoned = async (req, res) => {
     try {
         const { id } = req.params;
@@ -271,8 +293,10 @@ export const unmarkOrderAsAbandoned = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 };
+*/
 
-// Get all abandoned orders
+// Get all abandoned orders - DISABLED (database missing isAbandoned columns)
+/*
 export const getAbandonedOrders = async (req, res) => {
     try {
         const [rows] = await pool.query(
@@ -295,4 +319,5 @@ export const getAbandonedOrders = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 };
+*/
 

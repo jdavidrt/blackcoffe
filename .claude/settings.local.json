@@ -11,7 +11,12 @@
       "Bash(netstat:*)",
       "Bash(findstr:*)",
       "Bash(cat:*)",
-      "Read(//c/Users/jdk_l/OneDrive/Escritorio/BlackCoffe/**)"
+      "Read(//c/Users/jdk_l/OneDrive/Escritorio/BlackCoffe/**)",
+      "Bash(netcat:*)",
+      "Bash(if [ -f \"CollectedOrdersPage.jsx\" ])",
+      "Bash(then mkdir -p _archived)",
+      "Bash(else echo \"File not found, may already be archived\")",
+      "Bash(fi)"
     ],
     "deny": [],
     "ask": []

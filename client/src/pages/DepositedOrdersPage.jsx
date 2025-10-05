@@ -126,11 +126,8 @@ function DepositedOrdersPage() {
   }
   //console.log(aggregatedFilteredOrders)
 
-  // Calculate statistics from aggregated filtered orders
-  const fullyPaidToday = aggregatedFilteredOrders.filter(order => order.paid === 1).length;
-  const partialPayments = aggregatedFilteredOrders.filter(order => order.paid === 0).length;
+  // Calculate totals from deposit values
   const depositTotals = sumarDepositosPorMall(orders);
-
   const totalGeneral = Object.values(depositTotals).reduce((sum, val) => sum + val, 0);
 
   return (
@@ -190,14 +187,6 @@ function DepositedOrdersPage() {
 
       {orders.length !== 0 ? (
         <div className="mx-2">
-          {/* Order Statistics */}
-          <div className="bg-blue-100 p-3 rounded-md mb-2 shadow-sm">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div><span className="font-semibold">Órdenes pagadas completamente:</span> {fullyPaidToday}</div>
-              <div><span className="font-semibold">Órdenes con abonos parciales:</span> {partialPayments}</div>
-            </div>
-          </div>
-
           {/* Total Cobrado Section */}
           <div className="bg-white p-4 rounded-md shadow-md mb-3">
             <h3 className="text-lg font-bold mb-3 text-gray-700 border-b pb-2">💰 Total Cobrado</h3>

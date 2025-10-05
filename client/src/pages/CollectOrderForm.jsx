@@ -258,10 +258,19 @@ function CollectOrderForm() {
   useEffect(() => {
     const loadOrder = async () => {
       if (params.id) {
-        const order = await getOrder(params.id);
-        const depositsRequest = await getDepositsByOrderId(params.id);
-        setDeposits(depositsRequest);
-        setCart(safeJSONParse(order.items, []))
+        try {
+          const order = await getOrder(params.id);
+          const depositsRequest = await getDepositsByOrderId(params.id);
+
+          // Check if order exists
+          if (!order) {
+            console.error('[CollectOrderForm] Order not found:', params.id);
+            alert('No se pudo cargar la orden. Por favor, verifique la conexión al servidor.');
+            return;
+          }
+
+          setDeposits(depositsRequest || []);
+          setCart(safeJSONParse(order.items, []))
         if (order.paymentMethod == "Plataforma") {
           togglePlatform(true)
         }
@@ -291,7 +300,10 @@ function CollectOrderForm() {
             collectedBy: order.mall
           });
         }
-
+        } catch (error) {
+          console.error('[CollectOrderForm] Error loading order:', error);
+          alert('Error al cargar la orden. Por favor, verifique la conexión al servidor e intente nuevamente.');
+        }
       }
     };
     loadOrder();

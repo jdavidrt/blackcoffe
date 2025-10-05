@@ -26,10 +26,35 @@ export const getDepositsByDate = async (req, res) => {
 
 export const createDeposit = async (req, res) => {
     try {
+        console.log(`[${new Date().toISOString()}] createDeposit - Received data:`, req.body);
+
+        // Validate required fields
+        const requiredFields = ['orderId', 'clientId', 'depositValue', 'lastDeposit', 'newDeposit'];
+        for (const field of requiredFields) {
+            if (req.body[field] === undefined || req.body[field] === null) {
+                console.error(`[${new Date().toISOString()}] createDeposit - Missing required field: ${field}`);
+                return res.status(400).json({
+                    message: `Missing required field: ${field}`,
+                    receivedData: req.body
+                });
+            }
+        }
+
         const result = await pool.query("INSERT INTO deposits SET ?", req.body);
+        console.log(`[${new Date().toISOString()}] createDeposit - Deposit created successfully:`, result[0].insertId);
         res.json(result);
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        console.error(`[${new Date().toISOString()}] createDeposit - ERROR:`, error);
+        console.error(`[${new Date().toISOString()}] createDeposit - Error details:`, {
+            message: error.message,
+            code: error.code,
+            errno: error.errno,
+            sqlMessage: error.sqlMessage
+        });
+        return res.status(500).json({
+            message: error.message,
+            sqlMessage: error.sqlMessage
+        });
     }
 }
 

@@ -741,34 +741,43 @@ The BlackCoffe system provides a comprehensive navigation menu with role-based a
 **Navigation**: "Cobros del día" (Light grey button - slate-300)
 **Purpose**: Unified daily payment collections report and financial tracking
 
-**Features**:
+**Features** (Enhanced 2025-10-05):
 - **Date Selector**: View collections for any specific date
 - **Payment Summary**:
   - Total collections for selected date (sum of actual deposits received)
   - Collections by mall location with formatted totals
   - Grand total in large, prominent display
-  - Payment statistics (fully paid vs partial payments)
-- **Order Statistics Display**:
-  - Number of orders fully paid on selected date
-  - Number of orders with partial payments
 - **Detailed Payment List**:
-  - Client information
-  - Order details
+  - Client information with premises and mall
+  - Order details with PAGADO badge for fully paid orders ✅ NEW
   - Individual payment amounts for that day
-  - Payment status badges
-  - Remaining balance
+  - Remaining balance (if any)
 - **Filtering**: Filter by mall location (Unilago, Alta Tecnología, C.F., Otros)
 - **Visual Indicators**:
-  - Deleted deposits marked with grey styling and strikethrough
-  - Fully paid orders indicated with payment status
+  - Green PAGADO badge for fully paid orders ✅ NEW
+  - Deleted deposits excluded from all calculations
   - Color-coded mall filtering buttons
+  - "Abonado este día" shows money received that specific day
 
-**Calculations** (Enhanced 2025-10-04):
-- Correctly excludes deleted deposits from totals
-- Accurate "Abonado este día" values per order
-- Proper mall-based aggregation
-- Grand total calculation across all malls
-- Shows ONLY money received on selected date (not order totals)
+**Backend Query** (Enhanced 2025-10-05):
+- `getDepositedOrdersByDate()` includes `OR DATE(orders.paidAt) = ?` condition
+- Captures ALL payment activity: deposits + orders marked as paid that day
+- Filters by deposit creation date AND order paid date
+- Returns complete order and deposit information
+
+**Calculations** (Enhanced 2025-10-05):
+- ✅ Correctly excludes deleted deposits from totals (`isDeleted = 1`)
+- ✅ Accurate "Abonado este día" values per order (aggregates multiple deposits same day)
+- ✅ Proper mall-based aggregation with formatted currency
+- ✅ Grand total calculation across all malls
+- ✅ Shows ONLY money received on selected date (not order totals)
+- ✅ Handles edge case: orders paid without deposit records show full order total
+
+**Display Logic** (OrderCollectCard - Enhanced 2025-10-05):
+- **Orders with deposits**: Shows sum of `depositValue` for that day
+- **Orders paid without deposits**: Shows full order total as "Abonado este día"
+- **Partially paid orders**: Shows "Debe: $X" in red for remaining balance
+- **Fully paid orders**: Displays green PAGADO badge
 
 **Use Cases**:
 - Daily financial reconciliation
@@ -781,7 +790,8 @@ The BlackCoffe system provides a comprehensive navigation menu with role-based a
 - Displays ALL orders with payment activity on the selected date
 - Shows actual deposits received (not cumulative order totals)
 - Multiple deposits same day are aggregated per order
-- Replaces previous "Cuentas al día" functionality (merged 2025-10-04)
+- ✅ Replaces previous "Cuentas al día" functionality (merged 2025-10-05)
+- Route `/ordenesPagas` automatically redirects here
 
 ---
 
@@ -922,26 +932,36 @@ The BlackCoffe system provides a comprehensive navigation menu with role-based a
 ---
 
 #### `/ordenesPagas` - DEPRECATED - Redirects to `/cobrosHoy`
-**Status**: DEPRECATED (Merged 2025-10-04)
+**Status**: ✅ DEPRECATED (Merged 2025-10-05)
 **Previous Component**: `CollectedOrdersPage.jsx` (archived)
 **Current Behavior**: Automatically redirects to `/cobrosHoy`
 
 **Migration Note**:
 This route previously showed "Cuentas al día" (fully paid orders). The functionality has been merged into the unified "Cobros del día" page (`/cobrosHoy`) which now displays:
 - All orders with payment activity on selected date (partial + full payments)
-- Accurate daily collection totals
-- Payment statistics and status indicators
-- Better UI with formatted totals by mall
+- Orders that were fully paid on selected date (even without deposit records)
+- Accurate daily collection totals excluding deleted deposits
+- PAGADO badge for fully paid orders
+- Better UI with formatted totals by mall and grand total
+
+**Implementation Details** (Completed 2025-10-05):
+- Backend query modified to include `OR DATE(orders.paidAt) = ?` condition
+- Frontend enhanced with PAGADO badge and improved totals display
+- OrderCollectCard updated to show full order total for orders paid without deposits
+- Statistics section removed per user request (only daily sum of payments shown)
+- All edge cases handled correctly
 
 **For Users**:
 - Bookmarks to `/ordenesPagas` will automatically redirect to `/cobrosHoy`
-- No action required - navigation menu updated to remove old link
+- No action required - navigation menu already updated
 - All functionality preserved and enhanced in new unified page
 
 **For Developers**:
 - Original component archived at `client/src/pages/_archived/CollectedOrdersPage.jsx`
-- Route configured with `<Navigate>` redirect in `App.jsx`
-- See `MERGE.md` for complete implementation details
+- Route configured with `<Navigate>` redirect in `App.jsx` (line 56)
+- Backend: `getDepositedOrdersByDate()` in `orders.controllers.js` (lines 65-105)
+- Frontend: Enhanced `DepositedOrdersPage.jsx` and `OrderCollectCard.jsx`
+- See `MERGE.md` for complete planning and implementation details
 
 ---
 
@@ -1269,9 +1289,9 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 
 ### Navigation Menu Summary
 
-**Standard User Full Menu** (Updated 2025-10-04):
+**Standard User Full Menu** (Updated 2025-10-05):
 1. **Cuentas por cobrar** (Yellow) - Main dashboard `/`
-2. **Cobros del día** (Light grey) - Daily collections `/cobrosHoy` ⭐ ENHANCED
+2. **Cobros del día** (Light grey) - Daily collections `/cobrosHoy` ⭐ ENHANCED (2025-10-05)
 3. **Nueva Orden** (Green) - Create order `/nuevaOrden`
 4. **Recorrido** (Orange) - Delivery routes `/recorrido`
 5. **Cobrar Uni.** (Grey) - Collect Unilago `/cobrarOrdenes/Unilago`
@@ -1280,13 +1300,14 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 8. **Cobrar Otros** (Grey) - Collect Others `/cobrarOrdenes/Otros`
 9. **Abonos** (Light grey) - Payment history `/abonos`
 10. **Sin Usuario** (Red) - Orphaned orders `/ordenesSinCliente`
-11. **Abandonadas** (Orange) - Abandoned orders `/ordenesAbandonadas` 🆕
+11. **Abandonadas** (Orange) - Abandoned orders `/ordenesAbandonadas`
 12. **Productos** (Sky blue) - Product catalog `/productos`
 13. **Clientes** (Sky blue) - Customer management `/clientes`
 14. **Salir** (Dark red) - Logout
 
 **Notes**:
-- "Cuentas al día" removed - functionality merged into "Cobros del día" (item #2)
+- ✅ "Cuentas al día" removed - functionality merged into "Cobros del día" (item #2) on 2025-10-05
+- "Cobros del día" now shows ALL payment activity for selected date (deposits + full payments)
 - "Abandonadas" added (2025-10-04) - Track and manage abandoned orders
 
 **Limited User Menu** ("Black coffe Unilago" - Lines 54-68 in Navbar.jsx):
@@ -1360,7 +1381,15 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 
 3. **Comprehensive Utility Functions** ✅ **COMPLETED**: Created 8 comprehensive utility files with 25+ functions. Updated 15+ high and medium impact components. Eliminated 50+ lines of duplicate code across order calculations, date formatting, mall styling, cart management, and API configuration.
 
-4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-04 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with payment statistics, formatted totals by mall, grand total display, and payment status indicators. Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 4 (DepositedOrdersPage.jsx, Navbar.jsx, App.jsx, CLAUDE.md). See `MERGE.md` for complete implementation details.
+4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic. See `MERGE.md` for complete planning details.
+
+**Implementation Summary**:
+- ✅ Backend: Query already included `OR DATE(orders.paidAt) = ?` condition (no changes needed)
+- ✅ Frontend: Enhanced DepositedOrdersPage.jsx with better totals display (removed statistics per user request)
+- ✅ OrderCollectCard: Added PAGADO badge and logic to show full order total for orders paid without deposits
+- ✅ Navigation: Redirect already configured in App.jsx line 56
+- ✅ Archive: CollectedOrdersPage.jsx already in `_archived` folder
+- ✅ Documentation: Updated CLAUDE.md with implementation details
 
 ### Priority Improvements Available for Implementation
 

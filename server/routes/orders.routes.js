@@ -11,10 +11,10 @@ import {
     getNotDeliveredOrders,
     getDeliveredOrders,
     getDepositedOrdersByDate,
-    getOrphanedOrders,
-    getAbandonedOrders,
-    markOrderAsAbandoned,
-    unmarkOrderAsAbandoned
+    getOrphanedOrders
+    // getAbandonedOrders,  // DISABLED - database missing isAbandoned columns
+    // markOrderAsAbandoned,
+    // unmarkOrderAsAbandoned
 } from "../controllers/orders.controllers.js"
 const router = Router();
 
@@ -42,10 +42,9 @@ router.put('/order/:id', updateOrder);
 
 router.delete('/order/:id', deleteOrder);
 
-router.get('/abandonedOrders', getAbandonedOrders);
-
-router.put('/order/:id/abandon', markOrderAsAbandoned);
-
-router.put('/order/:id/reactivate', unmarkOrderAsAbandoned);
+// DISABLED - database missing isAbandoned columns
+// router.get('/abandonedOrders', getAbandonedOrders);
+// router.put('/order/:id/abandon', markOrderAsAbandoned);
+// router.put('/order/:id/reactivate', unmarkOrderAsAbandoned);
 
 export default router

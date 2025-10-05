@@ -106,9 +106,14 @@ export const OrderContextProvider = ({ children }) => {
 
   const updateOrder = async (id, newFields) => {
     try {
+      console.log('[OrderProvider] Updating order:', id, newFields);
       const response = await updateOrderRequest(id, newFields);
+      console.log('[OrderProvider] Order updated successfully:', response.data);
+      return response.data;
     } catch (error) {
-      console.error(error);
+      console.error('[OrderProvider] ERROR updating order:', error);
+      console.error('[OrderProvider] Error details:', error.response?.data);
+      throw error; // Re-throw to allow caller to handle
     }
   };
 
