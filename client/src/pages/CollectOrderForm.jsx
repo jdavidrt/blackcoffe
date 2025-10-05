@@ -70,7 +70,7 @@ function CollectOrderForm() {
   function togglePlatform() {
     setPlatformPayment(!platformPayment); // Change value from true to false and vice versa
   }
-  console.log(order)
+
 
   function depositTotal() {
     setDepositedTotal(true);
@@ -260,6 +260,7 @@ function CollectOrderForm() {
       if (params.id) {
         try {
           const order = await getOrder(params.id);
+          console.log(order)
           const depositsRequest = await getDepositsByOrderId(params.id);
 
           // Check if order exists
@@ -271,35 +272,35 @@ function CollectOrderForm() {
 
           setDeposits(depositsRequest || []);
           setCart(safeJSONParse(order.items, []))
-        if (order.paymentMethod == "Plataforma") {
-          togglePlatform(true)
-        }
-        if (order.paid) {
-          setOrder({
-            clientId: order.clientId,
-            shopId: 1,
-            items: cart,
-            clientName: order.clientName,
-            premises: order.premises,
-            createdAt: order.createdAt.slice(0, 10),
-            paid: order.paid,
-            paidAt: order.paidAt.slice(0, 10),
-            deposit: order.deposit,
-            collectedBy: order.mall
-          });
-        } else {
-          setOrder({
-            clientId: order.clientId,
-            shopId: 1,
-            items: cart,
-            clientName: order.clientName,
-            premises: order.premises,
-            createdAt: order.createdAt.slice(0, 10),
-            paid: order.paid,
-            deposit: order.deposit,
-            collectedBy: order.mall
-          });
-        }
+          if (order.paymentMethod == "Plataforma") {
+            togglePlatform(true)
+          }
+          if (order.paid) {
+            setOrder({
+              clientId: order.clientId,
+              shopId: 1,
+              items: cart,
+              clientName: order.clientName,
+              premises: order.premises,
+              createdAt: order.createdAt.slice(0, 10),
+              paid: order.paid,
+              paidAt: order.paidAt.slice(0, 10),
+              deposit: order.deposit,
+              collectedBy: order.mall
+            });
+          } else {
+            setOrder({
+              clientId: order.clientId,
+              shopId: 1,
+              items: cart,
+              clientName: order.clientName,
+              premises: order.premises,
+              createdAt: order.createdAt.slice(0, 10),
+              paid: order.paid,
+              deposit: order.deposit,
+              collectedBy: order.mall
+            });
+          }
         } catch (error) {
           console.error('[CollectOrderForm] Error loading order:', error);
           alert('Error al cargar la orden. Por favor, verifique la conexión al servidor e intente nuevamente.');

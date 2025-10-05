@@ -63,12 +63,17 @@ export const getDeliveredOrders = async (req, res) => {
 }
 
 export const getDepositedOrdersByDate = async (req, res) => {
+    // This query returns orders with payment activity on a specific date
+    // CRITICAL: Only includes deposits from the selected date (not all deposits for the order)
+    // Two scenarios:
+    // 1) Orders with deposits made on selected date (multiple rows if multiple deposits same day)
+    // 2) Orders marked as paid on selected date without any deposits on that date (single row with NULL deposit fields)
     const [result] = await pool.query(`
-            SELECT DISTINCT
+            SELECT
             deposits.orderId,
             deposits.depositId,
             deposits.depositCreatedAt,
-            deposits.clientId,
+            deposits.clientId as depositClientId,
             deposits.paymentMethod,
             deposits.depositValue,
             deposits.lastDeposit,
@@ -86,20 +91,21 @@ export const getDepositedOrdersByDate = async (req, res) => {
             clients.clientName,
             clients.mall
         FROM
-            deposits
-        JOIN
-            orders ON deposits.orderId = orders.id
+            orders
         JOIN
             clients ON orders.clientId = clients.id
+        LEFT JOIN
+            deposits ON deposits.orderId = orders.id
+                AND DATE(deposits.depositCreatedAt) = ?
         WHERE
-            DATE(deposits.depositCreatedAt) = ?
-            OR DATE(orders.paidAt) = ?
+            (deposits.depositId IS NOT NULL AND deposits.isDeleted = 0)
+            OR (DATE(orders.paidAt) = ? AND deposits.depositId IS NULL)
         ORDER BY
             orders.createdAt ASC
     `, [req.params.date, req.params.date]);
-    console.log(`[${new Date().toISOString()}] getDepositedOrdersByDate - Results: ${result.length}`);
+    console.log(`[${new Date().toISOString()}] getDepositedOrdersByDate - Date: ${req.params.date}, Results: ${result.length}`);
     if (result.length > 0) {
-        console.log('First result paid field:', result[0].paid);
+        console.log('Sample: orderId=${result[0].id}, paid=${result[0].paid}, depositValue=${result[0].depositValue || 'NULL'}, paidAt=${result[0].paidAt}`);
     }
     res.json(result);
 }
