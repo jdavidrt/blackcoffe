@@ -9,6 +9,7 @@ import { sortProductsByDateDesc } from '../utils/orderUtils';
 import { DeleteOutlined } from "@ant-design/icons";
 import { Modal, message } from "antd";
 import ProgressiveProductList from '../components/ProgressiveProductList';
+import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 
 function CollectOrderForm() {
 
@@ -328,7 +329,7 @@ function CollectOrderForm() {
         <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center">
           <div className="bg-white rounded-lg shadow-2xl p-8 max-w-sm mx-4">
             <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-500 mb-4"></div>
+              <CoffeePouringAnimation />
               <h2 className="text-xl font-bold text-gray-800 text-center">
                 {loadingMessage}
               </h2>
