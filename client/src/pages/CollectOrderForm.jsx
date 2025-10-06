@@ -38,6 +38,8 @@ function CollectOrderForm() {
   const [depositedTotal, setDepositedTotal] = useState(false);
   const [isDeletingDeposit, setIsDeletingDeposit] = useState(false);
   const [showDeposits, setShowDeposits] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
 
 
   const handleCheckboxChange = async (itemId) => {
@@ -94,6 +96,7 @@ function CollectOrderForm() {
       cancelText: "Cancelar",
       onOk: async () => {
         setIsDeletingDeposit(true);
+        setLoadingMessage("Eliminando abono");
         try {
           await deleteDepositById(depositId);
           message.success("Depósito eliminado correctamente");
@@ -104,8 +107,8 @@ function CollectOrderForm() {
         } catch (error) {
           message.error("Error al eliminar el depósito");
           console.error(error);
-        } finally {
           setIsDeletingDeposit(false);
+          setLoadingMessage("");
         }
       },
     });
@@ -163,6 +166,8 @@ function CollectOrderForm() {
 
   const handleConfirmPayment = async () => {
     setShowConfirmModal(false);
+    setIsRegistering(true);
+    setLoadingMessage("Registrando abono");
 
     if (!pendingFormData || !pendingActions) return;
 
@@ -184,7 +189,7 @@ function CollectOrderForm() {
     neewDeposit.orderId = params.id;
     neewDeposit.clientId = order.clientId;
     neewDeposit.paymentMethod = platformPayment ? 'Plataforma' : 'Efectivo';
-    neewDeposit.lastDeposit = order.deposit; // Previous cumulative total
+    neewDeposit.lastDeposit = order.deposit > 0 ? order.deposit : 0; // Previous cumulative total
     neewDeposit.depositValue = individualDepositAmount; // Individual payment amount (what user entered)
     neewDeposit.newDeposit = newCumulativeTotal; // New cumulative total after this deposit
     neewDeposit.dueOnDeposit = calculateTotal() - newCumulativeTotal; // Remaining debt
@@ -218,6 +223,8 @@ function CollectOrderForm() {
       } catch (error) {
         console.error('[CollectOrderForm] ERROR during payment processing:', error);
         alert(`Error al procesar el pago: ${error.message || 'Error desconocido'}. Por favor, verifique si el pago fue registrado correctamente.`);
+        setIsRegistering(false);
+        setLoadingMessage("");
         return; // Don't reload if there was an error
       }
     }
@@ -316,6 +323,23 @@ function CollectOrderForm() {
 
   return (
     <div>
+      {/* Loading Overlay */}
+      {(isRegistering || isDeletingDeposit) && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-2xl p-8 max-w-sm mx-4">
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-500 mb-4"></div>
+              <h2 className="text-xl font-bold text-gray-800 text-center">
+                {loadingMessage}
+              </h2>
+              <p className="text-sm text-gray-600 mt-2 text-center">
+                Por favor espere...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-xl font-bold uppercase text-center">
         {order.paid ? 'ORDEN COBRADA' : 'COBRAR/ABONAR ORDEN'}
       </h1>
