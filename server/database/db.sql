@@ -2,7 +2,7 @@ CREATE TABLE `users` (`id` int NOT NULL AUTO_INCREMENT, `createdAt` timestamp NU
 
 CREATE TABLE `products` (`id` int NOT NULL AUTO_INCREMENT, `createdAt` timestamp NOT NULL DEFAULT current_timestamp(), `productName` varchar(40), `unitValue` int, PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `orders` (`id` int NOT NULL AUTO_INCREMENT, `createdAt` timestamp NOT NULL DEFAULT current_timestamp(), `shopId` int NOT NULL, `clientId` int NOT NULL, `paymentMethod` varchar(20), `paid` tinyint(1) DEFAULT '0', `paidAt` datetime, `items` text, `deposit` int, `collectedBy` varchar(20), PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+CREATE TABLE `orders` (`id` int NOT NULL AUTO_INCREMENT, `createdAt` timestamp NOT NULL DEFAULT current_timestamp(), `shopId` int NOT NULL, `clientId` int NOT NULL, `paymentMethod` varchar(20), `paid` tinyint(1) DEFAULT '0', `isAbandoned` tinyint(1) DEFAULT '0', `abandonedAt` datetime, `abandonedBy` varchar(255), `abandonReason` text, `paidAt` datetime, `items` text, `deposit` int, `collectedBy` varchar(20), PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `clients` (`id` int NOT NULL AUTO_INCREMENT, `createdAt` timestamp NOT NULL DEFAULT current_timestamp(), `premises` varchar(20) NOT NULL, `clientName` varchar(20) NOT NULL, `mall` varchar(20) NOT NULL, `phoneNumber` varchar(20), PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

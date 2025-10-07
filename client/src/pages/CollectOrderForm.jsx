@@ -672,16 +672,23 @@ function CollectOrderForm() {
                         try {
                           // Get user data from localStorage with fallback
                           let userName = 'Unknown';
-                          try {
-                            const userDataString = localStorage.getItem('user');
-                            if (userDataString) {
-                              // Try to parse as JSON first
-                              const userData = JSON.parse(userDataString);
-                              userName = userData?.name || userDataString;
+                          const userDataString = localStorage.getItem('user');
+
+                          if (userDataString) {
+                            // Check if it's already a plain string (no quotes or curly braces)
+                            if (!userDataString.startsWith('{') && !userDataString.startsWith('"')) {
+                              // It's a plain string, use it directly
+                              userName = userDataString;
+                            } else {
+                              try {
+                                // Try to parse as JSON
+                                const userData = JSON.parse(userDataString);
+                                userName = userData?.name || userData || userDataString;
+                              } catch (parseError) {
+                                // If it's a quoted string like "Unilago", remove quotes
+                                userName = userDataString.replace(/^"|"$/g, '');
+                              }
                             }
-                          } catch (parseError) {
-                            // If JSON parse fails, use the raw string as username
-                            userName = localStorage.getItem('user') || 'Unknown';
                           }
 
                           await markOrderAsAbandoned(params.id, {
