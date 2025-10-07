@@ -1,7 +1,7 @@
 import pool from '../db.js'
 
 export const getOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
+    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
     res.json(result)
 }
 
@@ -231,8 +231,7 @@ export const deleteOrder = async (req, res) => {
     }
 };
 
-// Mark order as abandoned - DISABLED (database missing isAbandoned columns)
-/*
+// Mark order as abandoned
 export const markOrderAsAbandoned = async (req, res) => {
     try {
         const { id } = req.params;
@@ -271,10 +270,8 @@ export const markOrderAsAbandoned = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 };
-*/
 
-// Unmark order as abandoned (reactivate) - DISABLED (database missing isAbandoned columns)
-/*
+// Unmark order as abandoned (reactivate)
 export const unmarkOrderAsAbandoned = async (req, res) => {
     try {
         const { id } = req.params;
@@ -299,10 +296,8 @@ export const unmarkOrderAsAbandoned = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 };
-*/
 
-// Get all abandoned orders - DISABLED (database missing isAbandoned columns)
-/*
+// Get all abandoned orders
 export const getAbandonedOrders = async (req, res) => {
     try {
         const [rows] = await pool.query(
@@ -325,5 +320,4 @@ export const getAbandonedOrders = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 };
-*/
 

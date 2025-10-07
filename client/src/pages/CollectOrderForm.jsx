@@ -670,10 +670,23 @@ function CollectOrderForm() {
                       cancelText: 'Cancelar',
                       onOk: async () => {
                         try {
-                          const userData = JSON.parse(localStorage.getItem('user'));
+                          // Get user data from localStorage with fallback
+                          let userName = 'Unknown';
+                          try {
+                            const userDataString = localStorage.getItem('user');
+                            if (userDataString) {
+                              // Try to parse as JSON first
+                              const userData = JSON.parse(userDataString);
+                              userName = userData?.name || userDataString;
+                            }
+                          } catch (parseError) {
+                            // If JSON parse fails, use the raw string as username
+                            userName = localStorage.getItem('user') || 'Unknown';
+                          }
+
                           await markOrderAsAbandoned(params.id, {
                             abandonReason: abandonReason || 'Sin razón especificada',
-                            abandonedBy: userData?.name || 'Unknown'
+                            abandonedBy: userName
                           });
                           message.success('Orden marcada como abandonada');
                           setTimeout(() => {
