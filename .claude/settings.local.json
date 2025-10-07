@@ -16,7 +16,8 @@
       "Bash(if [ -f \"CollectedOrdersPage.jsx\" ])",
       "Bash(then mkdir -p _archived)",
       "Bash(else echo \"File not found, may already be archived\")",
-      "Bash(fi)"
+      "Bash(fi)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

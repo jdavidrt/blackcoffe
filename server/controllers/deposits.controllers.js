@@ -1,12 +1,12 @@
 import pool from '../db.js'
 
 export const getDeposits = async (req, res) => {
-    const [result] = await pool.query("SELECT *, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt, deposits.isDeleted, deposits.deletedAt FROM deposits join orders on orders.id = deposits.orderId ORDER BY deposits.depositCreatedAt ASC")
+    const [result] = await pool.query("SELECT *, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt, deposits.isDeleted, CONVERT_TZ(deposits.deletedAt, '+00:00', '-05:00') as deletedAt FROM deposits join orders on orders.id = deposits.orderId ORDER BY deposits.depositCreatedAt ASC")
     res.json(result)
 }
 export const getDepositsByOrder = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT *, deposits.paymentMethod as paymentMeethd , CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt, deposits.isDeleted, deposits.deletedAt FROM deposits join orders on orders.id = deposits.orderId WHERE deposits.orderId = ?", [
+        const [result] = await pool.query("SELECT *, deposits.paymentMethod as paymentMeethd , CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt, deposits.isDeleted, CONVERT_TZ(deposits.deletedAt, '+00:00', '-05:00') as deletedAt FROM deposits join orders on orders.id = deposits.orderId WHERE deposits.orderId = ?", [
             req.params.id,
         ]);
         if (result.length === 0)
@@ -18,7 +18,7 @@ export const getDepositsByOrder = async (req, res) => {
 }
 
 export const getDepositsByDate = async (req, res) => {
-    const [result] = await pool.query("SELECT orders.id, orders.clientId, orders.items, orders.deposit, deposits.paymentMethod, deposits.depositValue, deposits.lastDeposit, deposits.newDeposit, deposits.isDeleted, deposits.deletedAt, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt , clients.clientName, clients.premises, clients.mall FROM deposits join orders on orders.id = deposits.orderId join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ? ORDER BY orders.clientId, deposits.depositCreatedAt, orders.createdAt ASC", [
+    const [result] = await pool.query("SELECT orders.id, orders.clientId, orders.items, orders.deposit, deposits.paymentMethod, deposits.depositValue, deposits.lastDeposit, deposits.newDeposit, deposits.isDeleted, CONVERT_TZ(deposits.deletedAt, '+00:00', '-05:00') as deletedAt, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt , clients.clientName, clients.premises, clients.mall FROM deposits join orders on orders.id = deposits.orderId join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ? ORDER BY orders.clientId, deposits.depositCreatedAt, orders.createdAt ASC", [
         req.params.date,
     ]);
     res.json(result)
@@ -91,8 +91,9 @@ export const deleteDeposit = async (req, res) => {
         const orderTotal = orderItems.reduce((total, item) => total + (item.unitValue * item.quantity), 0);
 
         // Step 4: Soft delete the deposit
+        // IMPORTANT: Store deletedAt in Colombia time (UTC - 5 hours)
         await pool.query(
-            "UPDATE deposits SET isDeleted = 1, deletedAt = CURRENT_TIMESTAMP WHERE depositId = ?",
+            "UPDATE deposits SET isDeleted = 1, deletedAt = DATE_SUB(NOW(), INTERVAL 5 HOUR) WHERE depositId = ?",
             [depositId]
         );
 

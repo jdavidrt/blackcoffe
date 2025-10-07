@@ -61,7 +61,12 @@ This is a monorepo with separate client (React) and server (Express) application
 ### Database Integration
 - **MySQL Database**: Hosted on DigitalOcean (credentials in `server/db.js`)
 - **Connection Pool**: Uses mysql2/promise with connection pooling
-- **Timezone Handling**: All queries convert from UTC to Colombia timezone (`CONVERT_TZ(field, '+00:00', '-05:00')`)
+- **Timezone Handling**: All timestamps use Colombia timezone (UTC-5)
+  - **AUTO Timestamps** (`createdAt`, `depositCreatedAt`): Stored in UTC, retrieved with `CONVERT_TZ(field, '+00:00', '-05:00')`
+  - **MANUAL Timestamps** (`paidAt`, `deliveredAt`): Sent by frontend in Colombia time
+  - **COLOMBIA Timestamps** (`abandonedAt`, `deletedAt`): Stored using `DATE_SUB(NOW(), INTERVAL 5 HOUR)`
+  - **Date Filtering**: Always use `DATE(CONVERT_TZ(field, '+00:00', '-05:00'))` for correct timezone
+  - See [TIMEZONE.md](TIMEZONE.md) for complete implementation guide
 - **Key Tables**: orders, clients, products, users, deposits
 - **Order States**: Orders track paid status, delivery status, and collection status
 

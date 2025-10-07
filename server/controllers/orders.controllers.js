@@ -72,18 +72,18 @@ export const getDepositedOrdersByDate = async (req, res) => {
             SELECT
             deposits.orderId,
             deposits.depositId,
-            deposits.depositCreatedAt,
+            CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt,
             deposits.clientId as depositClientId,
             deposits.paymentMethod,
             deposits.depositValue,
             deposits.lastDeposit,
             deposits.newDeposit,
             deposits.isDeleted,
-            deposits.deletedAt,
+            CONVERT_TZ(deposits.deletedAt, '+00:00', '-05:00') as deletedAt,
             orders.id,
-            orders.createdAt,
+            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
             orders.clientId,
-            orders.paidAt,
+            CONVERT_TZ(orders.paidAt, '+00:00', '-05:00') as paidAt,
             orders.items,
             orders.deposit,
             orders.paid,
@@ -96,10 +96,10 @@ export const getDepositedOrdersByDate = async (req, res) => {
             clients ON orders.clientId = clients.id
         LEFT JOIN
             deposits ON deposits.orderId = orders.id
-                AND DATE(deposits.depositCreatedAt) = ?
+                AND DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ?
         WHERE
             (deposits.depositId IS NOT NULL AND deposits.isDeleted = 0)
-            OR (DATE(orders.paidAt) = ? AND deposits.depositId IS NULL)
+            OR (DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) = ? AND deposits.depositId IS NULL)
         ORDER BY
             orders.createdAt ASC
     `, [req.params.date, req.params.date]);
@@ -128,7 +128,7 @@ export const getUnPaidOrdersbyClientId = async (req, res) => {
 
 
 export const getCollectedOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id , DATE(orders.paidAt), orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(orders.createdAt) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(orders.paidAt) = ? and orders.paid = 1  ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+    const [result] = await pool.query("select orders.id , DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) as paidAt, orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) = ? and orders.paid = 1  ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
         req.params.date,
     ]);
     res.json(result)
@@ -136,7 +136,7 @@ export const getCollectedOrders = async (req, res) => {
 
 export const getOrder = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT orders.id, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod, orders.paidAt, orders.items, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
+        const [result] = await pool.query("SELECT orders.id, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod, CONVERT_TZ(orders.paidAt, '+00:00', '-05:00') as paidAt, orders.items, orders.isAbandoned, orders.abandonReason, CONVERT_TZ(orders.abandonedAt, '+00:00', '-05:00') as abandonedAt, orders.abandonedBy, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
             req.params.id,
         ]);
 
@@ -251,10 +251,13 @@ export const markOrderAsAbandoned = async (req, res) => {
         }
 
         // Update order as abandoned
+        // IMPORTANT: Store in UTC by subtracting 5 hours from server NOW()
+        // Database server is in UTC, so NOW() gives UTC time
+        // To store Colombia time as if it were UTC, we subtract 5 hours
         const result = await pool.query(
             `UPDATE orders
              SET isAbandoned = 1,
-                 abandonedAt = NOW(),
+                 abandonedAt = DATE_SUB(NOW(), INTERVAL 5 HOUR),
                  abandonedBy = ?,
                  abandonReason = ?
              WHERE id = ?`,

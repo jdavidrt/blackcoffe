@@ -10,6 +10,7 @@ BlackCoffe is an elegant and efficient order management system designed for caf√
 - **Frontend**: React.js with Vite - Crafting responsive and dynamic user interfaces
 - **Backend**: Express.js - Providing robust server-side logic
 - **Database**: MySQL (DigitalOcean) - Ensuring data integrity and reliable storage
+- **Timezone**: Colombia (UTC-5) - All timestamps displayed in Colombia local time
 - **Styling**: TailwindCSS + Ant Design - Modern and responsive UI components
 - **PDF Generation**: React-PDF - For invoice and document generation
 
@@ -461,6 +462,15 @@ The application is configured for deployment with:
   - Complete deposits and payment system documentation
   - Navigation menu and page documentation
   - Code improvements and implementation progress
+
+- **[TIMEZONE.md](TIMEZONE.md)** - Timezone implementation and management guide ‚è∞ **NEW**
+  - Complete timezone handling documentation for Colombia (UTC-5)
+  - Database field storage and retrieval strategies
+  - Backend query patterns with CONVERT_TZ
+  - Frontend date handling with dayjs
+  - Controller reference for all timestamp fields
+  - Testing scripts and verification procedures
+  - Best practices for future development
 
 ### Feature Documentation
 - **[INVOICES.md](INVOICES.md)** - Invoice payment information enhancement documentation
