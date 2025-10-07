@@ -7,27 +7,27 @@ export const getOrders = async (req, res) => {
 
 export const getNotDeliveredOrders = async (req, res) => {
     const [result] = await pool.query(`
-        SELECT 
-            orders.id, 
-            orders.deposit, 
-            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt, 
-            orders.clientId, 
-            orders.paid, 
-            orders.collectedBy, 
-            orders.items, 
-            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, 
-            clients.premises, 
-            clients.clientName, 
-            clients.mall 
-        FROM 
-            orders 
-        JOIN 
-            clients ON orders.clientId = clients.id 
-        WHERE 
-            orders.paid = 0 AND orders.items LIKE '%"delivered":false%' 
-        ORDER BY 
-        CAST(clients.premises AS SIGNED), 
-            clients.clientname ASC, 
+        SELECT
+            orders.id,
+            orders.deposit,
+            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
+            orders.clientId,
+            orders.paid,
+            orders.collectedBy,
+            orders.items,
+            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
+            clients.premises,
+            clients.clientName,
+            clients.mall
+        FROM
+            orders
+        JOIN
+            clients ON orders.clientId = clients.id
+        WHERE
+            orders.paid = 0 AND orders.items LIKE '%"delivered":false%' AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+        ORDER BY
+        CAST(clients.premises AS SIGNED),
+            clients.clientname ASC,
             orders.createdAt ASC
     `);
     res.json(result);
@@ -35,28 +35,29 @@ export const getNotDeliveredOrders = async (req, res) => {
 
 export const getDeliveredOrders = async (req, res) => {
     const [result] = await pool.query(`
-        SELECT 
-            orders.id, 
-            orders.deposit, 
-            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt, 
-            orders.clientId, 
-            orders.paid, 
-            orders.collectedBy, 
-            orders.items, 
-            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, 
-            clients.premises, 
-            clients.clientName, 
-            clients.mall 
-        FROM 
-            orders 
-        JOIN 
-            clients ON orders.clientId = clients.id 
-        WHERE 
-            orders.items LIKE '%"delivered":true%' AND 
-            orders.items LIKE CONCAT('%"deliveredAt":"', ?, '"%')
-        ORDER BY 
-            CAST(clients.premises AS SIGNED), 
-            clients.clientname ASC, 
+        SELECT
+            orders.id,
+            orders.deposit,
+            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
+            orders.clientId,
+            orders.paid,
+            orders.collectedBy,
+            orders.items,
+            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
+            clients.premises,
+            clients.clientName,
+            clients.mall
+        FROM
+            orders
+        JOIN
+            clients ON orders.clientId = clients.id
+        WHERE
+            orders.items LIKE '%"delivered":true%' AND
+            orders.items LIKE CONCAT('%"deliveredAt":"', ?, '"%') AND
+            (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+        ORDER BY
+            CAST(clients.premises AS SIGNED),
+            clients.clientname ASC,
             orders.createdAt ASC
     `, [req.params.date]);
     res.json(result);
@@ -98,8 +99,9 @@ export const getDepositedOrdersByDate = async (req, res) => {
             deposits ON deposits.orderId = orders.id
                 AND DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ?
         WHERE
-            (deposits.depositId IS NOT NULL AND deposits.isDeleted = 0)
-            OR (DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) = ? AND deposits.depositId IS NULL)
+            ((deposits.depositId IS NOT NULL AND deposits.isDeleted = 0)
+            OR (DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) = ? AND deposits.depositId IS NULL))
+            AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
         ORDER BY
             orders.createdAt ASC
     `, [req.params.date, req.params.date]);
@@ -113,14 +115,14 @@ export const getDepositedOrdersByDate = async (req, res) => {
 
 
 export const getUnPaidOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? and orders.paid = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? and orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
         req.params.mall,
     ]);
     res.json(result)
 }
 
 export const getUnPaidOrdersbyClientId = async (req, res) => {
-    const [result] = await pool.query("select orders.id, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.clientId = ? and orders.paid = 0 ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+    const [result] = await pool.query("select orders.id, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.clientId = ? and orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
         req.params.clientId,
     ]);
     res.json(result)
@@ -128,7 +130,7 @@ export const getUnPaidOrdersbyClientId = async (req, res) => {
 
 
 export const getCollectedOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id , DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) as paidAt, orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) = ? and orders.paid = 1  ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+    const [result] = await pool.query("select orders.id , DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) as paidAt, orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) = ? and orders.paid = 1 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
         req.params.date,
     ]);
     res.json(result)
@@ -211,7 +213,7 @@ export const getOrphanedOrders = async (req, res) => {
         LEFT JOIN
             clients ON orders.clientId = clients.id
         WHERE
-            clients.id IS NULL AND orders.paid = 0
+            clients.id IS NULL AND orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
         ORDER BY
             orders.createdAt DESC
     `);
