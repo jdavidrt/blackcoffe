@@ -66,7 +66,7 @@ This is a monorepo with separate client (React) and server (Express) application
   - **MANUAL Timestamps** (`paidAt`, `deliveredAt`): Sent by frontend in Colombia time
   - **COLOMBIA Timestamps** (`abandonedAt`, `deletedAt`): Stored using `DATE_SUB(NOW(), INTERVAL 5 HOUR)`
   - **Date Filtering**: Always use `DATE(CONVERT_TZ(field, '+00:00', '-05:00'))` for correct timezone
-  - See [TIMEZONE.md](TIMEZONE.md) for complete implementation guide
+  - See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#timezone-implementation) for complete implementation guide
 - **Key Tables**: orders, clients, products, users, deposits
 - **Order States**: Orders track paid status, delivery status, and collection status
 
@@ -77,12 +77,326 @@ The API follows a consistent RESTful pattern:
 - **Frontend API Services** (`client/src/api/*.api.js`): Axios-based HTTP client functions
 - **Dual Server Setup**: Frontend API calls point to `renderServer = 'https://coffeserver.onrender.com'` for production, but can work with local backend
 
+### Complete API Endpoints Reference
+
+The BlackCoffe backend exposes 33 RESTful API endpoints organized by entity. All endpoints are prefixed with the base URL (`http://localhost:25060` in development, `https://coffeserver.onrender.com` in production).
+
+#### Orders Endpoints (15 endpoints)
+**Base Route**: `/orders` | **Controller**: `orders.controllers.js` | **Route File**: `orders.routes.js`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/orders/` | Get all orders with client details (JOIN with clients table) |
+| GET | `/order/:id` | Get single order by ID with client information |
+| GET | `/orphanedOrders/` | Get orders without assigned clients (`clientId IS NULL` or invalid) |
+| GET | `/notDeliveredOrders/` | Get all orders pending delivery (`delivered = 0`) |
+| GET | `/deliveredOrders/:date` | Get orders delivered on specific date (Colombia timezone) |
+| GET | `/collectedOrders/:date` | Get orders collected/paid on specific date |
+| GET | `/depositedOrdersByDate/:date` | Get orders with deposits on specific date (includes partially and fully paid) |
+| GET | `/unPaidOrders/:mall` | Get unpaid orders filtered by mall location (`paid = 0` AND `mall = :mall`) |
+| GET | `/unPaidOrdersByClient/:clientId` | Get all unpaid orders for specific client |
+| GET | `/abandonedOrders` | Get all abandoned orders (`isAbandoned = 1`) |
+| POST | `/order` | Create new order (requires `clientId`, `items` JSON) |
+| PUT | `/order/:id` | Update existing order (any field except ID) |
+| PUT | `/order/:id/abandon` | Mark order as abandoned (sets `isAbandoned = 1`, records `abandonedAt`, `abandonedBy`, `abandonReason`) |
+| PUT | `/order/:id/reactivate` | Reactivate abandoned order (sets `isAbandoned = 0`, clears abandonment fields) |
+| DELETE | `/order/:id` | Soft delete order (actual deletion, not soft delete for orders) |
+
+#### Clients Endpoints (6 endpoints)
+**Base Route**: `/clients` | **Controller**: `clients.controllers.js` | **Route File**: `clients.routes.js`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/clients` | Get all clients across all locations |
+| GET | `/clients/:mall` | Get clients filtered by mall location |
+| GET | `/client/:id` | Get single client by ID |
+| POST | `/client` | Create new client (requires `clientName`, `phone`, `premises`, `mall`) |
+| PUT | `/client/:id` | Update existing client information |
+| DELETE | `/client/:id` | Delete client (validation prevents deletion if active orders exist) |
+
+#### Products Endpoints (5 endpoints)
+**Base Route**: `/products` | **Controller**: `products.controllers.js` | **Route File**: `products.routes.js`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/products` | Get all products in catalog |
+| GET | `/product/:id` | Get single product by ID |
+| POST | `/product` | Create new product (requires `productName`, `productValue`) |
+| PUT | `/product/:id` | Update product information (name, price, description) |
+| DELETE | `/product/:id` | Delete product (validation prevents deletion if used in orders) |
+
+#### Deposits Endpoints (5 endpoints)
+**Base Route**: `/deposits` | **Controller**: `deposits.controllers.js` | **Route File**: `deposits.routes.js`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/deposits` | Get all deposits with order information (JOIN with orders and clients) |
+| GET | `/deposits/:id` | Get all deposits for specific order ID (includes deleted deposits with `isDeleted` status) |
+| GET | `/depositsByDate/:date` | Get all deposits made on specific date (Colombia timezone) |
+| POST | `/deposits` | Create new deposit record (requires `orderId`, `clientId`, `depositValue`, `lastDeposit`, `newDeposit`, `dueOnDeposit`, `paymentMethod`) |
+| DELETE | `/deposits/:id` | Soft delete deposit (sets `isDeleted = 1`, `deletedAt`, `deletedBy`, triggers automatic recalculation of subsequent deposits) |
+
+#### Users Endpoints (1 endpoint)
+**Base Route**: `/users` | **Controller**: `users.controllers.js` | **Route File**: `users.routes.js`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/users/:userName/:pass` | Authenticate user (⚠️ plaintext password, needs security improvement) |
+
+#### Utility Endpoints (1 endpoint)
+**Base Route**: `/` | **Route File**: `index.routes.js`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/ping` | Health check endpoint (returns database connection test: `SELECT 1 + 1`) |
+
+---
+
+#### API Request/Response Patterns
+
+**Successful Response (200 OK)**:
+```json
+[
+  {
+    "id": 123,
+    "field": "value"
+  }
+]
+```
+
+**Error Response (500 Internal Server Error)**:
+```json
+{
+  "message": "Error description"
+}
+```
+
+**Empty Result (200 OK)**:
+```json
+[]
+```
+
+#### Authentication
+- **Current Implementation**: No authentication middleware on API endpoints
+- **Login**: Single endpoint `/users/:userName/:pass` returns user object if credentials match
+- **Session Management**: Handled client-side via localStorage
+
+#### CORS Configuration
+- **Development**: Enabled for all origins
+- **Production**: Enabled for cross-origin requests (configured in `server/index.js`)
+
+#### Error Handling
+- Most endpoints lack try-catch blocks (improvement opportunity)
+- Errors returned as `500` status with `{message: error.message}`
+- Console.error used for server-side logging
+
+---
+
 ### React Context State Management
-Each major entity uses React Context for state management:
-- **Pattern**: `Context.jsx` + `Provider.jsx` files in `client/src/context/`
-- **Custom Hooks**: Each provider exports a `use[Entity]` hook (e.g., `useOrders()`)
-- **State Operations**: Providers include CRUD operations and state management functions
-- **Error Handling**: Context hooks throw errors if used outside their provider scope
+
+BlackCoffe uses React Context API for centralized state management across 5 primary entities. Each entity follows a consistent pattern with Context + Provider architecture.
+
+#### Architecture Pattern
+
+**File Structure**:
+```
+client/src/context/
+├── OrderContext.jsx + OrderProvider.jsx
+├── ClientContext.jsx + ClientProvider.jsx
+├── ProductContext.jsx + ProductProvider.jsx
+├── DepositsContext.jsx + DepositsProvider.jsx
+└── UserContext.jsx + UserProvider.jsx
+```
+
+**Pattern Components**:
+1. **Context File** (`*Context.jsx`): Creates React context with `createContext()`
+2. **Provider File** (`*Provider.jsx`): Implements state management and methods
+3. **Custom Hook**: Each provider exports `use[Entity]()` hook (e.g., `useOrders()`)
+4. **Error Handling**: Hooks throw error if used outside provider scope
+
+#### Complete Context Provider Methods Reference
+
+##### OrderProvider (14 methods)
+**Hook**: `useOrders()`
+**State**: `orders`, `unPaidOrder`, `abandonedOrders`
+
+| Method | Parameters | Description |
+|--------|------------|-------------|
+| `loadOrders()` | none | Load all orders with client details |
+| `loadUnDeliveredOrders()` | none | Load orders pending delivery (`delivered = 0`) |
+| `loadDeliveredOrders(date)` | date | Load orders delivered on specific date |
+| `loadCollectedOrders(date)` | date | Load orders collected/paid on specific date |
+| `loadDepositedOrderByDate(date)` | date | Load orders with deposits on specific date |
+| `loadOrphanedOrders()` | none | Load orders without assigned clients |
+| `loadUnPaidOrders(mall)` | mall | Load unpaid orders filtered by location |
+| `getOrder(id)` | id | Get single order by ID, returns order object |
+| `getUnPaidOrdersbyClient(clientId)` | clientId | Get unpaid orders for specific client |
+| `createOrder(order)` | order object | Create new order |
+| `updateOrder(id, newFields)` | id, newFields | Update existing order |
+| `deleteOrder(id)` | id | Delete order by ID |
+| `getAbandonedOrders()` | none | Load all abandoned orders |
+| `markOrderAsAbandoned(id, data)` | id, abandonData | Mark order as abandoned with reason |
+| `unmarkOrderAsAbandoned(id)` | id | Reactivate abandoned order |
+
+##### ClientProvider (6 methods)
+**Hook**: `useClients()`
+**State**: `clients`
+
+| Method | Parameters | Description |
+|--------|------------|-------------|
+| `loadClients()` | none | Load all clients |
+| `getClient(id)` | id | Get single client by ID |
+| `createClient(client)` | client object | Create new client |
+| `updateClient(id, newFields)` | id, newFields | Update existing client |
+| `deleteClient(id)` | id | Delete client by ID |
+| `toggleClientDone(id)` | id | Toggle client status (legacy method) |
+
+##### ProductProvider (6 methods)
+**Hook**: `useProducts()`
+**State**: `products`
+
+| Method | Parameters | Description |
+|--------|------------|-------------|
+| `loadProducts()` | none | Load all products from catalog |
+| `getProduct(id)` | id | Get single product by ID |
+| `createProduct(product)` | product object | Create new product |
+| `updateProduct(id, newFields)` | id, newFields | Update existing product |
+| `deleteProduct(id)` | id | Delete product by ID |
+| `toggleProductDone(id)` | id | Toggle product status (legacy method) |
+
+##### DepositsProvider (5 methods)
+**Hook**: `useDeposits()`
+**State**: `deposits`
+
+| Method | Parameters | Description |
+|--------|------------|-------------|
+| `loadDeposits()` | none | Load all deposits with order information |
+| `getDepositsByOrderId(id)` | orderId | Get all deposits for specific order |
+| `getDepositsByDate(date)` | date | Get deposits made on specific date |
+| `createDeposit(deposits)` | deposit object | Create new deposit record |
+| `deleteDepositById(id)` | depositId | Soft delete deposit (triggers recalculation) |
+
+##### UserProvider (1 method)
+**Hook**: `useUser()`
+**State**: `user`, `isAuthenticated`
+
+| Method | Parameters | Description |
+|--------|------------|-------------|
+| `autenticateUser(userName, pass)` | userName, pass | Authenticate user and set session |
+
+---
+
+### Frontend API Service Layer
+
+BlackCoffe uses Axios-based API service modules to communicate with the backend. All API calls are centralized in `client/src/api/` directory.
+
+#### API Service Architecture
+
+**Service Files**:
+```
+client/src/api/
+├── orders.api.js    (15 functions)
+├── clients.api.js   (6 functions)
+├── products.api.js  (5 functions)
+├── deposits.api.js  (5 functions)
+└── users.api.js     (1 function)
+```
+
+**Configuration**:
+- **Base URL**: Configured in `client/src/utils/config.js`
+- **Development**: `http://localhost:25060`
+- **Production**: `https://coffeserver.onrender.com`
+- **HTTP Client**: Axios with automatic request/response handling
+
+#### API Service Functions Reference
+
+##### Orders API (`orders.api.js`) - 15 functions
+
+| Function | HTTP Method | Endpoint | Description |
+|----------|-------------|----------|-------------|
+| `getOrdersRequest()` | GET | `/orders/` | Get all orders |
+| `getOrderRequest(id)` | GET | `/order/:id` | Get single order |
+| `getOrphanedOrdersRequest()` | GET | `/orphanedOrders/` | Get orders without clients |
+| `getNotDeliveredOrdersRequest()` | GET | `/notDeliveredOrders/` | Get pending deliveries |
+| `getDeliveredOrdersRequest(date)` | GET | `/deliveredOrders/:date` | Get deliveries by date |
+| `getCollectedOrders(date)` | GET | `/collectedOrders/:date` | Get collections by date |
+| `getDepositedOrdersByDate(date)` | GET | `/depositedOrdersByDate/:date` | Get orders with deposits by date |
+| `getUnpaidOrders(mall)` | GET | `/unPaidOrders/:mall` | Get unpaid orders by location |
+| `loadUnPaidOrdersbyClient(clientId)` | GET | `/unPaidOrdersByClient/:clientId` | Get client's unpaid orders |
+| `createOrderRequest(order)` | POST | `/order` | Create new order |
+| `updateOrderRequest(id, order)` | PUT | `/order/:id` | Update existing order |
+| `deleteOrderRequest(id)` | DELETE | `/order/:id` | Delete order |
+| `getAbandonedOrdersRequest()` | GET | `/abandonedOrders` | Get abandoned orders |
+| `markOrderAsAbandonedRequest(id, data)` | PUT | `/order/:id/abandon` | Mark order as abandoned |
+| `unmarkOrderAsAbandonedRequest(id)` | PUT | `/order/:id/reactivate` | Reactivate abandoned order |
+
+##### Clients API (`clients.api.js`) - 6 functions
+
+| Function | HTTP Method | Endpoint | Description |
+|----------|-------------|----------|-------------|
+| `getClientsRequest()` | GET | `/clients` | Get all clients |
+| `getClientsbyMallRequest(mall)` | GET | `/clients/:mall` | Get clients by mall location |
+| `getClientRequest(id)` | GET | `/client/:id` | Get single client |
+| `createClientRequest(client)` | POST | `/client` | Create new client |
+| `updateClientRequest(id, client)` | PUT | `/client/:id` | Update existing client |
+| `deleteClientRequest(id)` | DELETE | `/client/:id` | Delete client |
+
+##### Products API (`products.api.js`) - 5 functions
+
+| Function | HTTP Method | Endpoint | Description |
+|----------|-------------|----------|-------------|
+| `getProductsRequest()` | GET | `/products` | Get all products |
+| `getProductRequest(id)` | GET | `/product/:id` | Get single product |
+| `createProductRequest(product)` | POST | `/product` | Create new product |
+| `updateProductRequest(id, product)` | PUT | `/product/:id` | Update existing product |
+| `deleteProductRequest(id)` | DELETE | `/product/:id` | Delete product |
+
+##### Deposits API (`deposits.api.js`) - 5 functions
+
+| Function | HTTP Method | Endpoint | Description |
+|----------|-------------|----------|-------------|
+| `getDepositsRequest()` | GET | `/deposits` | Get all deposits |
+| `getDepositsByOrderRequest(id)` | GET | `/deposits/:id` | Get deposits for order |
+| `getDepositsByDateRequest(date)` | GET | `/depositsByDate/:date` | Get deposits by date |
+| `createDepositRequest(deposit)` | POST | `/deposits` | Create new deposit |
+| `deleteDepositRequest(id)` | DELETE | `/deposits/:id` | Soft delete deposit |
+
+##### Users API (`users.api.js`) - 1 function
+
+| Function | HTTP Method | Endpoint | Description |
+|----------|-------------|----------|-------------|
+| `autenticateRequest(userName, pass)` | GET | `/users/:userName/:pass` | Authenticate user |
+
+#### API Service Usage Pattern
+
+**Example Usage in Components**:
+```javascript
+// Import API service functions
+import { getOrdersRequest, createOrderRequest } from '../api/orders.api';
+
+// Use in component
+const loadData = async () => {
+  const response = await getOrdersRequest();
+  setOrders(response.data);
+};
+
+const handleCreate = async (orderData) => {
+  await createOrderRequest(orderData);
+  loadData(); // Refresh data
+};
+```
+
+**Error Handling**:
+- Most API functions don't have built-in error handling
+- Components using API functions should wrap calls in try-catch blocks
+- Errors typically returned as rejected promises
+
+**Response Format**:
+- Axios automatically parses JSON responses
+- Data accessible via `response.data`
+- Error responses accessible via `error.response`
+
+---
 
 ### Order Management System
 Orders are the central entity with complex state tracking:
@@ -999,7 +1313,7 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 - Route configured with `<Navigate>` redirect in `App.jsx` (line 56)
 - Backend: `getDepositedOrdersByDate()` in `orders.controllers.js` (lines 65-105)
 - Frontend: Enhanced `DepositedOrdersPage.jsx` and `OrderCollectCard.jsx`
-- See `MERGE.md` for complete planning and implementation details
+- See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning and implementation details
 
 ---
 
@@ -1419,7 +1733,7 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 
 3. **Comprehensive Utility Functions** ✅ **COMPLETED**: Created 8 comprehensive utility files with 25+ functions. Updated 15+ high and medium impact components. Eliminated 50+ lines of duplicate code across order calculations, date formatting, mall styling, cart management, and API configuration.
 
-4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic. See `MERGE.md` for complete planning details.
+4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic. See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning details.
 
 **Implementation Summary**:
 - ✅ Backend: Query already included `OR DATE(orders.paidAt) = ?` condition (no changes needed)
@@ -1481,17 +1795,14 @@ All unsafe `JSON.parse(order.items)` calls have been successfully replaced with 
 
 ## 📚 Additional Documentation
 
-### Feature Implementation Guides
-- **[INVOICES.md](INVOICES.md)** - Invoice Payment Information Enhancement
-  - Implementation plan for adding payment details to both invoice views
-  - Payment display specifications: total paid, remaining debt, payment history
-  - Frontend and backend integration using existing infrastructure
-  - Visual design for thermal printer (Invoice.jsx) and web display (PublicInvoice.jsx)
-  - Testing checklist with edge cases and scenarios
-  - **Status**: 📝 Documentation Complete - Ready for Implementation
-  - **Complexity**: 🟢 Low (leverages existing code, minimal new functionality)
-  - **Estimated Time**: 3-4 hours
+### Technical Documentation
+- **[PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md)** - Comprehensive technical documentation consolidating all implementation guides
+  - **Deployment Guide**: Production deployment configuration, build process, and environment setup
+  - **Timezone Implementation**: Complete timezone handling for Colombia (UTC-5) with database patterns and best practices
+  - **Completed Improvements**: Full documentation of implemented features including delete deposits, safe JSON parsing, utility functions, and page merges
+  - **Feature Implementation Guides**: Invoice payment enhancements, progressive product reveal, and UI improvements
+  - **Code Improvement Opportunities**: Security enhancements, error handling, performance optimizations
+  - **Implementation Guides**: Step-by-step instructions for all improvements with code examples
 
 ### Project Documentation
 - **[README.md](README.md)** - Project overview, setup instructions, and architecture
-- **[MERGE.md](MERGE.md)** - Page merge history (Cobros del día enhancement)
