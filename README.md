@@ -44,6 +44,7 @@ blackcoffe/
 │   │   │   ├── OrderDeliveredCard.jsx # Delivered order tracking
 │   │   │   ├── OrderDeliveryCard.jsx # Delivery management
 │   │   │   ├── ProductCard.jsx  # Product display component
+│   │   │   ├── ProgressiveProductList.jsx # Progressive product reveal component
 │   │   │   └── SearchBar.jsx    # Search functionality
 │   │   ├── 📁 context/          # React Context providers
 │   │   │   ├── ClientContext.jsx & ClientProvider.jsx
@@ -130,7 +131,8 @@ blackcoffe/
 │   ├── `/cobrarOrden/:id` - Process Order Payment (Partial/Full)
 │   ├── `/ordenesPagas` - Completed Orders (Fully Paid)
 │   ├── `/abonos/` - Payment History & Deposits Audit Trail
-│   └── `/cobrosHoy/` - Today's Collections & Financial Reports
+│   ├── `/cobrosHoy/` - Today's Collections & Financial Reports
+│   └── `/ordenesAbandonadas` - Abandoned Orders Management
 │
 ├── 🚚 Delivery Management
 │   ├── `/recorrido/` - Delivery Routes
@@ -220,6 +222,39 @@ Complete financial audit trail showing ALL deposits including deleted ones. Dele
 
 Lists all orders with complete payment (`paid = 1`). Displays client details, order items, total amount paid, payment completion date, and delivery status. Features date filtering and search functionality. Orders move here after full payment completion.
 
+#### Abandoned Orders Management (`/ordenesAbandonadas`)
+**Component**: `AbandonedOrdersPage.jsx` | **Navigation**: Orange "Abandonadas" button
+
+Dedicated management interface for orders marked as abandoned (`isAbandoned = 1`). Abandoned orders are excluded from active order lists but maintained in the database for audit trail and potential reactivation.
+
+**Key Features**:
+- **Search & Filter**: Search by client name, premises, or mall location
+- **Order Statistics**: Count of abandoned orders and total abandoned value
+- **Detailed Order Information**:
+  - Client and location details
+  - Order items with quantities and prices
+  - Deposit amount (if any was paid before abandonment)
+  - Total order value
+- **Abandonment Details**:
+  - Abandonment timestamp
+  - User who marked the order as abandoned
+  - Reason for abandonment (optional text)
+  - Original order creation date
+- **Actions**:
+  - **View Details**: Navigate to payment interface to review full order details
+  - **Reactivate**: Restore abandoned order back to active "Cuentas por cobrar" list
+
+**Database Fields**: `isAbandoned`, `abandonedAt`, `abandonedBy`, `abandonReason`
+
+**Use Cases**:
+- Track orders that customers cancelled or abandoned
+- Maintain financial audit trail of uncollected orders
+- Reactivate orders if customer returns
+- Analyze reasons for order abandonment
+- Keep abandoned orders separate from active accounts receivable
+
+**Migration**: Feature added 2025-10-04 via `add_abandoned_fields.sql` migration
+
 ---
 
 ### 🚚 Delivery Management
@@ -304,9 +339,10 @@ Generate professional PDF invoices using React-PDF library. Features company hea
 6. **Abonos** (Light grey) - Payment history
 7. **Cuentas al día** (Dark grey) - Fully paid orders
 8. **Sin Usuario** (Red) - Orphaned orders
-9. **Productos** (Sky blue) - Product catalog
-10. **Clientes** (Sky blue) - Customer management
-11. **Salir** (Dark red) - Logout
+9. **Abandonadas** (Orange) - Abandoned orders
+10. **Productos** (Sky blue) - Product catalog
+11. **Clientes** (Sky blue) - Customer management
+12. **Salir** (Dark red) - Logout
 
 ### Limited User Menu ("Black coffe Unilago")
 1. **Nueva Orden** (Green) - Create order
@@ -333,7 +369,7 @@ Generate professional PDF invoices using React-PDF library. Features company hea
 3. Check outstanding → `/`
 4. Verify fully paid → `/ordenesPagas`
 
-## 📦 Key Components
+## 📦 Key Components & Entities
 
 The system elegantly orchestrates five primary entities:
 
@@ -361,6 +397,144 @@ The system elegantly orchestrates five primary entities:
 5. **User Management** 🔐
    - Authentication and authorization system
    - Role-based access control
+
+### Specialized UI Components
+
+#### ProgressiveProductList Component
+**File**: `client/src/components/ProgressiveProductList.jsx`
+
+Reusable component for displaying product lists with progressive reveal functionality. Improves performance and user experience by initially showing only first 3 items, then revealing 10 more at a time when user clicks "Mostrar más".
+
+**Features**:
+- **Initial Display**: Shows first 3 products automatically
+- **Progressive Reveal**: "Mostrar más" button reveals 10 additional products at a time
+- **Smart Counter**: Shows remaining product count (e.g., "Mostrar más (7 productos)")
+- **Dynamic Handling**: Automatically adjusts when products are added/removed from list
+- **Reusable**: Accepts custom render function for product display
+
+**Used In**: OrderForm, CollectOrderForm, OrderDeliveryCard, OrderDeliveredCard
+
+**Props**:
+- `products`: Array of products to display
+- `renderProduct`: Function to render individual product item
+- `containerClass`: Optional CSS classes for container
+
+**Utility Functions**: Backed by `client/src/utils/productUtils.js` with helper functions:
+- `shouldShowMoreButton()`: Determines if "Mostrar más" button should be shown
+- `getRemainingCount()`: Calculates remaining hidden products
+- `getInitialVisibleCount()`: Returns initial visible count (3 for ≤10, 10 for >10)
+- `getNextVisibleCount()`: Calculates next visible count after clicking button
+
+---
+
+## 🛠️ Utility Functions Library
+
+The application includes a comprehensive utility library in `client/src/utils/` providing reusable functions across the codebase. This promotes DRY (Don't Repeat Yourself) principles and ensures consistent behavior.
+
+### Core Utilities (10 Files)
+
+#### 1. JSON Utilities (`jsonUtils.js`)
+Safe JSON parsing to prevent application crashes from malformed data.
+
+**Functions**:
+- `safeJSONParse(jsonString, defaultValue)` - Safely parses JSON with fallback value
+- `getOrderItems(order)` - Safely extracts items array from order
+- `hasValidItems(order)` - Validates order has valid items array
+
+**Usage**: All components that parse `order.items` JSON data use these functions instead of direct `JSON.parse()` calls.
+
+#### 2. Order Utilities (`orderUtils.js`)
+Order calculation and processing functions.
+
+**Functions**:
+- `calculateOrderTotal(items)` - Calculates total order value from items array
+- `calculateBalance(orderTotal, deposit)` - Calculates remaining balance
+- `isOrderPaid(order)` - Checks if order is fully paid
+- Order status helpers and validation functions
+
+#### 3. Date Utilities (`dateUtils.js`)
+Date formatting and manipulation for Colombia timezone (UTC-5).
+
+**Functions**:
+- `formatDate(date, format)` - Formats dates consistently across application
+- `getCurrentColombiaDate()` - Gets current date in Colombia timezone
+- `parseColombiaDate(dateString)` - Parses date strings in Colombia timezone
+- Date comparison and validation helpers
+
+#### 4. Currency Utilities (`currencyUtils.js`)
+Currency formatting for Colombian Pesos (COP).
+
+**Functions**:
+- `formatCurrency(amount)` - Formats numbers as currency with locale formatting
+- `parseCurrency(formattedString)` - Parses currency strings back to numbers
+- Currency validation helpers
+
+#### 5. Cart Utilities (`cartUtils.js`)
+Shopping cart management functions.
+
+**Functions**:
+- `addToCart(cart, product, quantity)` - Adds product to cart
+- `removeFromCart(cart, productId)` - Removes product from cart
+- `updateQuantity(cart, productId, newQuantity)` - Updates product quantity
+- `calculateCartTotal(cart)` - Calculates cart total value
+- Cart validation and item count helpers
+
+#### 6. Mall Utilities (`mallUtils.js`)
+Mall/location styling and filtering functions.
+
+**Functions**:
+- `getMallColor(mallName)` - Returns color class for mall
+- `getMallButtonStyle(mallName)` - Returns button styling for mall
+- `filterOrdersByMall(orders, mallName)` - Filters orders by location
+- Mall name normalization helpers
+
+#### 7. Navigation Utilities (`navigationUtils.js`)
+Route navigation and URL helpers.
+
+**Functions**:
+- `navigateToOrder(navigate, orderId)` - Navigate to order detail page
+- `navigateToPayment(navigate, orderId)` - Navigate to payment page
+- `buildOrderRoute(orderId, action)` - Build order-related routes
+- Route validation helpers
+
+#### 8. Product Utilities (`productUtils.js`)
+Product list management and progressive reveal logic.
+
+**Functions**:
+- `shouldShowMoreButton(total, visible)` - Check if "show more" button needed
+- `getRemainingCount(total, visible)` - Calculate remaining hidden items
+- `getInitialVisibleCount(total)` - Initial items to show (3 or 10)
+- `getNextVisibleCount(current, total)` - Next visible count after expansion
+
+**Used By**: ProgressiveProductList component
+
+#### 9. Validation Utilities (`validationUtils.js`)
+Form validation and data validation functions.
+
+**Functions**:
+- `validatePhoneNumber(phone)` - Validates Colombian phone numbers
+- `validateEmail(email)` - Email format validation
+- `validateRequired(value)` - Required field validation
+- Form field validation helpers
+
+#### 10. Configuration (`config.js`)
+Application-wide configuration constants.
+
+**Exports**:
+- `API_BASE_URL` - Backend API URL (development vs production)
+- `renderServer` - Production server URL
+- Environment-based configuration values
+
+---
+
+### Benefits of Utility Layer
+- **Code Reusability**: Common functions used across multiple components
+- **Maintainability**: Single source of truth for business logic
+- **Testing**: Isolated functions easier to unit test
+- **Consistency**: Ensures uniform behavior across application
+- **Error Prevention**: Safe parsing and validation prevent crashes
+
+---
 
 ## 🔧 System Workflow
 

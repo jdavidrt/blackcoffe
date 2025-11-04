@@ -7,11 +7,12 @@ This document consolidates all technical implementation guides, deployment infor
 ## Table of Contents
 
 1. [Deployment Guide](#deployment-guide)
-2. [Timezone Implementation](#timezone-implementation)
-3. [Completed Improvements](#completed-improvements)
-4. [Feature Implementation Guides](#feature-implementation-guides)
-5. [Code Improvement Opportunities](#code-improvement-opportunities)
-6. [Implementation Guides](#implementation-guides)
+2. [Database Schema](#database-schema)
+3. [Timezone Implementation](#timezone-implementation)
+4. [Completed Improvements](#completed-improvements)
+5. [Feature Implementation Guides](#feature-implementation-guides)
+6. [Code Improvement Opportunities](#code-improvement-opportunities)
+7. [Implementation Guides](#implementation-guides)
 
 ---
 
@@ -121,6 +122,399 @@ This URL serves both:
    - Restrict CORS to only allow your frontend domain
 
 3. **Enable HTTPS redirect** (Render does this automatically)
+
+---
+
+# Database Schema
+
+## Overview
+BlackCoffe uses a MySQL database hosted on DigitalOcean with 5 primary tables managing customers, products, orders, payments, and users. The schema supports complex operations including partial payments, order tracking, delivery management, and soft deletes.
+
+## 📊 Complete Database Schema
+
+### 1. Users Table (`users`)
+Manages authentication and user accounts.
+
+| Column Name    | Data Type    | Constraints        | Description                           |
+|----------------|--------------|--------------------|---------------------------------------|
+| `userId`       | INT          | PRIMARY KEY, AUTO_INCREMENT | Unique user identifier    |
+| `userName`     | VARCHAR(255) | NOT NULL, UNIQUE   | User login name                       |
+| `userPassword` | VARCHAR(255) | NOT NULL           | User password (plaintext - needs encryption) |
+| `createdAt`    | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP | Account creation timestamp |
+| `isDeleted`    | TINYINT(1)   | DEFAULT 0          | Soft delete flag (0=active, 1=deleted) |
+
+**Notes**:
+- Passwords currently stored in plaintext (security improvement needed)
+- Role-based access differentiation in application logic (not schema)
+
+---
+
+### 2. Clients Table (`clients`)
+Stores customer information and location assignments.
+
+| Column Name   | Data Type    | Constraints        | Description                           |
+|---------------|--------------|--------------------|---------------------------------------|
+| `id`          | INT          | PRIMARY KEY, AUTO_INCREMENT | Unique client identifier  |
+| `clientName`  | VARCHAR(255) | NOT NULL           | Customer full name                    |
+| `phone`       | VARCHAR(50)  | NOT NULL           | Customer phone number                 |
+| `premises`    | VARCHAR(100) | NOT NULL           | Store location/premises number        |
+| `mall`        | VARCHAR(100) | NOT NULL           | Mall location (Unilago, Alta Tecnología, etc.) |
+| `email`       | VARCHAR(255) | NULL               | Customer email address (optional)     |
+| `createdAt`   | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP | Client registration timestamp |
+
+**Notes**:
+- `premises` typically stores "Local X" (store number)
+- `mall` values: "Unilago", "Alta Tecnología", "Cliente Frecuente", "Otros"
+- Cannot delete clients with active orders (enforced in application logic)
+
+---
+
+### 3. Products Table (`products`)
+Maintains the café product catalog.
+
+| Column Name     | Data Type     | Constraints        | Description                           |
+|-----------------|---------------|--------------------|---------------------------------------|
+| `id`            | INT           | PRIMARY KEY, AUTO_INCREMENT | Unique product identifier |
+| `productName`   | VARCHAR(255)  | NOT NULL, UNIQUE   | Product name                          |
+| `productValue`  | DECIMAL(10,2) | NOT NULL           | Product unit price                    |
+| `createdAt`     | TIMESTAMP     | DEFAULT CURRENT_TIMESTAMP | Product creation timestamp |
+| `shopId`        | INT           | NULL               | Store identifier (future multi-store support) |
+
+**Notes**:
+- `productValue` stored in COP (Colombian Pesos)
+- Cannot delete products used in active orders (enforced in application logic)
+
+---
+
+### 4. Orders Table (`orders`)
+Central table managing all order operations and state tracking.
+
+| Column Name     | Data Type     | Constraints        | Description                           |
+|-----------------|---------------|--------------------|---------------------------------------|
+| `id`            | INT           | PRIMARY KEY, AUTO_INCREMENT | Unique order identifier   |
+| `clientId`      | INT           | FOREIGN KEY → clients(id) | Customer who placed the order |
+| `shopId`        | INT           | NULL               | Store identifier                      |
+| `items`         | JSON          | NOT NULL           | Order items with products, quantities, prices, delivery status |
+| `paymentMethod` | VARCHAR(50)   | NULL               | Payment method ("Efectivo", "Plataforma") |
+| `deposit`       | DECIMAL(10,2) | DEFAULT 0          | Current total deposited amount        |
+| `paid`          | TINYINT(1)    | DEFAULT 0          | Payment status (0=unpaid, 1=fully paid) |
+| `paidAt`        | DATETIME      | NULL               | Timestamp when order was fully paid   |
+| `delivered`     | TINYINT(1)    | DEFAULT 0          | Delivery status (0=not delivered, 1=delivered) |
+| `collectedBy`   | VARCHAR(255)  | NULL               | User who collected payment            |
+| `createdAt`     | TIMESTAMP     | DEFAULT CURRENT_TIMESTAMP | Order creation timestamp (UTC, converted to Colombia time) |
+| `isAbandoned`   | TINYINT(1)    | DEFAULT 0          | Abandoned status (0=active, 1=abandoned) |
+| `abandonedAt`   | DATETIME      | NULL               | When order was marked as abandoned (Colombia time) |
+| `abandonedBy`   | VARCHAR(255)  | NULL               | User who marked order as abandoned    |
+| `abandonReason` | TEXT          | NULL               | Reason for abandonment (optional)     |
+
+**JSON Items Structure**:
+```json
+[
+  {
+    "productName": "Café Americano",
+    "quantity": 2,
+    "unitValue": 8000,
+    "delivered": "pending"  // or "delivered"
+  }
+]
+```
+
+**Notes**:
+- `items` JSON column stores complete product details for historical accuracy
+- `deposit` tracks cumulative payments, updated with each deposit
+- `paid = 1` when `deposit >= order total`
+- `isAbandoned = 1` excludes order from active order queries
+- Abandoned orders maintained for audit trail and potential reactivation
+
+**Foreign Keys**:
+- `clientId` → `clients.id`
+
+---
+
+### 5. Deposits Table (`deposits`)
+Tracks all payment transactions with complete audit trail.
+
+| Column Name       | Data Type     | Constraints        | Description                           |
+|-------------------|---------------|--------------------|---------------------------------------|
+| `depositId`       | INT           | PRIMARY KEY, AUTO_INCREMENT | Unique deposit identifier |
+| `orderId`         | INT           | FOREIGN KEY → orders(id) | Order this deposit belongs to |
+| `clientId`        | INT           | FOREIGN KEY → clients(id) | Customer who made payment |
+| `depositValue`    | DECIMAL(10,2) | NOT NULL           | Individual payment amount (this deposit only) |
+| `lastDeposit`     | DECIMAL(10,2) | NOT NULL           | Previous cumulative deposit total     |
+| `newDeposit`      | DECIMAL(10,2) | NOT NULL           | New cumulative deposit total after this payment |
+| `dueOnDeposit`    | DECIMAL(10,2) | NOT NULL           | Remaining debt after this deposit     |
+| `paymentMethod`   | VARCHAR(50)   | NOT NULL           | Payment method ("Efectivo", "Plataforma") |
+| `depositCreatedAt`| TIMESTAMP     | DEFAULT CURRENT_TIMESTAMP | Deposit creation timestamp (UTC, converted to Colombia time) |
+| `isDeleted`       | TINYINT(1)    | DEFAULT 0          | Soft delete flag (0=active, 1=deleted) |
+| `deletedAt`       | DATETIME      | NULL               | When deposit was soft-deleted (Colombia time) |
+| `deletedBy`       | VARCHAR(255)  | NULL               | User who deleted the deposit          |
+
+**Notes**:
+- `depositValue`: Individual payment amount entered by user
+- `lastDeposit`: Running total before this payment
+- `newDeposit`: Running total after this payment
+- `dueOnDeposit`: Remaining balance after payment
+- Soft delete maintains audit trail while marking deposit as invalid
+- Delete triggers automatic recalculation of all subsequent deposits
+
+**Foreign Keys**:
+- `orderId` → `orders.id`
+- `clientId` → `clients.id`
+
+---
+
+## 🔗 Entity Relationships
+
+### Primary Relationships
+```
+users (1) ───────────────┐
+                          │
+clients (1) ──────── (N) orders (1) ──────── (N) deposits
+                          │
+products (N) ────────────┘ (via JSON items)
+```
+
+### Relationship Details
+- **One-to-Many**: One client can have many orders
+- **One-to-Many**: One order can have many deposits (partial payments)
+- **Many-to-Many** (via JSON): One order contains many products, one product can be in many orders
+- **Soft Deletes**: Users and deposits support soft delete (isDeleted flag)
+- **Abandoned Orders**: Orders can be marked as abandoned (isAbandoned flag)
+
+---
+
+## 🔧 Schema Features
+
+### Soft Delete Support
+Tables with soft delete capability:
+- **users**: `isDeleted` flag preserves user history
+- **deposits**: `isDeleted`, `deletedAt`, `deletedBy` maintains payment audit trail
+
+### Abandoned Order Support
+- **orders**: `isAbandoned`, `abandonedAt`, `abandonedBy`, `abandonReason`
+- Abandoned orders excluded from active queries but maintained for audit
+- Can be reactivated if customer returns
+
+### Timezone Handling
+- **AUTO timestamps** (createdAt, depositCreatedAt): Stored in UTC, converted to Colombia time (UTC-5) in queries
+- **MANUAL timestamps** (paidAt): Sent by frontend in Colombia time
+- **COLOMBIA timestamps** (abandonedAt, deletedAt): Stored using `DATE_SUB(NOW(), INTERVAL 5 HOUR)`
+
+See [Timezone Implementation](#timezone-implementation) for complete details.
+
+---
+
+## 📝 Migration History
+
+| Date       | Migration File              | Description                              |
+|------------|-----------------------------|------------------------------------------|
+| 2025-10-04 | `add_abandoned_fields.sql`  | Added `isAbandoned`, `abandonedAt`, `abandonedBy`, `abandonReason` to orders table |
+
+**Migration Location**: `server/migrations/`
+
+**How to Apply Migrations**: See [Database Migrations](#database-migrations) section below
+
+---
+
+## Database Migrations
+
+### Overview
+BlackCoffe uses SQL migration files to manage database schema changes. Migrations are located in `server/migrations/` and must be manually executed on the production DigitalOcean MySQL database.
+
+### Migration System Architecture
+
+**Structure**:
+```
+server/migrations/
+├── MIGRATION_INSTRUCTIONS.md  # Detailed migration documentation
+├── add_abandoned_fields.sql   # SQL migration script
+├── test_abandoned_migration.js # Migration test script
+├── backfill_abandoned_fields.js # Data backfill script
+└── apply_migration.js         # Automated migration runner
+```
+
+**Process**:
+1. **Create Migration**: Write SQL script with `ALTER TABLE` or `CREATE TABLE` statements
+2. **Document Migration**: Update MIGRATION_INSTRUCTIONS.md with:
+   - Purpose and date
+   - SQL script
+   - Verification queries
+   - Rollback instructions
+   - Testing procedures
+3. **Test Locally**: Apply migration to local development database
+4. **Execute on Production**: Manually run SQL on DigitalOcean database console
+5. **Verify**: Run verification queries to confirm changes
+6. **Update Docs**: Record execution date and status
+
+### Current Migration: Abandoned Orders (2025-10-04)
+
+**Status**: ⏳ **PENDING EXECUTION ON PRODUCTION**
+
+**Purpose**: Add support for tracking abandoned orders in the orders table
+
+**New Columns**:
+- `isAbandoned` TINYINT(1) DEFAULT 0 - Abandoned status flag
+- `abandonedAt` DATETIME NULL - Abandonment timestamp
+- `abandonedBy` VARCHAR(255) NULL - User who abandoned order
+- `abandonReason` TEXT NULL - Optional abandonment reason
+
+**Migration SQL**:
+```sql
+ALTER TABLE orders
+ADD COLUMN isAbandoned TINYINT(1) DEFAULT 0 AFTER paid,
+ADD COLUMN abandonedAt DATETIME NULL AFTER isAbandoned,
+ADD COLUMN abandonedBy VARCHAR(255) NULL AFTER abandonedAt,
+ADD COLUMN abandonReason TEXT NULL AFTER abandonedBy;
+```
+
+**Verification Query**:
+```sql
+DESCRIBE orders;
+-- Should show new columns: isAbandoned, abandonedAt, abandonedBy, abandonReason
+
+SELECT COUNT(*) as total_orders,
+       SUM(CASE WHEN isAbandoned = 0 OR isAbandoned IS NULL THEN 1 ELSE 0 END) as active_orders,
+       SUM(CASE WHEN isAbandoned = 1 THEN 1 ELSE 0 END) as abandoned_orders
+FROM orders;
+-- All existing orders should have isAbandoned = 0
+```
+
+**Affected Code**:
+- Backend: `orders.controllers.js` (getOrders, markOrderAsAbandoned, unmarkOrderAsAbandoned, getAbandonedOrders)
+- Frontend: `AbandonedOrdersPage.jsx`, `CollectOrderForm.jsx`
+- API Routes: `/abandonedOrders`, `/order/:id/abandon`, `/order/:id/reactivate`
+
+### How to Execute Migrations
+
+#### Option 1: DigitalOcean Database Console (Recommended)
+
+1. **Access Database**:
+   - Log in to https://cloud.digitalocean.com/databases
+   - Select BlackCoffe MySQL database cluster
+   - Click "Console" or "Connect" tab
+
+2. **Execute Migration**:
+   - Copy SQL from migration file
+   - Paste into console
+   - Execute command
+   - Wait for success confirmation
+
+3. **Verify**:
+   - Run `DESCRIBE table_name;` to confirm new columns
+   - Execute verification queries from MIGRATION_INSTRUCTIONS.md
+
+#### Option 2: MySQL Command Line
+
+```bash
+mysql -h <host>.db.ondigitalocean.com \
+      -u <username> \
+      -p \
+      -P <port> \
+      <database-name>
+
+# Paste migration SQL and execute
+```
+
+#### Option 3: MySQL Workbench / DBeaver
+
+1. Connect to DigitalOcean database using credentials from `server/db.js`
+2. Open SQL editor
+3. Paste migration SQL
+4. Execute query
+5. Verify with verification queries
+
+### Migration Best Practices
+
+**Before Execution**:
+- ✅ Backup production database
+- ✅ Test migration on local database first
+- ✅ Review SQL for syntax errors
+- ✅ Check database user has ALTER TABLE privileges
+- ✅ Plan for downtime if needed (typically < 1 minute for schema changes)
+
+**During Execution**:
+- ⏱️ Note execution start time
+- 👀 Monitor for errors
+- 📝 Record any warnings or messages
+
+**After Execution**:
+- ✅ Run verification queries
+- ✅ Test affected application features
+- ✅ Check server logs for errors
+- ✅ Update MIGRATION_INSTRUCTIONS.md with completion date
+- ✅ Document any issues encountered
+
+### Rollback Procedures
+
+Each migration includes rollback SQL in MIGRATION_INSTRUCTIONS.md:
+
+```sql
+-- Example: Rollback abandoned fields migration
+ALTER TABLE orders
+DROP COLUMN abandonReason,
+DROP COLUMN abandonedBy,
+DROP COLUMN abandonedAt,
+DROP COLUMN isAbandoned;
+```
+
+**Warning**: Rollback removes all data in affected columns. Only use if absolutely necessary.
+
+### Migration Troubleshooting
+
+**Error: "Unknown column 'table.column'"**
+- **Cause**: Migration not executed yet
+- **Solution**: Execute migration SQL on database
+
+**Error: "Duplicate column name 'column'"**
+- **Cause**: Migration already executed
+- **Solution**: Check with `DESCRIBE table;` - no action needed
+
+**Error: "Access denied for ALTER TABLE"**
+- **Cause**: Database user lacks ALTER privileges
+- **Solution**: Contact database administrator or use admin credentials
+
+**Application Errors After Migration**
+- **Cause**: Application code not deployed
+- **Solution**: Ensure frontend and backend code deployed before migration
+
+### Future Migration Guidelines
+
+When creating new migrations:
+
+1. **Naming Convention**: `YYYY-MM-DD_description.sql`
+   - Example: `2025-10-04_add_abandoned_fields.sql`
+
+2. **Documentation Requirements**:
+   - Purpose and date
+   - Complete SQL script
+   - Verification queries
+   - Rollback instructions
+   - List of affected code files
+
+3. **Testing Requirements**:
+   - Test on local development database
+   - Verify application functionality with new schema
+   - Test rollback procedure
+
+4. **Deployment Coordination**:
+   - Execute migration before deploying code that uses new fields
+   - Ensure backward compatibility if possible
+   - Plan for potential downtime
+
+### Migration Checklist Template
+
+Use this checklist for each migration:
+
+- [ ] Backup production database
+- [ ] Test migration locally
+- [ ] Document migration in MIGRATION_INSTRUCTIONS.md
+- [ ] Connect to production database
+- [ ] Execute migration SQL
+- [ ] Run verification queries
+- [ ] Test affected features
+- [ ] Monitor logs for errors
+- [ ] Update migration status in docs
+- [ ] Notify team of completion
 
 ---
 
@@ -396,17 +790,19 @@ Created utility functions to prevent application crashes from malformed JSON dat
 **Status**: ✅ **COMPLETED**
 
 ### Overview
-Created 8 comprehensive utility files with 25+ functions to eliminate duplicate code and centralize business logic across 37+ files.
+Created 10 comprehensive utility files with 35+ functions to eliminate duplicate code and centralize business logic across 40+ files.
 
 ### Utility Files Created
-1. **`orderUtils.js`** - Order calculations, balance, payment status (eliminates 9 duplicate functions)
-2. **`dateUtils.js`** - Date formatting, string manipulation (eliminates 9+ duplicate patterns)
-3. **`mallUtils.js`** - Mall constants, styling, selection logic (eliminates 6+ duplicate patterns)
-4. **`cartUtils.js`** - Cart management functions
-5. **`currencyUtils.js`** - Currency formatting and parsing
-6. **`config.js`** - API configuration (eliminates 5 duplicate server URLs)
-7. **`validationUtils.js`** - Form validation functions
-8. **`navigationUtils.js`** - Navigation and reload utilities
+1. **`jsonUtils.js`** - Safe JSON parsing functions (safeJSONParse, getOrderItems, hasValidItems) - prevents application crashes
+2. **`orderUtils.js`** - Order calculations, balance, payment status (eliminates 9 duplicate functions)
+3. **`dateUtils.js`** - Date formatting, string manipulation (eliminates 9+ duplicate patterns)
+4. **`mallUtils.js`** - Mall constants, styling, selection logic (eliminates 6+ duplicate patterns)
+5. **`cartUtils.js`** - Cart management functions (add, remove, update, calculate)
+6. **`currencyUtils.js`** - Currency formatting and parsing for Colombian Pesos
+7. **`config.js`** - API configuration (eliminates 5 duplicate server URLs)
+8. **`validationUtils.js`** - Form validation functions (phone, email, required fields)
+9. **`navigationUtils.js`** - Navigation and reload utilities
+10. **`productUtils.js`** - Product list progressive reveal logic (supports ProgressiveProductList component)
 
 ### Impact
 - **Code Reduction**: ~50+ lines of duplicate code eliminated
