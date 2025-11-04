@@ -463,27 +463,14 @@ The application is configured for deployment with:
   - Navigation menu and page documentation
   - Code improvements and implementation progress
 
-- **[TIMEZONE.md](TIMEZONE.md)** - Timezone implementation and management guide ⏰ **NEW**
-  - Complete timezone handling documentation for Colombia (UTC-5)
-  - Database field storage and retrieval strategies
-  - Backend query patterns with CONVERT_TZ
-  - Frontend date handling with dayjs
-  - Controller reference for all timestamp fields
-  - Testing scripts and verification procedures
-  - Best practices for future development
-
-### Feature Documentation
-- **[INVOICES.md](INVOICES.md)** - Invoice payment information enhancement documentation
-  - Implementation plan for adding payment information to invoices
-  - Payment display specifications (total paid, remaining debt, payment history)
-  - Frontend and backend integration guide
-  - Testing checklist and edge cases
-  - Visual design considerations for thermal and web invoices
-
-### Project History
-- **[MERGE.md](MERGE.md)** - Page merge history and implementation details
-  - Cobros del día enhancement (2025-10-04)
-  - Feature consolidation documentation
+### Technical Documentation & Improvements
+- **[PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md)** - Comprehensive technical documentation
+  - **Deployment Guide**: Production deployment configuration and setup
+  - **Timezone Implementation**: Complete timezone handling for Colombia (UTC-5)
+  - **Completed Improvements**: Delete deposits, safe JSON parsing, utility functions, page merges
+  - **Feature Implementation Guides**: Invoice enhancements, progressive product reveal
+  - **Code Improvement Opportunities**: Error handling, security, performance optimizations
+  - **Implementation Guides**: Step-by-step instructions for all improvements
 
 ## 📄 License
 

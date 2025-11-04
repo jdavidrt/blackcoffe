@@ -66,7 +66,7 @@ This is a monorepo with separate client (React) and server (Express) application
   - **MANUAL Timestamps** (`paidAt`, `deliveredAt`): Sent by frontend in Colombia time
   - **COLOMBIA Timestamps** (`abandonedAt`, `deletedAt`): Stored using `DATE_SUB(NOW(), INTERVAL 5 HOUR)`
   - **Date Filtering**: Always use `DATE(CONVERT_TZ(field, '+00:00', '-05:00'))` for correct timezone
-  - See [TIMEZONE.md](TIMEZONE.md) for complete implementation guide
+  - See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#timezone-implementation) for complete implementation guide
 - **Key Tables**: orders, clients, products, users, deposits
 - **Order States**: Orders track paid status, delivery status, and collection status
 
@@ -999,7 +999,7 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 - Route configured with `<Navigate>` redirect in `App.jsx` (line 56)
 - Backend: `getDepositedOrdersByDate()` in `orders.controllers.js` (lines 65-105)
 - Frontend: Enhanced `DepositedOrdersPage.jsx` and `OrderCollectCard.jsx`
-- See `MERGE.md` for complete planning and implementation details
+- See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning and implementation details
 
 ---
 
@@ -1419,7 +1419,7 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 
 3. **Comprehensive Utility Functions** ✅ **COMPLETED**: Created 8 comprehensive utility files with 25+ functions. Updated 15+ high and medium impact components. Eliminated 50+ lines of duplicate code across order calculations, date formatting, mall styling, cart management, and API configuration.
 
-4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic. See `MERGE.md` for complete planning details.
+4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic. See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning details.
 
 **Implementation Summary**:
 - ✅ Backend: Query already included `OR DATE(orders.paidAt) = ?` condition (no changes needed)
@@ -1481,17 +1481,14 @@ All unsafe `JSON.parse(order.items)` calls have been successfully replaced with 
 
 ## 📚 Additional Documentation
 
-### Feature Implementation Guides
-- **[INVOICES.md](INVOICES.md)** - Invoice Payment Information Enhancement
-  - Implementation plan for adding payment details to both invoice views
-  - Payment display specifications: total paid, remaining debt, payment history
-  - Frontend and backend integration using existing infrastructure
-  - Visual design for thermal printer (Invoice.jsx) and web display (PublicInvoice.jsx)
-  - Testing checklist with edge cases and scenarios
-  - **Status**: 📝 Documentation Complete - Ready for Implementation
-  - **Complexity**: 🟢 Low (leverages existing code, minimal new functionality)
-  - **Estimated Time**: 3-4 hours
+### Technical Documentation
+- **[PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md)** - Comprehensive technical documentation consolidating all implementation guides
+  - **Deployment Guide**: Production deployment configuration, build process, and environment setup
+  - **Timezone Implementation**: Complete timezone handling for Colombia (UTC-5) with database patterns and best practices
+  - **Completed Improvements**: Full documentation of implemented features including delete deposits, safe JSON parsing, utility functions, and page merges
+  - **Feature Implementation Guides**: Invoice payment enhancements, progressive product reveal, and UI improvements
+  - **Code Improvement Opportunities**: Security enhancements, error handling, performance optimizations
+  - **Implementation Guides**: Step-by-step instructions for all improvements with code examples
 
 ### Project Documentation
 - **[README.md](README.md)** - Project overview, setup instructions, and architecture
-- **[MERGE.md](MERGE.md)** - Page merge history (Cobros del día enhancement)
