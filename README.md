@@ -425,13 +425,32 @@ Reusable component for displaying product lists with progressive reveal function
 - `getInitialVisibleCount()`: Returns initial visible count (3 for ≤10, 10 for >10)
 - `getNextVisibleCount()`: Calculates next visible count after clicking button
 
+#### AnimatedSection Component
+**File**: `client/src/components/AnimatedSection.jsx`
+
+Lightweight animation wrapper component providing smooth fade-in transitions for UI sections and page elements. Enhances user experience with professional animations while maintaining performance.
+
+**Features**:
+- **Fade-in Animations**: Smooth opacity transitions when component mounts
+- **Customizable**: Configurable animation duration and delay
+- **Reusable**: Wraps any child content with consistent animations
+- **Performance**: Optimized CSS transitions without JavaScript animation overhead
+
+**Used In**: Multiple pages for smooth page transitions and section reveals
+
+**Props**:
+- `children`: React children to animate
+- `duration`: Animation duration in milliseconds (default: 300ms)
+- `delay`: Animation delay in milliseconds (default: 0ms)
+- `className`: Optional CSS classes for styling
+
 ---
 
 ## 🛠️ Utility Functions Library
 
 The application includes a comprehensive utility library in `client/src/utils/` providing reusable functions across the codebase. This promotes DRY (Don't Repeat Yourself) principles and ensures consistent behavior.
 
-### Core Utilities (10 Files)
+### Core Utilities (11 Files)
 
 #### 1. JSON Utilities (`jsonUtils.js`)
 Safe JSON parsing to prevent application crashes from malformed data.
@@ -508,7 +527,17 @@ Product list management and progressive reveal logic.
 
 **Used By**: ProgressiveProductList component
 
-#### 9. Validation Utilities (`validationUtils.js`)
+#### 9. String Utilities (`stringUtils.js`)
+String manipulation and formatting helpers.
+
+**Functions**:
+- `capitalizeFirst(string)` - Capitalizes first letter of string
+- `truncateText(text, maxLength)` - Truncates text with ellipsis
+- `normalizeString(str)` - Normalizes strings for comparison
+- `sanitizeInput(input)` - Sanitizes user input for security
+- String formatting and transformation helpers
+
+#### 10. Validation Utilities (`validationUtils.js`)
 Form validation and data validation functions.
 
 **Functions**:
@@ -517,7 +546,7 @@ Form validation and data validation functions.
 - `validateRequired(value)` - Required field validation
 - Form field validation helpers
 
-#### 10. Configuration (`config.js`)
+#### 11. Configuration (`config.js`)
 Application-wide configuration constants.
 
 **Exports**:
@@ -533,6 +562,151 @@ Application-wide configuration constants.
 - **Testing**: Isolated functions easier to unit test
 - **Consistency**: Ensures uniform behavior across application
 - **Error Prevention**: Safe parsing and validation prevent crashes
+
+---
+
+## 🗄️ Database Architecture
+
+### Database Schema Overview
+
+The BlackCoffe system uses a **MySQL database** hosted on DigitalOcean with 5 core tables managing all business operations. All timestamps are handled with Colombia timezone (UTC-5) awareness.
+
+#### Core Tables
+
+**1. users** - User authentication and management
+- `userId` (INT, Primary Key, Auto Increment)
+- `userName` (VARCHAR) - User login name
+- `userPassword` (VARCHAR) - User password
+- `createdAt` (TIMESTAMP) - Account creation timestamp
+- `isDeleted` (BOOLEAN) - Soft delete flag
+
+**2. clients** - Customer information
+- `id` (INT, Primary Key, Auto Increment)
+- `clientName` (VARCHAR) - Customer full name
+- `phone` (VARCHAR) - Contact phone number
+- `premises` (VARCHAR) - Local/premises number
+- `mall` (VARCHAR) - Mall location (Unilago, Alta Tecnología, etc.)
+- `createdAt` (TIMESTAMP) - Registration timestamp
+- `email` (VARCHAR, Optional) - Customer email
+
+**3. products** - Product catalog
+- `id` (INT, Primary Key, Auto Increment)
+- `productName` (VARCHAR) - Product name
+- `productValue` (DECIMAL) - Product price
+- `createdAt` (TIMESTAMP) - Product creation timestamp
+- `shopId` (INT) - Shop identifier
+
+**4. orders** - Order management (Central entity)
+- `id` (INT, Primary Key, Auto Increment)
+- `clientId` (INT, Foreign Key → clients.id) - Customer reference
+- `shopId` (INT) - Shop identifier
+- `items` (JSON) - Order items with quantities and delivery status
+- `paymentMethod` (VARCHAR) - Payment method (Efectivo, Plataforma)
+- `deposit` (DECIMAL) - Current total deposited amount
+- `paid` (BOOLEAN) - Fully paid flag (0=unpaid, 1=paid)
+- `paidAt` (TIMESTAMP) - Full payment completion timestamp
+- `delivered` (BOOLEAN) - Delivery status flag
+- `collectedBy` (VARCHAR) - User who collected payment
+- `createdAt` (TIMESTAMP) - Order creation timestamp
+- `isAbandoned` (BOOLEAN) - Abandoned order flag ✨ NEW
+- `abandonedAt` (TIMESTAMP) - Abandonment timestamp ✨ NEW
+- `abandonedBy` (VARCHAR) - User who abandoned order ✨ NEW
+- `abandonReason` (TEXT) - Reason for abandonment ✨ NEW
+
+**5. deposits** - Payment tracking and audit trail
+- `depositId` (INT, Primary Key, Auto Increment)
+- `orderId` (INT, Foreign Key → orders.id) - Order reference
+- `clientId` (INT, Foreign Key → clients.id) - Customer reference
+- `depositValue` (DECIMAL) - Individual payment amount (this deposit only)
+- `lastDeposit` (DECIMAL) - Previous cumulative deposit total
+- `newDeposit` (DECIMAL) - New cumulative deposit total after this payment
+- `dueOnDeposit` (DECIMAL) - Remaining debt after this payment
+- `paymentMethod` (VARCHAR) - Payment method for this deposit
+- `depositCreatedAt` (TIMESTAMP) - Deposit creation timestamp
+- `isDeleted` (BOOLEAN) - Soft delete flag ✨ FEATURE
+- `deletedAt` (TIMESTAMP) - Deletion timestamp ✨ FEATURE
+- `deletedBy` (VARCHAR) - User who deleted deposit ✨ FEATURE
+
+### Database Relationships
+
+```
+clients (1) ──< orders (N) ──< deposits (N)
+                │
+                └──< order.items (JSON array of products)
+```
+
+**Key Relationships**:
+- One **client** can have many **orders**
+- One **order** can have many **deposits** (partial payments)
+- Orders contain **items** as JSON array with product references
+- **Soft deletes** maintain data integrity (isDeleted, isAbandoned flags)
+
+### Timezone Handling
+
+All datetime fields use **Colombia timezone (UTC-5)** with proper conversion:
+- **AUTO timestamps** (createdAt, depositCreatedAt): Stored in UTC, retrieved with `CONVERT_TZ(field, '+00:00', '-05:00')`
+- **MANUAL timestamps** (paidAt, deliveredAt): Sent by frontend in Colombia time
+- **COLOMBIA timestamps** (abandonedAt, deletedAt): Stored using `DATE_SUB(NOW(), INTERVAL 5 HOUR)`
+
+See **[PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#timezone-implementation)** for complete timezone implementation guide.
+
+---
+
+## 📊 API Architecture
+
+### RESTful API Endpoints
+
+The backend exposes **47 RESTful API endpoints** organized by entity with consistent patterns:
+
+**Endpoint Structure**: `HTTP_METHOD /entity/action/:parameter`
+
+**Core Entities**:
+- **Orders**: 15 endpoints (CRUD, filtering by status, location, date)
+- **Clients**: 6 endpoints (CRUD, filtering by mall)
+- **Products**: 5 endpoints (CRUD operations)
+- **Deposits**: 5 endpoints (CRUD, soft delete with recalculation)
+- **Users**: 1 endpoint (authentication)
+- **Utility**: 1 endpoint (health check)
+
+**API Pattern**:
+1. **Routes** (`server/routes/*.routes.js`) - Define HTTP endpoints
+2. **Controllers** (`server/controllers/*.controllers.js`) - Business logic and database queries
+3. **Frontend Services** (`client/src/api/*.api.js`) - Axios-based HTTP client functions
+
+**Complete API Reference**: See **[CLAUDE.md](CLAUDE.md#complete-api-endpoints-reference)** for detailed documentation of all 47 endpoints with parameters and descriptions.
+
+---
+
+## 🔄 Database Migrations
+
+### Migration System
+
+The project includes a **database migration system** for safe schema updates:
+
+**Location**: `server/migrations/`
+
+**Files**:
+- `add_abandoned_fields.sql` - Adds abandoned order tracking fields (2025-10-04)
+- `MIGRATION_INSTRUCTIONS.md` - Migration application guide
+- `apply_migration.js` - Migration execution script
+- `backfill_abandoned_fields.js` - Data backfill script
+- `test_abandoned_migration.js` - Migration testing script
+
+**How to Apply Migrations**:
+1. Review migration SQL file in `server/migrations/`
+2. Test migration on development database first
+3. Run `node server/migrations/apply_migration.js` to apply
+4. Verify schema changes with test script
+5. Apply to production database when verified
+
+**Current Migration Status**: Abandoned orders feature migration applied (2025-10-04)
+
+**Migration Best Practices**:
+- Always backup database before applying migrations
+- Test on development environment first
+- Use soft deletes instead of DROP operations
+- Document all schema changes
+- Include rollback plans for critical migrations
 
 ---
 
