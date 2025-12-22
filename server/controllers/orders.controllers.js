@@ -80,7 +80,7 @@ export const getDepositedOrdersByDate = async (req, res) => {
             deposits.lastDeposit,
             deposits.newDeposit,
             deposits.isDeleted,
-            CONVERT_TZ(deposits.deletedAt, '+00:00', '-05:00') as deletedAt,
+            deposits.deletedAt as deletedAt,  -- COLOMBIA timestamp: stored via DATE_SUB, no conversion needed
             orders.id,
             CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
             orders.clientId,
@@ -130,7 +130,8 @@ export const getUnPaidOrdersbyClientId = async (req, res) => {
 
 
 export const getCollectedOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id , DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) as paidAt, orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) = ? and orders.paid = 1 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+    // paidAt is a MANUAL timestamp (frontend sends Colombia time) - no CONVERT_TZ needed
+    const [result] = await pool.query("select orders.id , DATE(orders.paidAt) as paidAt, orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(orders.paidAt) = ? and orders.paid = 1 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
         req.params.date,
     ]);
     res.json(result)
@@ -138,7 +139,8 @@ export const getCollectedOrders = async (req, res) => {
 
 export const getOrder = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT orders.id, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod, CONVERT_TZ(orders.paidAt, '+00:00', '-05:00') as paidAt, orders.items, orders.isAbandoned, orders.abandonReason, CONVERT_TZ(orders.abandonedAt, '+00:00', '-05:00') as abandonedAt, orders.abandonedBy, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
+        // paidAt and abandonedAt are MANUAL/COLOMBIA timestamps - no CONVERT_TZ needed
+        const [result] = await pool.query("SELECT orders.id, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod, orders.paidAt as paidAt, orders.items, orders.isAbandoned, orders.abandonReason, orders.abandonedAt as abandonedAt, orders.abandonedBy, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
             req.params.id,
         ]);
 
@@ -305,6 +307,7 @@ export const unmarkOrderAsAbandoned = async (req, res) => {
 // Get all abandoned orders
 export const getAbandonedOrders = async (req, res) => {
     try {
+        // abandonedAt is a COLOMBIA timestamp (stored via DATE_SUB) - no CONVERT_TZ needed
         const [rows] = await pool.query(
             `SELECT
                 orders.*,
@@ -312,7 +315,7 @@ export const getAbandonedOrders = async (req, res) => {
                 clients.premises AS premises,
                 clients.mall AS mall,
                 CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') AS createdAt,
-                CONVERT_TZ(orders.abandonedAt, '+00:00', '-05:00') AS abandonedAt
+                orders.abandonedAt AS abandonedAt
             FROM orders
             LEFT JOIN clients ON orders.clientId = clients.id
             WHERE orders.isAbandoned = 1
