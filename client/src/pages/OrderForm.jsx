@@ -11,6 +11,7 @@ import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc } from '../utils/orderUtils';
 import { createCartSnapshot, validateSafeMerge } from '../utils/orderValidation';
+import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function OrderForm() {
@@ -29,6 +30,7 @@ function OrderForm() {
     items: ""
   });
   const submittingRef = useRef(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
   const params = useParams();
   const navigate = useNavigate();
   const dateFormat = 'YYYY-MM-DD';
@@ -116,6 +118,21 @@ function OrderForm() {
 
   return (
     <div>
+      {loadingMessage && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-2xl p-8 max-w-sm mx-4">
+            <div className="flex flex-col items-center">
+              <CoffeePouringAnimation />
+              <h2 className="text-xl font-bold text-gray-800 text-center">
+                {loadingMessage}
+              </h2>
+              <p className="text-sm text-gray-600 mt-2 text-center">
+                Por favor espere...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <h1 className="text-xl font-bold uppercase text-center">
         {params.id ? "Editar Orden" : "Nueva Orden"}
       </h1>
@@ -187,6 +204,7 @@ function OrderForm() {
                 throw new Error('Los productos no coinciden con los valores esperados antes de guardar.');
               }
 
+              setLoadingMessage("Modificando orden");
               await updateOrder(params.id, values);
             } else if (unPaidOrder) {
               // MERGE with existing unpaid order
@@ -198,6 +216,7 @@ function OrderForm() {
               }
 
               values.items = JSON.stringify(mergeResult.mergedItems);
+              setLoadingMessage("Combinando pedidos");
               await updateOrder(unPaidOrder.id, values);
             } else {
               // CREATE new order
@@ -212,11 +231,13 @@ function OrderForm() {
                 throw new Error('Los productos no coinciden con los valores esperados antes de guardar.');
               }
 
+              setLoadingMessage("Creando orden");
               await createOrder(values);
             }
             navigate("/nuevaOrden");
           } catch (error) {
             console.error('[OrderForm] Submit error:', error);
+            setLoadingMessage("");
             submittingRef.current = false;
             actions.setSubmitting(false);
             alert(`Error al guardar el pedido: ${error.message}`);
