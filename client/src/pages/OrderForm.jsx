@@ -234,6 +234,7 @@ function OrderForm() {
               setLoadingMessage("Creando orden");
               await createOrder(values);
             }
+            setLoadingMessage("");
             navigate("/nuevaOrden");
           } catch (error) {
             console.error('[OrderForm] Submit error:', error);
