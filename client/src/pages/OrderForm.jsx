@@ -20,7 +20,14 @@ function OrderForm() {
   const { clients, loadClients } = useClients()
   const [refresh, setRefresh] = useState(true);
   const [client, setClient] = useState([]);
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    const savedItems = localStorage.getItem('blackcoffe_nueva_orden_items');
+    if (savedItems) {
+      localStorage.removeItem('blackcoffe_nueva_orden_items');
+      return safeJSONParse(savedItems, []);
+    }
+    return [];
+  });
   const [clientChanged, setClientChanged] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [mall, setMall] = useState("Alta Tecnología");
@@ -41,13 +48,6 @@ function OrderForm() {
   );
 
   if (location.pathname.includes('nuevaOrden') && refresh) {
-    const savedItems = localStorage.getItem('blackcoffe_nueva_orden_items');
-    if (savedItems) {
-      setCart(safeJSONParse(savedItems, []));
-      localStorage.removeItem('blackcoffe_nueva_orden_items');
-    } else {
-      setCart([]);
-    }
     setRefresh(false);
   }
 
