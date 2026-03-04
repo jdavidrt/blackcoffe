@@ -3,13 +3,15 @@ import { useOrders } from "../context/OrderProvider";
 import { useClients } from "../context/ClientProvider";
 import { useProducts } from "../context/ProductProvider";
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PlusCircleOutlined, MinusCircleOutlined } from "@ant-design/icons";
 import { Select } from "antd"
 import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc } from '../utils/orderUtils';
+import { createCartSnapshot, validateSafeMerge } from '../utils/orderValidation';
+import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function OrderForm() {
@@ -27,6 +29,8 @@ function OrderForm() {
     shopId: "1",
     items: ""
   });
+  const submittingRef = useRef(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
   const params = useParams();
   const navigate = useNavigate();
   const dateFormat = 'YYYY-MM-DD';
@@ -114,6 +118,21 @@ function OrderForm() {
 
   return (
     <div>
+      {loadingMessage && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-2xl p-8 max-w-sm mx-4">
+            <div className="flex flex-col items-center">
+              <CoffeePouringAnimation />
+              <h2 className="text-xl font-bold text-gray-800 text-center">
+                {loadingMessage}
+              </h2>
+              <p className="text-sm text-gray-600 mt-2 text-center">
+                Por favor espere...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <h1 className="text-xl font-bold uppercase text-center">
         {params.id ? "Editar Orden" : "Nueva Orden"}
       </h1>
@@ -161,43 +180,67 @@ function OrderForm() {
         initialValues={order}
         enableReinitialize={true}
         onSubmit={async (values, actions) => {
-          values.shopId = 1;
-          values.clientId = client;
-          getUnPaidOrdersbyClient(client);
-          values.items = JSON.stringify(cart)
-          if (params.id) {
-            delete values.clientName;
-            delete values.premises;
-            await updateOrder(params.id, values);
-          } else if (unPaidOrder) {
-            const array1 = safeJSONParse(values.items, []);
-            const array2 = safeJSONParse(unPaidOrder.items, []);
-            const mergedJson = array1.concat(array2);
-            const idMap = {};
-            mergedJson.forEach((item) => {
-              const { id, quantity } = item;
-              if (idMap[id]) {
-                // Si ya existe el ID en el mapa, sumar la cantidad
-                idMap[id].quantity += quantity;
-              } else {
-                // Si no existe el ID en el mapa, agregar el elemento al mapa
-                idMap[id] = { ...item };
+          if (submittingRef.current) return;
+          submittingRef.current = true;
+          try {
+            // Snapshot cart BEFORE any processing to detect corruption
+            const preSnapshot = createCartSnapshot(cart);
+
+            values.shopId = 1;
+            values.clientId = client;
+
+            if (params.id) {
+              // EDIT existing order
+              values.items = JSON.stringify(cart);
+              delete values.clientName;
+              delete values.premises;
+
+              // Validate serialized items match the snapshot
+              const postSnapshot = createCartSnapshot(safeJSONParse(values.items, []));
+              if (
+                postSnapshot.totalValue !== preSnapshot.totalValue ||
+                postSnapshot.totalQuantity !== preSnapshot.totalQuantity
+              ) {
+                throw new Error('Los productos no coinciden con los valores esperados antes de guardar.');
               }
-            });
-            const resultArray = Object.values(idMap);
-            values.items = JSON.stringify(resultArray);
-            setCart(safeJSONParse(unPaidOrder.items, []))
-            await updateOrder(unPaidOrder.id, values)
-          } else {
-            await createOrder(values);
-            window.location.reload();
-          }
-          navigate("/nuevaOrden");
-          window.location.reload();
-          if (client == [] || cart == []) {
-            alert("Por favor selecciona un cliente y agrega propductos para crear la orden");
-          } else {
-            setOrder({ order });
+
+              setLoadingMessage("Modificando orden");
+              await updateOrder(params.id, values);
+            } else if (unPaidOrder) {
+              // MERGE with existing unpaid order
+              const existingItems = safeJSONParse(unPaidOrder.items, []);
+              const mergeResult = validateSafeMerge(cart, existingItems);
+
+              if (!mergeResult.isValid) {
+                throw new Error(`Error al combinar pedidos: ${mergeResult.errors.join(', ')}`);
+              }
+
+              values.items = JSON.stringify(mergeResult.mergedItems);
+              setLoadingMessage("Combinando pedidos");
+              await updateOrder(unPaidOrder.id, values);
+            } else {
+              // CREATE new order
+              values.items = JSON.stringify(cart);
+
+              // Validate serialized items match the snapshot
+              const postSnapshot = createCartSnapshot(safeJSONParse(values.items, []));
+              if (
+                postSnapshot.totalValue !== preSnapshot.totalValue ||
+                postSnapshot.totalQuantity !== preSnapshot.totalQuantity
+              ) {
+                throw new Error('Los productos no coinciden con los valores esperados antes de guardar.');
+              }
+
+              setLoadingMessage("Creando orden");
+              await createOrder(values);
+            }
+            navigate("/nuevaOrden");
+          } catch (error) {
+            console.error('[OrderForm] Submit error:', error);
+            setLoadingMessage("");
+            submittingRef.current = false;
+            actions.setSubmitting(false);
+            alert(`Error al guardar el pedido: ${error.message}`);
           }
         }}
       >
