@@ -20,7 +20,14 @@ function OrderForm() {
   const { clients, loadClients } = useClients()
   const [refresh, setRefresh] = useState(true);
   const [client, setClient] = useState([]);
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    const savedItems = localStorage.getItem('blackcoffe_nueva_orden_items');
+    if (savedItems) {
+      localStorage.removeItem('blackcoffe_nueva_orden_items');
+      return safeJSONParse(savedItems, []);
+    }
+    return [];
+  });
   const [clientChanged, setClientChanged] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [mall, setMall] = useState("Alta Tecnología");
@@ -41,8 +48,7 @@ function OrderForm() {
   );
 
   if (location.pathname.includes('nuevaOrden') && refresh) {
-    setCart([]);
-    setRefresh(false)
+    setRefresh(false);
   }
 
   const handleAddToCart = (product) => {
@@ -234,8 +240,9 @@ function OrderForm() {
               setLoadingMessage("Creando orden");
               await createOrder(values);
             }
-            setLoadingMessage("");
-            navigate("/nuevaOrden");
+            localStorage.setItem('blackcoffe_nueva_orden_items', JSON.stringify(cart));
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            window.location.href = '/nuevaOrden';
           } catch (error) {
             console.error('[OrderForm] Submit error:', error);
             setLoadingMessage("");
