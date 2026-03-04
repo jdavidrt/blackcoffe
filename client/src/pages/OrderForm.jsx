@@ -234,8 +234,8 @@ function OrderForm() {
               setLoadingMessage("Creando orden");
               await createOrder(values);
             }
-            setLoadingMessage("");
-            navigate("/nuevaOrden");
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            window.location.href = '/nuevaOrden';
           } catch (error) {
             console.error('[OrderForm] Submit error:', error);
             setLoadingMessage("");
