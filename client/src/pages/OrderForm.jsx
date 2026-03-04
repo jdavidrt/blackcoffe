@@ -41,8 +41,14 @@ function OrderForm() {
   );
 
   if (location.pathname.includes('nuevaOrden') && refresh) {
-    setCart([]);
-    setRefresh(false)
+    const savedItems = localStorage.getItem('blackcoffe_nueva_orden_items');
+    if (savedItems) {
+      setCart(safeJSONParse(savedItems, []));
+      localStorage.removeItem('blackcoffe_nueva_orden_items');
+    } else {
+      setCart([]);
+    }
+    setRefresh(false);
   }
 
   const handleAddToCart = (product) => {
@@ -234,6 +240,7 @@ function OrderForm() {
               setLoadingMessage("Creando orden");
               await createOrder(values);
             }
+            localStorage.setItem('blackcoffe_nueva_orden_items', JSON.stringify(cart));
             await new Promise(resolve => setTimeout(resolve, 2000));
             window.location.href = '/nuevaOrden';
           } catch (error) {
