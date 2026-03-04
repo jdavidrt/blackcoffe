@@ -206,6 +206,7 @@ function OrderForm() {
 
               setLoadingMessage("Modificando orden");
               await updateOrder(params.id, values);
+              setLoadingMessage("");
             } else if (unPaidOrder) {
               // MERGE with existing unpaid order
               const existingItems = safeJSONParse(unPaidOrder.items, []);
@@ -218,6 +219,7 @@ function OrderForm() {
               values.items = JSON.stringify(mergeResult.mergedItems);
               setLoadingMessage("Combinando pedidos");
               await updateOrder(unPaidOrder.id, values);
+              setLoadingMessage("");
             } else {
               // CREATE new order
               values.items = JSON.stringify(cart);
@@ -233,6 +235,7 @@ function OrderForm() {
 
               setLoadingMessage("Creando orden");
               await createOrder(values);
+              setLoadingMessage("");
             }
             navigate("/nuevaOrden");
           } catch (error) {
