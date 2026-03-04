@@ -20,14 +20,7 @@ function OrderForm() {
   const { clients, loadClients } = useClients()
   const [refresh, setRefresh] = useState(true);
   const [client, setClient] = useState([]);
-  const [cart, setCart] = useState(() => {
-    const savedItems = localStorage.getItem('blackcoffe_nueva_orden_items');
-    if (savedItems) {
-      localStorage.removeItem('blackcoffe_nueva_orden_items');
-      return safeJSONParse(savedItems, []);
-    }
-    return [];
-  });
+  const [cart, setCart] = useState([]);
   const [clientChanged, setClientChanged] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [mall, setMall] = useState("Alta Tecnología");
@@ -116,11 +109,22 @@ function OrderForm() {
           clientName: order.clientName,
           premises: order.premises
         });
+      } else {
+        setMall("Alta Tecnología");
+        loadClients("Alta Tecnología");
+        setClient([]);
+        setCart([]);
+        setOrder({
+          clientId: "",
+          shopId: "1",
+          items: ""
+        });
+        setClientChanged(false);
       }
     };
     loadOrder();
     loadProducts();
-  }, []);
+  }, [params.id]);
 
   return (
     <div>
@@ -183,6 +187,7 @@ function OrderForm() {
       <div className="py-2" />
 
       <Formik
+        key={params.id || 'new'}
         initialValues={order}
         enableReinitialize={true}
         onSubmit={async (values, actions) => {
@@ -240,7 +245,6 @@ function OrderForm() {
               setLoadingMessage("Creando orden");
               await createOrder(values);
             }
-            localStorage.setItem('blackcoffe_nueva_orden_items', JSON.stringify(cart));
             await new Promise(resolve => setTimeout(resolve, 2000));
             window.location.href = '/nuevaOrden';
           } catch (error) {
