@@ -9,8 +9,9 @@ function OrdersPage() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('');
+  const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const [clave, setClave] = useState('');
-  const [mostrarContenido, setMostrarContenido] = useState(false);
+  const [mostrarContenido, setMostrarContenido] = useState(isLocalDev);
   const { orders, loadOrders } = useOrders();
 
   const loadOrdersS = async (value, dateString) => {
