@@ -15,11 +15,11 @@ import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function OrderForm() {
-  const { unPaidOrder, createOrder, getOrder, updateOrder, getUnPaidOrdersbyClient } = useOrders();
+  const { unPaidOrder, createOrder, getOrder, updateOrder, getUnPaidOrdersbyClient, resetUnPaidOrder } = useOrders();
   const { products, loadProducts, } = useProducts();
   const { clients, loadClients } = useClients()
   const [refresh, setRefresh] = useState(true);
-  const [client, setClient] = useState([]);
+  const [client, setClient] = useState(null);
   const [cart, setCart] = useState([]);
   const [clientChanged, setClientChanged] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,6 +31,7 @@ function OrderForm() {
   });
   const submittingRef = useRef(false);
   const [loadingMessage, setLoadingMessage] = useState("");
+  const [formKey, setFormKey] = useState(0);
   const params = useParams();
   const navigate = useNavigate();
   const dateFormat = 'YYYY-MM-DD';
@@ -112,7 +113,7 @@ function OrderForm() {
       } else {
         setMall("Alta Tecnología");
         loadClients("Alta Tecnología");
-        setClient([]);
+        setClient(null);
         setCart([]);
         setOrder({
           clientId: "",
@@ -140,7 +141,7 @@ function OrderForm() {
         });
         navigate('/');
       } else {
-        if (!client || client.length === 0) {
+        if (!client) {
           alert("Por favor selecciona un cliente.");
           return;
         }
@@ -162,7 +163,16 @@ function OrderForm() {
             items: JSON.stringify(cart),
           });
         }
-        navigate('/');
+        // Reset form fully for next order
+        setCart([]);
+        setClient(null);
+        setClientChanged(false);
+        setOrder({ clientId: "", shopId: "1", items: "" });
+        setMall("Alta Tecnología");
+        loadClients("Alta Tecnología");
+        setSearchTerm('');
+        resetUnPaidOrder();
+        setFormKey(prev => prev + 1);
       }
     } catch (error) {
       console.error('[OrderForm] Error during order submission:', error);
@@ -221,7 +231,7 @@ function OrderForm() {
             </Select.Option>
           ))}
         </Select> :
-          <Select onChange={selectClient} showSearch optionFilterProp="children" placeholder="Seleccionar cliente" name="clientId" className="px-2 py-1 rounded-sm w-100%">
+          <Select key={formKey} onChange={selectClient} showSearch optionFilterProp="children" placeholder="Seleccionar cliente" name="clientId" className="px-2 py-1 rounded-sm w-100%">
             {params.id ? <Select.Option selected="selected" title={order.clientId} label={order.clientId} value={order.clientId}>{order.premises} - {order.clientName}</Select.Option> : <Select.Option value={1}> </Select.Option>}
             {clients.map((client) => (
               <Select.Option title={client.id} value={client.id}>
@@ -234,7 +244,7 @@ function OrderForm() {
       <div className="py-2" />
 
       <Formik
-        key={params.id || 'new'}
+        key={params.id || `new-${formKey}`}
         initialValues={order}
         enableReinitialize={true}
         onSubmit={handleSubmitWithLogging}
@@ -280,7 +290,7 @@ function OrderForm() {
         }
       </Formik >
       <div>
-        <SearchBar onSearch={setSearchTerm} />
+        <SearchBar key={formKey} onSearch={setSearchTerm} />
         {filteredProducts.map((product) => (
           <div className="bg-stone-100 rounded-md m-2 flex font-bold" key={(product.id)}>
             <p className="flex items-center px-2">{product.productName}</p>

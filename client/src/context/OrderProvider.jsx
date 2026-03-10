@@ -29,7 +29,7 @@ export const useOrders = () => {
 
 export const OrderContextProvider = ({ children }) => {
   const [orders, setOrders] = useState([]);
-  var [unPaidOrder, setUnPaidOrder] = useState([]);
+  var [unPaidOrder, setUnPaidOrder] = useState(null);
   const [abandonedOrders, setAbandonedOrders] = useState([]);
 
   async function loadOrders() {
@@ -91,8 +91,12 @@ export const OrderContextProvider = ({ children }) => {
     if (response.data.length > 0) {
       setUnPaidOrder(response.data[0]);
     } else {
-      setUnPaidOrder(false)
+      setUnPaidOrder(null);
     }
+  }
+
+  function resetUnPaidOrder() {
+    setUnPaidOrder(null);
   }
 
   const getOrder = async (id) => {
@@ -161,6 +165,7 @@ export const OrderContextProvider = ({ children }) => {
         updateOrder,
         loadUnPaidOrders,
         getUnPaidOrdersbyClient,
+        resetUnPaidOrder,
         loadUnDeliveredOrders,
         loadDeliveredOrders,
         loadDepositedOrderByDate,
