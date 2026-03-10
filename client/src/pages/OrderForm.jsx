@@ -127,20 +127,45 @@ function OrderForm() {
   }, [params.id]);
 
   const handleSubmitWithLogging = async (values, actions) => {
-    console.log('[OrderForm] Submitting order with values:', values);
-    console.log('[OrderForm] Current cart state:', cart);
+    if (submittingRef.current) return;
+    submittingRef.current = true;
 
     try {
       if (params.id) {
-        console.log('[OrderForm] Updating existing order with ID:', params.id);
+        setLoadingMessage("Modificando orden...");
+        await updateOrder(params.id, { ...values, items: JSON.stringify(cart) });
+        navigate('/');
       } else {
-        console.log('[OrderForm] Creating new order for user ID:', client);
-      }
+        if (!client || client.length === 0) {
+          alert("Por favor selecciona un cliente.");
+          return;
+        }
 
-      await onSubmit(values, actions);
-      console.log('[OrderForm] Order submission successful.');
+        // Check if client has an existing unpaid order to merge into
+        if (unPaidOrder && unPaidOrder.length > 0) {
+          const existingOrder = unPaidOrder[0];
+          const existingItems = safeJSONParse(existingOrder.items, []);
+          const mergedItems = [...existingItems, ...cart];
+          setLoadingMessage("Agregando productos a orden existente...");
+          await updateOrder(existingOrder.id, {
+            items: JSON.stringify(mergedItems),
+          });
+        } else {
+          setLoadingMessage("Creando orden...");
+          await createOrder({
+            clientId: client,
+            shopId: 1,
+            items: JSON.stringify(cart),
+          });
+        }
+        navigate('/');
+      }
     } catch (error) {
       console.error('[OrderForm] Error during order submission:', error);
+      alert("Error al procesar la orden. Intenta de nuevo.");
+    } finally {
+      submittingRef.current = false;
+      setLoadingMessage("");
     }
   };
 
