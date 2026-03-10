@@ -126,6 +126,24 @@ function OrderForm() {
     loadProducts();
   }, [params.id]);
 
+  const handleSubmitWithLogging = async (values, actions) => {
+    console.log('[OrderForm] Submitting order with values:', values);
+    console.log('[OrderForm] Current cart state:', cart);
+
+    try {
+      if (params.id) {
+        console.log('[OrderForm] Updating existing order with ID:', params.id);
+      } else {
+        console.log('[OrderForm] Creating new order for user ID:', client);
+      }
+
+      await onSubmit(values, actions);
+      console.log('[OrderForm] Order submission successful.');
+    } catch (error) {
+      console.error('[OrderForm] Error during order submission:', error);
+    }
+  };
+
   return (
     <div>
       {loadingMessage && (
@@ -190,71 +208,7 @@ function OrderForm() {
         key={params.id || 'new'}
         initialValues={order}
         enableReinitialize={true}
-        onSubmit={async (values, actions) => {
-          if (submittingRef.current) return;
-          submittingRef.current = true;
-          try {
-            // Snapshot cart BEFORE any processing to detect corruption
-            const preSnapshot = createCartSnapshot(cart);
-
-            values.shopId = 1;
-            values.clientId = client;
-
-            if (params.id) {
-              // EDIT existing order
-              values.items = JSON.stringify(cart);
-              delete values.clientName;
-              delete values.premises;
-
-              // Validate serialized items match the snapshot
-              const postSnapshot = createCartSnapshot(safeJSONParse(values.items, []));
-              if (
-                postSnapshot.totalValue !== preSnapshot.totalValue ||
-                postSnapshot.totalQuantity !== preSnapshot.totalQuantity
-              ) {
-                throw new Error('Los productos no coinciden con los valores esperados antes de guardar.');
-              }
-
-              setLoadingMessage("Modificando orden");
-              await updateOrder(params.id, values);
-            } else if (unPaidOrder) {
-              // MERGE with existing unpaid order
-              const existingItems = safeJSONParse(unPaidOrder.items, []);
-              const mergeResult = validateSafeMerge(cart, existingItems);
-
-              if (!mergeResult.isValid) {
-                throw new Error(`Error al combinar pedidos: ${mergeResult.errors.join(', ')}`);
-              }
-
-              values.items = JSON.stringify(mergeResult.mergedItems);
-              setLoadingMessage("Combinando pedidos");
-              await updateOrder(unPaidOrder.id, values);
-            } else {
-              // CREATE new order
-              values.items = JSON.stringify(cart);
-
-              // Validate serialized items match the snapshot
-              const postSnapshot = createCartSnapshot(safeJSONParse(values.items, []));
-              if (
-                postSnapshot.totalValue !== preSnapshot.totalValue ||
-                postSnapshot.totalQuantity !== preSnapshot.totalQuantity
-              ) {
-                throw new Error('Los productos no coinciden con los valores esperados antes de guardar.');
-              }
-
-              setLoadingMessage("Creando orden");
-              await createOrder(values);
-            }
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            window.location.href = '/nuevaOrden';
-          } catch (error) {
-            console.error('[OrderForm] Submit error:', error);
-            setLoadingMessage("");
-            submittingRef.current = false;
-            actions.setSubmitting(false);
-            alert(`Error al guardar el pedido: ${error.message}`);
-          }
-        }}
+        onSubmit={handleSubmitWithLogging}
       >
         {({ handleChange, handleSubmit, values, isSubmitting }) => (
           <Form

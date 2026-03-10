@@ -163,6 +163,8 @@ export const getOrder = async (req, res) => {
 }
 export const createOrder = async (req, res) => {
     try {
+        console.log(`[createOrder] Request body:`, req.body);
+
         const { shopId, clientId, items } = req.body
         if (hasDuplicateItemIds(items)) {
             return res.status(400).json({ message: 'Error: items duplicados detectados. Operación cancelada.' });
@@ -172,19 +174,21 @@ export const createOrder = async (req, res) => {
             clientId,
             items]
         );
+        console.log(`[createOrder] Create result:`, result);
         res.json({
             shopId,
             clientId,
             items,
         })
     } catch (error) {
+        console.error(`[createOrder] Error:`, error);
         return res.status(500).json({ message: error.message });
     }
 }
 export const updateOrder = async (req, res) => {
     try {
-        console.log(`[${new Date().toISOString()}] updateOrder - Order ID: ${req.params.id}`);
-        console.log(`[${new Date().toISOString()}] updateOrder - Update data:`, req.body);
+        console.log(`[updateOrder] Request params:`, req.params);
+        console.log(`[updateOrder] Request body:`, req.body);
 
         if (req.body.items && hasDuplicateItemIds(req.body.items)) {
             return res.status(400).json({ message: 'Error: items duplicados detectados. Operación cancelada.' });
@@ -195,24 +199,11 @@ export const updateOrder = async (req, res) => {
             req.params.id,
         ]);
 
-        console.log(`[${new Date().toISOString()}] updateOrder - Update result:`, {
-            affectedRows: result[0].affectedRows,
-            changedRows: result[0].changedRows
-        });
-
+        console.log(`[updateOrder] Update result:`, result);
         res.json(result);
     } catch (error) {
-        console.error(`[${new Date().toISOString()}] updateOrder - ERROR:`, error);
-        console.error(`[${new Date().toISOString()}] updateOrder - Error details:`, {
-            message: error.message,
-            code: error.code,
-            errno: error.errno,
-            sqlMessage: error.sqlMessage
-        });
-        return res.status(500).json({
-            message: error.message,
-            sqlMessage: error.sqlMessage
-        });
+        console.error(`[updateOrder] Error:`, error);
+        res.status(500).json({ message: error.message });
     }
 }
 export const getOrphanedOrders = async (req, res) => {
