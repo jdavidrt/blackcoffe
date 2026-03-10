@@ -9,7 +9,7 @@ import { Select } from "antd"
 import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
-import { sortProductsByDateDesc } from '../utils/orderUtils';
+import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
 import { createCartSnapshot, validateSafeMerge } from '../utils/orderValidation';
 import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 import ProgressiveProductList from '../components/ProgressiveProductList';
@@ -270,7 +270,7 @@ function OrderForm() {
                 <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
                   <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
                   <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                    {item.id.slice(-14)}
+                    {getItemDisplayTime(item.id)}
                   </p>
                   <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue * item.quantity}</p>
 

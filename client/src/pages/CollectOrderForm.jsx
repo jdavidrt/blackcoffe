@@ -5,7 +5,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
-import { sortProductsByDateDesc } from '../utils/orderUtils';
+import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
 import { DeleteOutlined } from "@ant-design/icons";
 import { Modal, message } from "antd";
 import ProgressiveProductList from '../components/ProgressiveProductList';
@@ -558,7 +558,7 @@ function CollectOrderForm() {
                   />
                   <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
                   <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                    {item.id.slice(-14)}
+                    {getItemDisplayTime(item.id)}
                   </p>
                   <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
                 </div>

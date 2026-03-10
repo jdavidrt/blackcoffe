@@ -42,40 +42,60 @@ export const getUndeliveredItems = (order) => {
 };
 
 /**
+ * Extract display timestamp from item ID.
+ * Handles both old format "productId HH:mm DD/MM/YY" and new format "productId HH:mm:ss DD/MM/YY".
+ * Always displays as "HH:mm DD/MM/YY" (no seconds).
+ */
+export const getItemDisplayTime = (itemId) => {
+  if (!itemId) return '';
+  // New format with seconds: "374 17:08:30 10/03/26" → "17:08 10/03/26"
+  if (itemId.includes(':') && itemId.split(':').length === 3) {
+    return itemId.slice(-17, -12) + itemId.slice(-9);
+  }
+  // Old format without seconds: "374 17:08 10/03/26" → "17:08 10/03/26"
+  return itemId.slice(-14);
+};
+
+/**
+ * Extract full timestamp string from item ID for sorting.
+ * Returns "HH:mm:ss DD/MM/YY" or "HH:mm DD/MM/YY" depending on format.
+ */
+const getItemTimestamp = (itemId) => {
+  if (!itemId) return '';
+  if (itemId.includes(':') && itemId.split(':').length === 3) {
+    return itemId.slice(-17);
+  }
+  return itemId.slice(-14);
+};
+
+/**
  * Sort products by timestamp in descending order (newest first)
- * Product IDs have format: "productId HH:mm DD/MM/YY"
- * Example: "prod123 14:30 15/10/24"
+ * Supports both "HH:mm DD/MM/YY" and "HH:mm:ss DD/MM/YY" formats.
  */
 export const sortProductsByDateDesc = (products) => {
   if (!Array.isArray(products)) return [];
 
   return [...products].sort((a, b) => {
-    // Extract timestamp from product ID (last 14 characters: "HH:mm DD/MM/YY")
-    const timeA = a.id?.slice(-14) || '';
-    const timeB = b.id?.slice(-14) || '';
+    const timeA = getItemTimestamp(a.id);
+    const timeB = getItemTimestamp(b.id);
 
-    // If timestamps are invalid, maintain original order
     if (!timeA || !timeB) return 0;
 
     try {
-      // Parse "HH:mm DD/MM/YY" format
-      const [timePartA, datePartA] = timeA.split(' ');
-      const [timePartB, datePartB] = timeB.split(' ');
+      const partsA = timeA.split(' ');
+      const partsB = timeB.split(' ');
 
-      const [hourA, minA] = timePartA.split(':').map(Number);
-      const [dayA, monthA, yearA] = datePartA.split('/').map(Number);
+      const timePartsA = partsA[0].split(':').map(Number);
+      const [dayA, monthA, yearA] = partsA[1].split('/').map(Number);
 
-      const [hourB, minB] = timePartB.split(':').map(Number);
-      const [dayB, monthB, yearB] = datePartB.split('/').map(Number);
+      const timePartsB = partsB[0].split(':').map(Number);
+      const [dayB, monthB, yearB] = partsB[1].split('/').map(Number);
 
-      // Create date objects (year is 20XX format)
-      const dateA = new Date(2000 + yearA, monthA - 1, dayA, hourA, minA);
-      const dateB = new Date(2000 + yearB, monthB - 1, dayB, hourB, minB);
+      const dateA = new Date(2000 + yearA, monthA - 1, dayA, timePartsA[0], timePartsA[1], timePartsA[2] || 0);
+      const dateB = new Date(2000 + yearB, monthB - 1, dayB, timePartsB[0], timePartsB[1], timePartsB[2] || 0);
 
-      // Sort descending (newest first)
       return dateB - dateA;
     } catch (error) {
-      // If parsing fails, maintain original order
       return 0;
     }
   });

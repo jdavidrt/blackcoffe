@@ -3,7 +3,7 @@ import { useDeposits } from "../context/DepositsProvider";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { safeJSONParse } from '../utils/jsonUtils';
-import { sortProductsByDateDesc } from '../utils/orderUtils';
+import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
 
 function PublicInvoice() {
     const params = useParams();
@@ -112,7 +112,7 @@ function PublicInvoice() {
                             <tr key={product.id}>
                                 <td className="py-2 border border-black text-center">{product.productName} ({product.quantity})</td>
                                 <td className="py-2 border border-black text-center">${product.quantity * product.unitValue}</td>
-                                <td className="py-2 border border-black text-center">{product.id.slice(-14)}</td>
+                                <td className="py-2 border border-black text-center">{getItemDisplayTime(product.id)}</td>
                             </tr>
                         ))}
                     </tbody>

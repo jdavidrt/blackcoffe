@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { LoginOutlined } from '@ant-design/icons';
 import { getOrderItems } from '../utils/jsonUtils';
-import { calculateOrderTotal } from '../utils/orderUtils';
+import { calculateOrderTotal, getItemDisplayTime } from '../utils/orderUtils';
 import { getCurrentDate } from '../utils/dateUtils';
 import { getMallCardStyle } from '../utils/mallUtils';
 import ProgressiveProductList from './ProgressiveProductList';
@@ -82,7 +82,7 @@ function OrderDeliveryCard({ order }) {
             />
             <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
             <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-              {item.id.slice(-14)}
+              {getItemDisplayTime(item.id)}
             </p>
             <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
           </div>
