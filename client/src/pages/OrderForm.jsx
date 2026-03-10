@@ -36,7 +36,7 @@ function OrderForm() {
   const navigate = useNavigate();
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
-  const fechaProducto = dayjs().format('HH:mm DD/MM/YY');
+
   const filteredProducts = products.filter((product) =>
     product.productName.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -296,7 +296,7 @@ function OrderForm() {
             <p className="flex items-center px-2">{product.productName}</p>
             <p className="flex items-center sticky right-0 text-green-500 px-2 py-1 ml-auto">${product.unitValue}</p>
             <p className="">
-              <button className="px-2" type="button" onClick={() => handleAddToCart({ ...product, id: product.id + ' ' + fechaProducto })}
+              <button className="px-2" type="button" onClick={() => handleAddToCart({ ...product, id: product.id + ' ' + dayjs().format('HH:mm:ss DD/MM/YY') })}
               ><PlusCircleOutlined style={{
                 verticalAlign: 'middle'
               }} /></button>
