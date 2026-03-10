@@ -206,20 +206,22 @@ function CollectOrderForm() {
 
     values.paidAt = fechaActual;
     if (params.id) {
-      delete values.clientName;
-      delete values.premises;
-      delete values.createdAt;
-      delete values.clientId;
-      delete values.items;
-      delete values.shopId;
+      // Only send valid orders table columns to avoid "Unknown column" SQL errors
+      const orderUpdate = {
+        deposit: values.deposit,
+        paid: values.paid,
+        paidAt: values.paidAt,
+        collectedBy: values.collectedBy,
+        paymentMethod: values.paymentMethod,
+      };
 
       try {
         console.log('[CollectOrderForm] Creating deposit:', neewDeposit);
         await createDeposit(neewDeposit);
         console.log('[CollectOrderForm] Deposit created successfully');
 
-        console.log('[CollectOrderForm] Updating order:', values);
-        await updateOrder(params.id, values);
+        console.log('[CollectOrderForm] Updating order:', orderUpdate);
+        await updateOrder(params.id, orderUpdate);
         console.log('[CollectOrderForm] Order updated successfully');
       } catch (error) {
         console.error('[CollectOrderForm] ERROR during payment processing:', error);

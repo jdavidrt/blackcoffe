@@ -146,12 +146,12 @@ function OrderForm() {
         }
 
         // Check if client has an existing unpaid order to merge into
-        if (unPaidOrder && unPaidOrder.length > 0) {
-          const existingOrder = unPaidOrder[0];
-          const existingItems = safeJSONParse(existingOrder.items, []);
+        // unPaidOrder is a single order object (not an array) set by getUnPaidOrdersbyClient
+        if (unPaidOrder && unPaidOrder.id) {
+          const existingItems = safeJSONParse(unPaidOrder.items, []);
           const mergedItems = [...existingItems, ...cart];
           setLoadingMessage("Agregando productos a orden existente...");
-          await updateOrder(existingOrder.id, {
+          await updateOrder(unPaidOrder.id, {
             items: JSON.stringify(mergedItems),
           });
         } else {
