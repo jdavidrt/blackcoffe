@@ -133,7 +133,11 @@ function OrderForm() {
     try {
       if (params.id) {
         setLoadingMessage("Modificando orden...");
-        await updateOrder(params.id, { ...values, items: JSON.stringify(cart) });
+        await updateOrder(params.id, {
+          clientId: client || values.clientId,
+          shopId: values.shopId,
+          items: JSON.stringify(cart),
+        });
         navigate('/');
       } else {
         if (!client || client.length === 0) {
