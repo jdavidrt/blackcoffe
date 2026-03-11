@@ -1,4 +1,9 @@
+import { useId } from "react";
+
 function CoffeePouringAnimation() {
+  const uid = useId();
+  const clipId = `cupClip-${uid}`;
+
   return (
     <svg
       width="80"
@@ -7,7 +12,7 @@ function CoffeePouringAnimation() {
       xmlns="http://www.w3.org/2000/svg"
       className="mb-4"
     >
-      <g id="coffee-cup-with-plate">
+      <g>
         {/* Plate/Saucer */}
         <ellipse
           cx="60"
@@ -26,7 +31,7 @@ function CoffeePouringAnimation() {
 
         {/* Cup Body - Rounded */}
         <defs>
-          <clipPath id="cupClip">
+          <clipPath id={clipId}>
             <path d="M 38 45 Q 37 50 38 55 L 38 70 Q 38 78 45 82 Q 52 85 60 85 Q 68 85 75 82 Q 82 78 82 70 L 82 55 Q 83 50 82 45 Z" />
           </clipPath>
         </defs>
@@ -57,7 +62,7 @@ function CoffeePouringAnimation() {
           width="50"
           height="40"
           fill="#6B3410"
-          clipPath="url(#cupClip)"
+          clipPath={`url(#${clipId})`}
         >
           <animate
             attributeName="y"
@@ -97,7 +102,7 @@ function CoffeePouringAnimation() {
 
         {/* Cup Handle - Rounded */}
         <path
-          d="M 82 50 Q 95 55 98 65 Q 95 75 82 70"
+          d="M 82 52 C 104 44 100 72 82 68"
           fill="none"
           stroke="#8B4513"
           strokeWidth="3"

@@ -5,6 +5,7 @@ import { useProducts } from "../context/ProductProvider";
 import { PlusCircleOutlined } from "@ant-design/icons";
 import { Link } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
+import CoffeePouringAnimation from "../components/CoffeePouringAnimation";
 
 function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,7 +31,8 @@ function ProductsPage() {
   function renderMain() {
     if (loading) {
       return (
-        <div className="flex items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+        <div className="flex flex-col items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+          <CoffeePouringAnimation />
           <div className="text-white text-2xl">Cargando...</div>
         </div>
       );

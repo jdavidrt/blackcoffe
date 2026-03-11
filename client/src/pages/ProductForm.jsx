@@ -2,6 +2,7 @@ import { Form, Formik } from "formik";
 import { useProducts } from "../context/ProductProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import CoffeePouringAnimation from "../components/CoffeePouringAnimation";
 
 function ProductForm() {
   const { createProduct, getProduct, updateProduct } = useProducts();
@@ -63,7 +64,8 @@ function ProductForm() {
               {params.id ? "Editar Producto" : "Nuevo Producto"}
             </h1>
             {loading ? (
-              <div className="flex items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+              <div className="flex flex-col items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+                <CoffeePouringAnimation />
                 <div className="text-white text-2xl">Cargando...</div>
               </div>
             ) : (

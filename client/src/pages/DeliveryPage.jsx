@@ -3,6 +3,7 @@ import OrderDeliveryCard from "../components/OrderDeliveryCard";
 import { useOrders } from "../context/OrderProvider";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
+import CoffeePouringAnimation from "../components/CoffeePouringAnimation";
 
 function DeliveryOrdersPage() {
     const [searchTerm, setSearchTerm] = useState('');
@@ -33,7 +34,8 @@ function DeliveryOrdersPage() {
     function renderMain() {
         if (loading) {
             return (
-                <div className="flex items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+                <div className="flex flex-col items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+                    <CoffeePouringAnimation />
                     <div className="text-white text-2xl">Cargando...</div>
                 </div>
             );
