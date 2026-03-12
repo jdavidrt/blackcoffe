@@ -43,7 +43,7 @@ function OrdersPage() {
   const handleSubmit = event => {
     event.preventDefault();
     // Verificar si la clave ingresada es correcta
-    if (clave === '0114') { // Reemplaza 'tuclave' con la clave correcta
+    if (clave === '031421') { // Reemplaza 'tuclave' con la clave correcta
       setMostrarContenido(true);
     } else {
       alert('Clave incorrecta. Por favor, inténtalo de nuevo.');
