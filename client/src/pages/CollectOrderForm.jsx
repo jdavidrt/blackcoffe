@@ -5,7 +5,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
-import { sortProductsByDateDesc } from '../utils/orderUtils';
+import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
 import { DeleteOutlined } from "@ant-design/icons";
 import { Modal, message } from "antd";
 import ProgressiveProductList from '../components/ProgressiveProductList';
@@ -206,20 +206,22 @@ function CollectOrderForm() {
 
     values.paidAt = fechaActual;
     if (params.id) {
-      delete values.clientName;
-      delete values.premises;
-      delete values.createdAt;
-      delete values.clientId;
-      delete values.items;
-      delete values.shopId;
+      // Only send valid orders table columns to avoid "Unknown column" SQL errors
+      const orderUpdate = {
+        deposit: values.deposit,
+        paid: values.paid,
+        paidAt: values.paidAt,
+        collectedBy: values.collectedBy,
+        paymentMethod: values.paymentMethod,
+      };
 
       try {
         console.log('[CollectOrderForm] Creating deposit:', neewDeposit);
         await createDeposit(neewDeposit);
         console.log('[CollectOrderForm] Deposit created successfully');
 
-        console.log('[CollectOrderForm] Updating order:', values);
-        await updateOrder(params.id, values);
+        console.log('[CollectOrderForm] Updating order:', orderUpdate);
+        await updateOrder(params.id, orderUpdate);
         console.log('[CollectOrderForm] Order updated successfully');
       } catch (error) {
         console.error('[CollectOrderForm] ERROR during payment processing:', error);
@@ -556,7 +558,7 @@ function CollectOrderForm() {
                   />
                   <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
                   <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                    {item.id.slice(-14)}
+                    {getItemDisplayTime(item.id)}
                   </p>
                   <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
                 </div>

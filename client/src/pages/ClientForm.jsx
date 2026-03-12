@@ -2,6 +2,7 @@ import { Form, Formik } from "formik";
 import { useClients } from "../context/ClientProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import CoffeePouringAnimation from "../components/CoffeePouringAnimation";
 
 function ClientForm() {
   const { createClient, getClient, updateClient } = useClients();
@@ -69,7 +70,8 @@ function ClientForm() {
               {params.id ? "Editar Cliente" : "Nuevo Cliente"}
             </h1>
             {loading ? (
-              <div className="flex items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+              <div className="flex flex-col items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+                <CoffeePouringAnimation />
                 <div className="text-white text-2xl">Cargando...</div>
               </div>
             ) : (

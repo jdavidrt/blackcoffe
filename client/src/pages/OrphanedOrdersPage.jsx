@@ -2,10 +2,11 @@ import React, { useEffect, useState } from "react";
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { DeleteOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
-import { calculateOrderTotal } from '../utils/orderUtils';
+import { calculateOrderTotal, getItemDisplayTime } from '../utils/orderUtils';
 import { safeJSONParse } from '../utils/jsonUtils';
 import SearchBar from "../components/SearchBar";
 import ProgressiveProductList from '../components/ProgressiveProductList';
+import CoffeePouringAnimation from "../components/CoffeePouringAnimation";
 
 function OrphanedOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,7 +48,8 @@ function OrphanedOrdersPage() {
   function renderMain() {
     if (loading) {
       return (
-        <div className="flex items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+        <div className="flex flex-col items-center justify-center h-screen bg-opacity-50 bg-gray-500">
+          <CoffeePouringAnimation />
           <div className="text-white text-2xl">Cargando...</div>
         </div>
       );
@@ -101,7 +103,7 @@ function OrphanedOrdersPage() {
                   <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
                     <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
                     <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                      {item.id.slice(-14)}
+                      {getItemDisplayTime(item.id)}
                     </p>
                     <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${(item.quantity * item.unitValue)?.toLocaleString()}</p>
                   </div>

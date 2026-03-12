@@ -1,5 +1,14 @@
 import pool from '../db.js'
 
+const hasDuplicateItemIds = (itemsJson) => {
+    try {
+        const items = JSON.parse(itemsJson);
+        if (!Array.isArray(items)) return false;
+        const ids = items.map(i => i.id);
+        return ids.length !== new Set(ids).size;
+    } catch { return false; }
+};
+
 export const getOrders = async (req, res) => {
     const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
     res.json(result)
@@ -154,49 +163,47 @@ export const getOrder = async (req, res) => {
 }
 export const createOrder = async (req, res) => {
     try {
+        console.log(`[createOrder] Request body:`, req.body);
+
         const { shopId, clientId, items } = req.body
+        if (hasDuplicateItemIds(items)) {
+            return res.status(400).json({ message: 'Error: items duplicados detectados. Operación cancelada.' });
+        }
         const result = await pool.query("INSERT INTO orders(shopId, clientId, items) VALUES (?, ?, ?)", [
             shopId,
             clientId,
             items]
         );
+        console.log(`[createOrder] Create result:`, result);
         res.json({
             shopId,
             clientId,
             items,
         })
     } catch (error) {
+        console.error(`[createOrder] Error:`, error);
         return res.status(500).json({ message: error.message });
     }
 }
 export const updateOrder = async (req, res) => {
     try {
-        console.log(`[${new Date().toISOString()}] updateOrder - Order ID: ${req.params.id}`);
-        console.log(`[${new Date().toISOString()}] updateOrder - Update data:`, req.body);
+        console.log(`[updateOrder] Request params:`, req.params);
+        console.log(`[updateOrder] Request body:`, req.body);
+
+        if (req.body.items && hasDuplicateItemIds(req.body.items)) {
+            return res.status(400).json({ message: 'Error: items duplicados detectados. Operación cancelada.' });
+        }
 
         const result = await pool.query("UPDATE orders SET ? WHERE id = ?", [
             req.body,
             req.params.id,
         ]);
 
-        console.log(`[${new Date().toISOString()}] updateOrder - Update result:`, {
-            affectedRows: result[0].affectedRows,
-            changedRows: result[0].changedRows
-        });
-
+        console.log(`[updateOrder] Update result:`, result);
         res.json(result);
     } catch (error) {
-        console.error(`[${new Date().toISOString()}] updateOrder - ERROR:`, error);
-        console.error(`[${new Date().toISOString()}] updateOrder - Error details:`, {
-            message: error.message,
-            code: error.code,
-            errno: error.errno,
-            sqlMessage: error.sqlMessage
-        });
-        return res.status(500).json({
-            message: error.message,
-            sqlMessage: error.sqlMessage
-        });
+        console.error(`[updateOrder] Error:`, error);
+        res.status(500).json({ message: error.message });
     }
 }
 export const getOrphanedOrders = async (req, res) => {

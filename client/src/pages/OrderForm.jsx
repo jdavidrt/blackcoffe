@@ -3,21 +3,23 @@ import { useOrders } from "../context/OrderProvider";
 import { useClients } from "../context/ClientProvider";
 import { useProducts } from "../context/ProductProvider";
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PlusCircleOutlined, MinusCircleOutlined } from "@ant-design/icons";
 import { Select } from "antd"
 import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
-import { sortProductsByDateDesc } from '../utils/orderUtils';
+import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
+import { createCartSnapshot, validateSafeMerge } from '../utils/orderValidation';
+import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function OrderForm() {
-  const { unPaidOrder, createOrder, getOrder, updateOrder, getUnPaidOrdersbyClient } = useOrders();
+  const { unPaidOrder, createOrder, getOrder, updateOrder, getUnPaidOrdersbyClient, resetUnPaidOrder } = useOrders();
   const { products, loadProducts, } = useProducts();
   const { clients, loadClients } = useClients()
   const [refresh, setRefresh] = useState(true);
-  const [client, setClient] = useState([]);
+  const [client, setClient] = useState(null);
   const [cart, setCart] = useState([]);
   const [clientChanged, setClientChanged] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,18 +29,20 @@ function OrderForm() {
     shopId: "1",
     items: ""
   });
+  const submittingRef = useRef(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
+  const [formKey, setFormKey] = useState(0);
   const params = useParams();
   const navigate = useNavigate();
   const dateFormat = 'YYYY-MM-DD';
   const fechaActual = dayjs().format('YYYY-MM-DD');
-  const fechaProducto = dayjs().format('HH:mm DD/MM/YY');
+
   const filteredProducts = products.filter((product) =>
     product.productName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (location.pathname.includes('nuevaOrden') && refresh) {
-    setCart([]);
-    setRefresh(false)
+    setRefresh(false);
   }
 
   const handleAddToCart = (product) => {
@@ -106,14 +110,96 @@ function OrderForm() {
           clientName: order.clientName,
           premises: order.premises
         });
+      } else {
+        setMall("Alta Tecnología");
+        loadClients("Alta Tecnología");
+        setClient(null);
+        setCart([]);
+        setOrder({
+          clientId: "",
+          shopId: "1",
+          items: ""
+        });
+        setClientChanged(false);
       }
     };
     loadOrder();
     loadProducts();
-  }, []);
+  }, [params.id]);
+
+  const handleSubmitWithLogging = async (values, actions) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
+    try {
+      if (params.id) {
+        setLoadingMessage("Modificando orden...");
+        await updateOrder(params.id, {
+          clientId: client || values.clientId,
+          shopId: values.shopId,
+          items: JSON.stringify(cart),
+        });
+        navigate('/');
+      } else {
+        if (!client) {
+          alert("Por favor selecciona un cliente.");
+          return;
+        }
+
+        // Check if client has an existing unpaid order to merge into
+        // unPaidOrder is a single order object (not an array) set by getUnPaidOrdersbyClient
+        if (unPaidOrder && unPaidOrder.id) {
+          const existingItems = safeJSONParse(unPaidOrder.items, []);
+          const mergedItems = [...existingItems, ...cart];
+          setLoadingMessage("Agregando productos a orden existente...");
+          await updateOrder(unPaidOrder.id, {
+            items: JSON.stringify(mergedItems),
+          });
+        } else {
+          setLoadingMessage("Creando orden...");
+          await createOrder({
+            clientId: client,
+            shopId: 1,
+            items: JSON.stringify(cart),
+          });
+        }
+        // Reset form fully for next order
+        setCart([]);
+        setClient(null);
+        setClientChanged(false);
+        setOrder({ clientId: "", shopId: "1", items: "" });
+        setMall("Alta Tecnología");
+        loadClients("Alta Tecnología");
+        setSearchTerm('');
+        resetUnPaidOrder();
+        setFormKey(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('[OrderForm] Error during order submission:', error);
+      alert("Error al procesar la orden. Intenta de nuevo.");
+    } finally {
+      submittingRef.current = false;
+      setLoadingMessage("");
+    }
+  };
 
   return (
     <div>
+      {loadingMessage && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-2xl p-8 max-w-sm mx-4">
+            <div className="flex flex-col items-center">
+              <CoffeePouringAnimation />
+              <h2 className="text-xl font-bold text-gray-800 text-center">
+                {loadingMessage}
+              </h2>
+              <p className="text-sm text-gray-600 mt-2 text-center">
+                Por favor espere...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <h1 className="text-xl font-bold uppercase text-center">
         {params.id ? "Editar Orden" : "Nueva Orden"}
       </h1>
@@ -145,7 +231,7 @@ function OrderForm() {
             </Select.Option>
           ))}
         </Select> :
-          <Select onChange={selectClient} showSearch optionFilterProp="children" placeholder="Seleccionar cliente" name="clientId" className="px-2 py-1 rounded-sm w-100%">
+          <Select key={formKey} onChange={selectClient} showSearch optionFilterProp="children" placeholder="Seleccionar cliente" name="clientId" className="px-2 py-1 rounded-sm w-100%">
             {params.id ? <Select.Option selected="selected" title={order.clientId} label={order.clientId} value={order.clientId}>{order.premises} - {order.clientName}</Select.Option> : <Select.Option value={1}> </Select.Option>}
             {clients.map((client) => (
               <Select.Option title={client.id} value={client.id}>
@@ -158,48 +244,10 @@ function OrderForm() {
       <div className="py-2" />
 
       <Formik
+        key={params.id || `new-${formKey}`}
         initialValues={order}
         enableReinitialize={true}
-        onSubmit={async (values, actions) => {
-          values.shopId = 1;
-          values.clientId = client;
-          getUnPaidOrdersbyClient(client);
-          values.items = JSON.stringify(cart)
-          if (params.id) {
-            delete values.clientName;
-            delete values.premises;
-            await updateOrder(params.id, values);
-          } else if (unPaidOrder) {
-            const array1 = safeJSONParse(values.items, []);
-            const array2 = safeJSONParse(unPaidOrder.items, []);
-            const mergedJson = array1.concat(array2);
-            const idMap = {};
-            mergedJson.forEach((item) => {
-              const { id, quantity } = item;
-              if (idMap[id]) {
-                // Si ya existe el ID en el mapa, sumar la cantidad
-                idMap[id].quantity += quantity;
-              } else {
-                // Si no existe el ID en el mapa, agregar el elemento al mapa
-                idMap[id] = { ...item };
-              }
-            });
-            const resultArray = Object.values(idMap);
-            values.items = JSON.stringify(resultArray);
-            setCart(safeJSONParse(unPaidOrder.items, []))
-            await updateOrder(unPaidOrder.id, values)
-          } else {
-            await createOrder(values);
-            window.location.reload();
-          }
-          navigate("/nuevaOrden");
-          window.location.reload();
-          if (client == [] || cart == []) {
-            alert("Por favor selecciona un cliente y agrega propductos para crear la orden");
-          } else {
-            setOrder({ order });
-          }
-        }}
+        onSubmit={handleSubmitWithLogging}
       >
         {({ handleChange, handleSubmit, values, isSubmitting }) => (
           <Form
@@ -222,7 +270,7 @@ function OrderForm() {
                 <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
                   <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
                   <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                    {item.id.slice(-14)}
+                    {getItemDisplayTime(item.id)}
                   </p>
                   <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.unitValue * item.quantity}</p>
 
@@ -242,13 +290,13 @@ function OrderForm() {
         }
       </Formik >
       <div>
-        <SearchBar onSearch={setSearchTerm} />
+        <SearchBar key={formKey} onSearch={setSearchTerm} />
         {filteredProducts.map((product) => (
           <div className="bg-stone-100 rounded-md m-2 flex font-bold" key={(product.id)}>
             <p className="flex items-center px-2">{product.productName}</p>
             <p className="flex items-center sticky right-0 text-green-500 px-2 py-1 ml-auto">${product.unitValue}</p>
             <p className="">
-              <button className="px-2" type="button" onClick={() => handleAddToCart({ ...product, id: product.id + ' ' + fechaProducto })}
+              <button className="px-2" type="button" onClick={() => handleAddToCart({ ...product, id: product.id + ' ' + dayjs().format('HH:mm:ss DD/MM/YY') })}
               ><PlusCircleOutlined style={{
                 verticalAlign: 'middle'
               }} /></button>

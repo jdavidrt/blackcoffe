@@ -17,7 +17,8 @@
       "Bash(then mkdir -p _archived)",
       "Bash(else echo \"File not found, may already be archived\")",
       "Bash(fi)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(find /c/Users/jutorres/Documents/Repos/BlackCofee/BLAKE3/blackcoffe -name .env* -type f)"
     ],
     "deny": [],
     "ask": []
