@@ -2,6 +2,7 @@ import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { DollarOutlined } from '@ant-design/icons';
 import { calculateOrderTotal } from '../utils/orderUtils';
+import { formatDate } from '../utils/dateUtils';
 
 function orderCard({ order }) {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ function orderCard({ order }) {
 
   return (
     <div className="flex bg-stone-100 text-black rounded-md m-2">
-      <span>{order.createAt}</span>
+      <span>{formatDate(order.createAt)}</span>
       <b>
         <p className="p-2 flex items-center h-content">
           {order.premises} {order.clientName} - {order.mall}

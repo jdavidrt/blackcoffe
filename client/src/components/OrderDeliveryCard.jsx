@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { LoginOutlined } from '@ant-design/icons';
 import { getOrderItems } from '../utils/jsonUtils';
 import { calculateOrderTotal, getItemDisplayTime } from '../utils/orderUtils';
-import { getCurrentDate } from '../utils/dateUtils';
+import { getCurrentDate, formatDate } from '../utils/dateUtils';
 import { getMallCardStyle } from '../utils/mallUtils';
 import ProgressiveProductList from './ProgressiveProductList';
 
@@ -47,7 +47,7 @@ function OrderDeliveryCard({ order }) {
   return (
     <div className={getMallCardStyle(order.mall)}>
       <div className="flex">
-        <span>{order.createAt}</span>
+        <span>{formatDate(order.createAt)}</span>
         <b>
           <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p>
         </b>

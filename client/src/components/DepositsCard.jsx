@@ -2,7 +2,7 @@ import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { DollarOutlined } from '@ant-design/icons';
 import { calculateOrderTotal } from '../utils/orderUtils';
-import { formatDepositDateTime } from '../utils/dateUtils';
+import { formatDepositDateTime, formatDate } from '../utils/dateUtils';
 
 function depositsCard({ order }) {
   const navigate = useNavigate();
@@ -16,7 +16,7 @@ function depositsCard({ order }) {
           : 'bg-stone-100 text-black'
       }`}
     >
-      <span>{order.createAt}</span>
+      <span>{formatDate(order.createAt)}</span>
       <b>
         <p className="p-2 flex items-center h-content">
           {isDeleted && <span className="text-red-600 font-bold mr-2">[ELIMINADO]</span>}

@@ -146,7 +146,7 @@ function AbandonedOrdersPage() {
                 {/* Abandonment Info */}
                 <div className="bg-red-50 rounded-md p-2 mb-3">
                   <p className="text-xs text-red-700">
-                    <strong>Abandonada:</strong> {dayjs(order.abandonedAt).format('DD/MM/YYYY HH:mm')}
+                    <strong>Abandonada:</strong> {dayjs(order.abandonedAt).format('DD/MM/YY HH:mm')}
                   </p>
                   {order.abandonedBy && (
                     <p className="text-xs text-red-700">
@@ -159,7 +159,7 @@ function AbandonedOrdersPage() {
                     </p>
                   )}
                   <p className="text-xs text-gray-600 mt-1">
-                    <strong>Creada:</strong> {dayjs(order.createdAt).format('DD/MM/YYYY')}
+                    <strong>Creada:</strong> {dayjs(order.createdAt).format('DD/MM/YY')}
                   </p>
                 </div>
 

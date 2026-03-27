@@ -8,6 +8,7 @@ import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
 import { DeleteOutlined } from "@ant-design/icons";
 import { Modal, message } from "antd";
+import { formatDate } from '../utils/dateUtils';
 import ProgressiveProductList from '../components/ProgressiveProductList';
 import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 
@@ -294,7 +295,7 @@ function CollectOrderForm() {
               premises: order.premises,
               createdAt: order.createdAt.slice(0, 10),
               paid: order.paid,
-              paidAt: order.paidAt ? order.paidAt.slice(0, 10) : null,
+              paidAt: order.paidAt ? formatDate(order.paidAt) : null,
               deposit: order.deposit,
               collectedBy: order.mall
             });
@@ -367,7 +368,7 @@ function CollectOrderForm() {
                 <p className="text-xs mt-1">Razón: {order.abandonReason}</p>
               )}
               {order.abandonedAt && (
-                <p className="text-xs">Abandonada: {dayjs(order.abandonedAt).format('DD/MM/YYYY HH:mm')}</p>
+                <p className="text-xs">Abandonada: {dayjs(order.abandonedAt).format('DD/MM/YY HH:mm')}</p>
               )}
             </div>
           </div>

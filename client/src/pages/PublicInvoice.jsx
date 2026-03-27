@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
+import { formatDate } from '../utils/dateUtils';
 
 function PublicInvoice() {
     const params = useParams();
@@ -57,9 +58,9 @@ function PublicInvoice() {
                         items: cart,
                         clientName: order.clientName,
                         premises: order.premises,
-                        createdAt: order.createdAt.slice(0, 10),
+                        createdAt: formatDate(order.createdAt),
                         paid: order.paid,
-                        paidAt: order.paidAt ? order.paidAt.slice(0, 10) : null,
+                        paidAt: order.paidAt ? formatDate(order.paidAt) : null,
                         deposit: order.deposit
                     }) : setOrder({
                         orderId: order.id,
@@ -68,7 +69,7 @@ function PublicInvoice() {
                         items: cart,
                         clientName: order.clientName,
                         premises: order.premises,
-                        createdAt: order.createdAt.slice(0, 10),
+                        createdAt: formatDate(order.createdAt),
                         deposit: order.deposit
                     })
             }
@@ -194,7 +195,7 @@ function PublicInvoice() {
                                             <tr key={deposit.depositId}>
                                                 <td className="py-2 border border-black text-center">{index + 1}</td>
                                                 <td className="py-2 border border-black text-center">
-                                                    {deposit.depositCreatedAt.slice(0, 10)}
+                                                    {formatDate(deposit.depositCreatedAt)}
                                                 </td>
                                                 <td className="py-2 border border-black text-center">
                                                     {deposit.paymentMethod}

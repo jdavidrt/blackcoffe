@@ -407,6 +407,83 @@ Orders are the central entity with complex state tracking:
 - **Payment Tracking**: Supports partial payments through deposits system
 - **Abandoned Orders** 🆕: Orders can be marked as abandoned with reason tracking, excluded from active lists, and reactivated if needed
 
+### Core Business Rules
+
+#### 1. One Unpaid Order Per Client (Order Merging)
+When creating a new order via `/nuevaOrden` for a client who already has an unpaid order, the system **merges new products into the existing order** instead of creating a second one. This prevents order fragmentation — each client has at most one active (unpaid) order at any time.
+
+**Implementation flow:**
+1. User selects a client in `OrderForm.jsx` → `selectClient()` (line 85-90) triggers `getUnPaidOrdersbyClient(clientId)`
+2. `OrderProvider.jsx:89-96` fetches unpaid orders for that client and stores only the first result in `unPaidOrder` state
+3. On form submit (`OrderForm.jsx:149-157`):
+   - If `unPaidOrder && unPaidOrder.id` → calls `updateOrder()` with `[...existingItems, ...newCartItems]` (MERGE)
+   - If no unpaid order exists → calls `createOrder()` (NEW ORDER)
+4. After successful save in create mode: form resets (cart cleared, client cleared, mall defaults to "Alta Tecnología"), `resetUnPaidOrder()` called
+5. After successful save in edit mode: navigates to `/`
+
+**Backend validation:** `hasDuplicateItemIds()` in `orders.controllers.js:3-10` rejects submissions (HTTP 400) if duplicate item IDs are detected in the items JSON, preventing data corruption during merges.
+
+#### 2. Item ID Generation & Uniqueness
+Each product added to the cart receives a composite ID: `{productId} {HH:mm:ss} {DD/MM/YY}`
+
+**Example:** Product ID `374` added at 5:08:30 PM on March 10, 2026 → `"374 17:08:30 10/03/26"`
+
+- Generated at `OrderForm.jsx:299`: `product.id + ' ' + dayjs().format('HH:mm:ss DD/MM/YY')`
+- Makes each addition globally unique, even for the same product added at different times or across merged orders
+- Display utility `getItemDisplayTime()` in `orderUtils.js` strips seconds for readability: `"17:08 10/03/26"`
+
+#### 3. Cart Quantity Logic
+- **Adding from product catalog** (clicking + next to a product): Always creates a NEW cart item with a unique timestamp-based ID. Each click = new item entry.
+- **+/- buttons on existing cart items** (`handleAddOneToCart`/`handleRemoveFromCart`): Modify quantity of that specific item by ID
+- **Auto-removal:** Items reaching quantity 0 are automatically removed from the cart
+- **After merge:** Items from different order sessions have different IDs and are NOT deduplicated by product name — they appear as separate line items
+
+#### 4. Per-Item Delivery Tracking
+Delivery is tracked at the **individual item level**, not at the order level. Each item in the order's JSON `items` array has:
+- `delivered: boolean` — whether this item has been delivered (initially `false`)
+- `deliveredAt: "YYYY-MM-DD"` — date delivered (initially `""`)
+
+**Delivery workflow** (`OrderDeliveryCard.jsx`):
+1. Delivery driver checks checkbox next to item
+2. System sets `delivered = true`, `deliveredAt = getCurrentDate()`
+3. Calls `updateOrder()` with updated items JSON
+4. Page reloads after 3-second delay
+
+**Backend query patterns:**
+- Undelivered orders: `WHERE orders.items LIKE '%"delivered":false%'` (`orders.controllers.js:36`)
+- Delivered by date: `WHERE orders.items LIKE CONCAT('%"deliveredAt":"', ?, '"%')` (`orders.controllers.js:65`)
+
+#### 5. paidAt Conditional Logic (Fixed in commit 7dd34ea)
+`paidAt` is **ONLY set when the order becomes fully paid** (`paid = 1`):
+```javascript
+const orderUpdate = {
+  deposit: values.deposit,
+  paid: values.paid,
+  collectedBy: values.collectedBy,
+  paymentMethod: values.paymentMethod,
+  ...(values.paid === 1 && { paidAt: fechaActual }),  // CONDITIONAL
+};
+```
+- Format: `YYYY-MM-DD` in Colombia local time via `dayjs().format('YYYY-MM-DD')`
+- Null-safe read: `order.paidAt ? order.paidAt.slice(0, 10) : null` (in Invoice.jsx, PublicInvoice.jsx, CollectOrderForm.jsx)
+- Backend validation: `DATE(orders.paidAt) = ? AND orders.paid = 1` in `getDepositedOrdersByDate` query
+- **History:** Previously bugged — `paidAt` was set on every deposit regardless of payment status, causing 106 orders to have stale `paidAt` values while `paid = 0`
+
+#### 6. Full Payment Detection
+There is no "Cobrar Total" button — the user enters the exact remaining amount manually in the deposit field. The system auto-detects full payment:
+```javascript
+if (values.deposit >= calculateTotal()) {
+  values.paid = 1;  // Mark as fully paid
+}
+```
+- Payment confirmation modal shows: current debt (red), deposit amount (green), new debt (orange or green if zero)
+- Green badge "Orden completamente pagada!" when new debt = 0
+- Confirm button disabled when deposit amount = 0
+- Overpayment prevention: validation rejects amounts exceeding remaining balance
+
+#### 7. Known Bug: collectedBy Field
+`collectedBy` is currently set to `order.mall` (e.g., "Unilago") in `CollectOrderForm.jsx:299,311` instead of the actual username who collected the payment. This should be fixed to capture `localStorage.getItem('user')`.
+
 ### Deposits and Payment System
 The BlackCoffe system implements a comprehensive payment tracking system that supports both partial payments (deposits) and full order payments. This system allows café managers to handle complex payment scenarios where customers may pay in installments or make partial payments over time.
 
@@ -543,10 +620,9 @@ The system supports multiple payment methods:
    - Current debt = `calculateTotal() - order.deposit`
    - Displays current balance to user
 
-4. **Full Payment Selection**
-   - User clicks "Cobrar Total" (Charge Full) button
-   - Sets `depositedTotal = true` flag in `CollectOrderForm.jsx:34`
-   - System automatically calculates exact remaining amount
+4. **Full Payment Entry**
+   - User enters the exact remaining amount in the deposit field
+   - System auto-detects full payment when `deposit >= calculateTotal()`
 
 5. **Payment Confirmation Modal**
    - Displays payment breakdown:
@@ -688,8 +764,8 @@ Current Deposit: 0 COP
 4. Remaining balance: 17,000 COP
 
 **Step 3: Final Payment (Complete Order)**
-1. Click "Cobrar Total" button (`depositedTotal = true`)
-2. System calculates remaining: 52,000 - 35,000 = 17,000 COP
+1. User enters remaining amount: 17,000 COP in deposit field
+2. System detects: 35,000 + 17,000 = 52,000 >= order total
 3. Creates final deposit:
    ```sql
    INSERT INTO deposits (orderId, clientId, paymentMethod, depositValue, lastDeposit, newDeposit)
@@ -1193,8 +1269,8 @@ The BlackCoffe system provides a comprehensive navigation menu with role-based a
   - Current deposit amount
   - Remaining balance
 - **Payment Options**:
-  - **Partial Payment**: Enter specific amount to pay
-  - **Full Payment**: "Cobrar Total" button to complete order
+  - **Partial Payment**: Enter specific amount in deposit field
+  - **Full Payment**: Enter exact remaining amount — system auto-detects full payment and marks order as paid
 - **Payment Methods**:
   - Efectivo (Cash)
   - Plataforma (Digital Platform)

@@ -16,13 +16,15 @@ function DeliveredOrdersPage() {
     const [loading, setLoading] = useState(false);
     const { orders, loadDeliveredOrders } = useOrders();
 
-    const dateFormat = 'YYYY-MM-DD';
-    const fechaActual = dayjs().format('YYYY-MM-DD');
-    const onDatePickerChange = async (date, dateString) => {
+    const dateFormat = 'DD/MM/YY';
+    const backendFormat = 'YYYY-MM-DD';
+    const fechaActual = dayjs().format(backendFormat);
+    const onDatePickerChange = async (date) => {
         setLoading(true);
         try {
-            await (dateString ? loadDeliveredOrders(dateString) : loadDeliveredOrders(fechaActual));
-            dateString ? localStorage.setItem('dateFilter', dateString) : localStorage.setItem('dateFilter', fechaActual)
+            const formattedDate = date ? date.format(backendFormat) : fechaActual;
+            await loadDeliveredOrders(formattedDate);
+            localStorage.setItem('dateFilter', formattedDate);
         } finally {
             setLoading(false);
         }
@@ -115,7 +117,7 @@ function DeliveredOrdersPage() {
                         C.F.
                     </button>
                     <div className="ml-auto">
-                        <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, dateFormat)} format={dateFormat} />
+                        <DatePicker onChange={onDatePickerChange} defaultValue={dayjs(fechaActual, backendFormat)} format={dateFormat} />
                     </div>
                 </div>
             </div>

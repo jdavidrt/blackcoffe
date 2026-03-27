@@ -12,6 +12,7 @@ import dayjs from "dayjs"; import {
 } from "@react-pdf/renderer";
 import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc } from '../utils/orderUtils';
+import { formatDate } from '../utils/dateUtils';
 
 const styles = StyleSheet.create({
     page: {
@@ -89,9 +90,9 @@ function Invoice() {
                         items: cart,
                         clientName: order.clientName,
                         premises: order.premises,
-                        createdAt: order.createdAt.slice(0, 10),
+                        createdAt: formatDate(order.createdAt),
                         paid: order.paid,
-                        paidAt: order.paidAt ? order.paidAt.slice(0, 10) : null,
+                        paidAt: order.paidAt ? formatDate(order.paidAt) : null,
                         deposit: order.deposit
                     }) : setOrder({
                         orderId: order.id,
@@ -100,7 +101,7 @@ function Invoice() {
                         items: cart,
                         clientName: order.clientName,
                         premises: order.premises,
-                        createdAt: order.createdAt.slice(0, 10),
+                        createdAt: formatDate(order.createdAt),
                         deposit: order.deposit
                     })
             }
@@ -203,7 +204,7 @@ function Invoice() {
                                 {deposits.map((deposit, index) => (
                                     <tr key={deposit.depositId}>
                                         <td>{index + 1}.</td>
-                                        <td>{deposit.depositCreatedAt.slice(0, 10)}</td>
+                                        <td>{formatDate(deposit.depositCreatedAt)}</td>
                                         <td>{deposit.paymentMethod}</td>
                                         <td>${deposit.depositValue}</td>
                                     </tr>

@@ -55,7 +55,7 @@ blackcoffe/
 │   │   ├── 📁 pages/            # Application pages/views
 │   │   │   ├── ClientForm.jsx   # Customer creation/editing
 │   │   │   ├── ClientsPage.jsx  # Customer management dashboard
-│   │   │   ├── CollectedOrdersPage.jsx # Completed orders view
+│   │   │   ├── _archived/CollectedOrdersPage.jsx # Archived (merged into DepositedOrdersPage)
 │   │   │   ├── CollectOrderForm.jsx # Order payment interface
 │   │   │   ├── CollectOrdersPage.jsx # Orders ready for collection
 │   │   │   ├── DeliveredPage.jsx # Delivered orders tracking
@@ -129,7 +129,7 @@ blackcoffe/
 ├── 💰 Order Processing & Payments
 │   ├── `/cobrarOrdenes/:mall` - Orders to Collect by Location
 │   ├── `/cobrarOrden/:id` - Process Order Payment (Partial/Full)
-│   ├── `/ordenesPagas` - Completed Orders (Fully Paid)
+│   ├── `/ordenesPagas` - ⚠️ DEPRECATED: Redirects to `/cobrosHoy`
 │   ├── `/abonos/` - Payment History & Deposits Audit Trail
 │   ├── `/cobrosHoy/` - Today's Collections & Financial Reports
 │   └── `/ordenesAbandonadas` - Abandoned Orders Management
@@ -168,9 +168,9 @@ Central hub displaying all unpaid orders across all mall locations. Features com
 #### Create New Order (`/nuevaOrden`)
 **Component**: `OrderForm.jsx` | **Navigation**: Green "Nueva Orden" button
 
-Interactive order creation interface with client selection, dynamic product cart, quantity adjustments, and delivery details. Uses Formik for form handling and Context API for state management. Orders are created with initial status of unpaid, undelivered, and uncollected.
+Interactive order creation interface with client selection, dynamic product cart, quantity adjustments, and delivery details. Uses Formik for form handling and Context API for state management. **If the selected client already has an unpaid order, new products are merged into it rather than creating a second order.** Orders are created with initial status of unpaid, undelivered, and uncollected.
 
-**Workflow**: Select client → Add products → Adjust quantities → Add delivery details → Submit
+**Workflow**: Select client → Add products → Adjust quantities → Add delivery details → Submit (merges into existing order if one exists)
 
 #### Edit Order (`/editarOrden/:id`)
 **Component**: `OrderForm.jsx` | **Access**: Via "Editar" button on order cards
@@ -217,10 +217,8 @@ Complete financial audit trail showing ALL deposits including deleted ones. Dele
 
 **Data Integrity**: Maintains complete audit trail with soft delete support
 
-#### Fully Paid Orders (`/ordenesPagas`)
-**Component**: `CollectedOrdersPage.jsx` | **Navigation**: Dark grey "Cuentas al día" button
-
-Lists all orders with complete payment (`paid = 1`). Displays client details, order items, total amount paid, payment completion date, and delivery status. Features date filtering and search functionality. Orders move here after full payment completion.
+#### Fully Paid Orders (`/ordenesPagas`) - DEPRECATED
+**Status**: Redirects to `/cobrosHoy` since the 2025-10-05 page merge. All fully-paid order tracking is now part of the unified "Cobros del dia" page.
 
 #### Abandoned Orders Management (`/ordenesAbandonadas`)
 **Component**: `AbandonedOrdersPage.jsx` | **Navigation**: Orange "Abandonadas" button
@@ -332,17 +330,16 @@ Generate professional PDF invoices using React-PDF library. Features company hea
 
 ### Standard User Menu (Full Access)
 1. **Cuentas por cobrar** (Yellow) - Unpaid orders dashboard
-2. **Cobros del día** (Light grey) - Today's collections
+2. **Cobros del día** (Light grey) - Daily collections (deposits + fully paid orders)
 3. **Nueva Orden** (Green) - Create new order
 4. **Recorrido** (Orange) - Delivery routes
 5. **Cobrar Uni./Alta T./C.F./Otros** (Grey) - Payment collection by location
-6. **Abonos** (Light grey) - Payment history
-7. **Cuentas al día** (Dark grey) - Fully paid orders
-8. **Sin Usuario** (Red) - Orphaned orders
-9. **Abandonadas** (Orange) - Abandoned orders
-10. **Productos** (Sky blue) - Product catalog
-11. **Clientes** (Sky blue) - Customer management
-12. **Salir** (Dark red) - Logout
+6. **Abonos** (Light grey) - Payment history & audit trail
+7. **Sin Usuario** (Red) - Orphaned orders
+8. **Abandonadas** (Orange) - Abandoned orders
+9. **Productos** (Sky blue) - Product catalog
+10. **Clientes** (Sky blue) - Customer management
+11. **Salir** (Dark red) - Logout
 
 ### Limited User Menu ("Black coffe Unilago")
 1. **Nueva Orden** (Green) - Create order
@@ -355,19 +352,18 @@ Generate professional PDF invoices using React-PDF library. Features company hea
 ## 🔄 Workflow Examples
 
 ### Complete Order Lifecycle
-1. **Create** → `/nuevaOrden` (Order created, unpaid)
+1. **Create** → `/nuevaOrden` (Order created, or merged into existing unpaid order)
 2. **Dashboard** → `/` (View in accounts receivable)
 3. **Collect** → `/cobrarOrdenes/:mall` → `/cobrarOrden/:id` (Process payment)
 4. **Track** → `/abonos` & `/cobrosHoy` (Monitor payments)
-5. **Paid** → `/ordenesPagas` (Fully paid orders)
+5. **Paid** → `/cobrosHoy` (Fully paid orders appear here on payment date)
 6. **Deliver** → `/recorrido` (Delivery management)
 7. **Complete** → `/entregados` (Delivery history)
 
 ### Daily Financial Reconciliation
-1. View daily collections → `/cobrosHoy`
+1. View daily collections → `/cobrosHoy` (all deposits + fully paid orders for selected date)
 2. Review payment audit → `/abonos`
 3. Check outstanding → `/`
-4. Verify fully paid → `/ordenesPagas`
 
 ## 📦 Key Components & Entities
 
@@ -739,6 +735,27 @@ The project includes a **database migration system** for safe schema updates:
 - **Authentication System**: Secure user login and session management
 - **Responsive Design**: Mobile-friendly interface with TailwindCSS
 - **Real-time Updates**: Context-based state management
+
+## 📐 Core Business Rules
+
+These are the fundamental business rules that govern how the BlackCoffe system operates:
+
+### One Active Order Per Client
+A client can only have **one unpaid order at a time**. When placing a new order for a client who already has an unpaid order, the new products are **merged into the existing order** rather than creating a second one. This prevents order fragmentation and gives each client a single consolidated bill. Once an order is fully paid, the client can start a new order.
+
+### Timestamped Product Tracking
+Every product added to an order is stamped with the exact time it was added (e.g., `"17:08 10/03/26"`). This allows the cafe to trace when each item was requested, even when products are added across multiple sessions or merged from different order attempts. The system ensures each item entry is globally unique.
+
+### Item-Level Delivery
+Delivery is tracked **per product**, not per order. An order with 5 items can have 3 delivered and 2 still pending. Each item records whether it has been delivered and the date it was delivered. This supports the cafe's rolling delivery workflow where items are delivered throughout the day as they're ready.
+
+### Automatic Full Payment Detection
+The system automatically marks an order as fully paid when the cumulative deposit total reaches or exceeds the order total. There is no separate "mark as paid" action — the user simply enters the remaining amount as a deposit, and the system detects that the order is complete. Overpayment is prevented by validation.
+
+### Payment Method Per Deposit
+Each individual deposit (payment) can use a different payment method — either **Cash ("Efectivo")** or **Digital Platform ("Plataforma")**. The payment method is not fixed at the order level, so a customer might pay part in cash and part via platform across multiple deposits.
+
+---
 
 ## 📋 Prerequisites
 
