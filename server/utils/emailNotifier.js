@@ -3,9 +3,9 @@ import { Resend } from 'resend';
 // ─── Config ───────────────────────────────────────────────────────────────────
 // Set RESEND_API_KEY and NOTIFICATION_EMAIL in Render.com env vars for production.
 // For local dev, export them in your terminal before running npm run dev.
-const RESEND_API_KEY    = process.env.RESEND_API_KEY    || 're_ePZmD83s_LcEckRT4HXSWRnAz1YUwCykJ';
-const NOTIFICATION_EMAIL = process.env.NOTIFICATION_EMAIL || 'jdramirezt@unal.edu.co';
-const FROM_EMAIL        = process.env.FROM_EMAIL        || 'onboarding@resend.dev';
+const RESEND_API_KEY     = process.env.RESEND_API_KEY;
+const NOTIFICATION_EMAIL = process.env.NOTIFICATION_EMAIL;
+const FROM_EMAIL         = process.env.FROM_EMAIL || 'onboarding@resend.dev';
 
 // ─── Rate limiter ─────────────────────────────────────────────────────────────
 // Prevents email spam: max 1 email per 60 s for the same function + error combo

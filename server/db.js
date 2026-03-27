@@ -2,11 +2,11 @@ import { createPool } from "mysql2/promise";
 
 
 export const pool = await createPool({
-    database: "defaultdb",
-    user: "doadmin",
-    port: "25060",
-    host: "pedidos-do-user-16280854-0.c.db.ondigitalocean.com",
-    password: "AVNS_j0uumiaHkFVlV8xxR43",
+    database: process.env.DB_NAME,
+    user:     process.env.DB_USER,
+    port:     process.env.DB_PORT,
+    host:     process.env.DB_HOST,
+    password: process.env.DB_PASSWORD,
     ssl: {
         rejectUnauthorized: false
     }
