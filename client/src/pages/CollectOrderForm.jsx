@@ -204,15 +204,15 @@ function CollectOrderForm() {
       values.paid = 0;
     }
 
-    values.paidAt = fechaActual;
     if (params.id) {
       // Only send valid orders table columns to avoid "Unknown column" SQL errors
+      // Only set paidAt when the order is actually fully paid
       const orderUpdate = {
         deposit: values.deposit,
         paid: values.paid,
-        paidAt: values.paidAt,
         collectedBy: values.collectedBy,
         paymentMethod: values.paymentMethod,
+        ...(values.paid === 1 && { paidAt: fechaActual }),
       };
 
       try {
@@ -294,7 +294,7 @@ function CollectOrderForm() {
               premises: order.premises,
               createdAt: order.createdAt.slice(0, 10),
               paid: order.paid,
-              paidAt: order.paidAt.slice(0, 10),
+              paidAt: order.paidAt ? order.paidAt.slice(0, 10) : null,
               deposit: order.deposit,
               collectedBy: order.mall
             });

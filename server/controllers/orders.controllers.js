@@ -109,7 +109,7 @@ export const getDepositedOrdersByDate = async (req, res) => {
                 AND DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ?
         WHERE
             ((deposits.depositId IS NOT NULL AND deposits.isDeleted = 0)
-            OR (DATE(orders.paidAt) = ? AND deposits.depositId IS NULL))
+            OR (DATE(orders.paidAt) = ? AND orders.paid = 1 AND deposits.depositId IS NULL))
             AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
         ORDER BY
             orders.createdAt ASC

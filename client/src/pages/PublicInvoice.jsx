@@ -59,7 +59,7 @@ function PublicInvoice() {
                         premises: order.premises,
                         createdAt: order.createdAt.slice(0, 10),
                         paid: order.paid,
-                        paidAt: order.paidAt.slice(0, 10),
+                        paidAt: order.paidAt ? order.paidAt.slice(0, 10) : null,
                         deposit: order.deposit
                     }) : setOrder({
                         orderId: order.id,
