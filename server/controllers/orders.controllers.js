@@ -1,4 +1,5 @@
 import pool from '../db.js'
+import { sendErrorEmail } from '../utils/emailNotifier.js'
 
 const hasDuplicateItemIds = (itemsJson) => {
     try {
@@ -10,140 +11,172 @@ const hasDuplicateItemIds = (itemsJson) => {
 };
 
 export const getOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
-    res.json(result)
+    try {
+        const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
+        res.json(result)
+    } catch (error) {
+        sendErrorEmail(req, error, 'getOrders');
+        return res.status(500).json({ message: error.message });
+    }
 }
 
 export const getNotDeliveredOrders = async (req, res) => {
-    const [result] = await pool.query(`
-        SELECT
-            orders.id,
-            orders.deposit,
-            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
-            orders.clientId,
-            orders.paid,
-            orders.collectedBy,
-            orders.items,
-            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
-            clients.premises,
-            clients.clientName,
-            clients.mall
-        FROM
-            orders
-        JOIN
-            clients ON orders.clientId = clients.id
-        WHERE
-            orders.paid = 0 AND orders.items LIKE '%"delivered":false%' AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
-        ORDER BY
-        CAST(clients.premises AS SIGNED),
-            clients.clientname ASC,
-            orders.createdAt ASC
-    `);
-    res.json(result);
+    try {
+        const [result] = await pool.query(`
+            SELECT
+                orders.id,
+                orders.deposit,
+                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
+                orders.clientId,
+                orders.paid,
+                orders.collectedBy,
+                orders.items,
+                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
+                clients.premises,
+                clients.clientName,
+                clients.mall
+            FROM
+                orders
+            JOIN
+                clients ON orders.clientId = clients.id
+            WHERE
+                orders.paid = 0 AND orders.items LIKE '%"delivered":false%' AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+            ORDER BY
+            CAST(clients.premises AS SIGNED),
+                clients.clientname ASC,
+                orders.createdAt ASC
+        `);
+        res.json(result);
+    } catch (error) {
+        sendErrorEmail(req, error, 'getNotDeliveredOrders');
+        return res.status(500).json({ message: error.message });
+    }
 }
 
 export const getDeliveredOrders = async (req, res) => {
-    const [result] = await pool.query(`
-        SELECT
-            orders.id,
-            orders.deposit,
-            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
-            orders.clientId,
-            orders.paid,
-            orders.collectedBy,
-            orders.items,
-            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
-            clients.premises,
-            clients.clientName,
-            clients.mall
-        FROM
-            orders
-        JOIN
-            clients ON orders.clientId = clients.id
-        WHERE
-            orders.items LIKE '%"delivered":true%' AND
-            orders.items LIKE CONCAT('%"deliveredAt":"', ?, '"%') AND
-            (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
-        ORDER BY
-            CAST(clients.premises AS SIGNED),
-            clients.clientname ASC,
-            orders.createdAt ASC
-    `, [req.params.date]);
-    res.json(result);
+    try {
+        const [result] = await pool.query(`
+            SELECT
+                orders.id,
+                orders.deposit,
+                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
+                orders.clientId,
+                orders.paid,
+                orders.collectedBy,
+                orders.items,
+                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
+                clients.premises,
+                clients.clientName,
+                clients.mall
+            FROM
+                orders
+            JOIN
+                clients ON orders.clientId = clients.id
+            WHERE
+                orders.items LIKE '%"delivered":true%' AND
+                orders.items LIKE CONCAT('%"deliveredAt":"', ?, '"%') AND
+                (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+            ORDER BY
+                CAST(clients.premises AS SIGNED),
+                clients.clientname ASC,
+                orders.createdAt ASC
+        `, [req.params.date]);
+        res.json(result);
+    } catch (error) {
+        sendErrorEmail(req, error, 'getDeliveredOrders');
+        return res.status(500).json({ message: error.message });
+    }
 }
 
 export const getDepositedOrdersByDate = async (req, res) => {
-    // This query returns orders with payment activity on a specific date
-    // CRITICAL: Only includes deposits from the selected date (not all deposits for the order)
-    // Two scenarios:
-    // 1) Orders with deposits made on selected date (multiple rows if multiple deposits same day)
-    // 2) Orders marked as paid on selected date without any deposits on that date (single row with NULL deposit fields)
-    const [result] = await pool.query(`
-            SELECT
-            deposits.orderId,
-            deposits.depositId,
-            CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt,
-            deposits.clientId as depositClientId,
-            deposits.paymentMethod,
-            deposits.depositValue,
-            deposits.lastDeposit,
-            deposits.newDeposit,
-            deposits.isDeleted,
-            deposits.deletedAt as deletedAt,  -- COLOMBIA timestamp: stored via DATE_SUB, no conversion needed
-            orders.id,
-            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
-            orders.clientId,
-            orders.paidAt as paidAt,  -- MANUAL timestamp: already in Colombia time, no conversion needed
-            orders.items,
-            orders.deposit,
-            orders.paid,
-            clients.premises,
-            clients.clientName,
-            clients.mall
-        FROM
-            orders
-        JOIN
-            clients ON orders.clientId = clients.id
-        LEFT JOIN
-            deposits ON deposits.orderId = orders.id
-                AND DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ?
-        WHERE
-            ((deposits.depositId IS NOT NULL AND deposits.isDeleted = 0)
-            OR (DATE(orders.paidAt) = ? AND orders.paid = 1 AND deposits.depositId IS NULL))
-            AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
-        ORDER BY
-            orders.createdAt ASC
-    `, [req.params.date, req.params.date]);
-    console.log(`[${new Date().toISOString()}] getDepositedOrdersByDate - Date: ${req.params.date}, Results: ${result.length}`);
-    if (result.length > 0) {
-        console.log(`[${new Date().toISOString()}] Sample result - orderId: ${result[0].id}, paid: ${result[0].paid}, depositValue: ${result[0].depositValue || 'NULL'}, paidAt: ${result[0].paidAt}`);
+    try {
+        // This query returns orders with payment activity on a specific date
+        // CRITICAL: Only includes deposits from the selected date (not all deposits for the order)
+        // Two scenarios:
+        // 1) Orders with deposits made on selected date (multiple rows if multiple deposits same day)
+        // 2) Orders marked as paid on selected date without any deposits on that date (single row with NULL deposit fields)
+        const [result] = await pool.query(`
+                SELECT
+                deposits.orderId,
+                deposits.depositId,
+                CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt,
+                deposits.clientId as depositClientId,
+                deposits.paymentMethod,
+                deposits.depositValue,
+                deposits.lastDeposit,
+                deposits.newDeposit,
+                deposits.isDeleted,
+                deposits.deletedAt as deletedAt,  -- COLOMBIA timestamp: stored via DATE_SUB, no conversion needed
+                orders.id,
+                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
+                orders.clientId,
+                orders.paidAt as paidAt,  -- MANUAL timestamp: already in Colombia time, no conversion needed
+                orders.items,
+                orders.deposit,
+                orders.paid,
+                clients.premises,
+                clients.clientName,
+                clients.mall
+            FROM
+                orders
+            JOIN
+                clients ON orders.clientId = clients.id
+            LEFT JOIN
+                deposits ON deposits.orderId = orders.id
+                    AND DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ?
+            WHERE
+                ((deposits.depositId IS NOT NULL AND deposits.isDeleted = 0)
+                OR (DATE(orders.paidAt) = ? AND orders.paid = 1 AND deposits.depositId IS NULL))
+                AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+            ORDER BY
+                orders.createdAt ASC
+        `, [req.params.date, req.params.date]);
+        console.log(`[${new Date().toISOString()}] getDepositedOrdersByDate - Date: ${req.params.date}, Results: ${result.length}`);
+        if (result.length > 0) {
+            console.log(`[${new Date().toISOString()}] Sample result - orderId: ${result[0].id}, paid: ${result[0].paid}, depositValue: ${result[0].depositValue || 'NULL'}, paidAt: ${result[0].paidAt}`);
+        }
+        res.json(result);
+    } catch (error) {
+        sendErrorEmail(req, error, 'getDepositedOrdersByDate');
+        return res.status(500).json({ message: error.message });
     }
-    res.json(result);
 }
 
-
-
 export const getUnPaidOrders = async (req, res) => {
-    const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? and orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
-        req.params.mall,
-    ]);
-    res.json(result)
+    try {
+        const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? and orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+            req.params.mall,
+        ]);
+        res.json(result)
+    } catch (error) {
+        sendErrorEmail(req, error, 'getUnPaidOrders');
+        return res.status(500).json({ message: error.message });
+    }
 }
 
 export const getUnPaidOrdersbyClientId = async (req, res) => {
-    const [result] = await pool.query("select orders.id, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.clientId = ? and orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
-        req.params.clientId,
-    ]);
-    res.json(result)
+    try {
+        const [result] = await pool.query("select orders.id, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.clientId = ? and orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+            req.params.clientId,
+        ]);
+        res.json(result)
+    } catch (error) {
+        sendErrorEmail(req, error, 'getUnPaidOrdersbyClientId');
+        return res.status(500).json({ message: error.message });
+    }
 }
 
-
 export const getCollectedOrders = async (req, res) => {
-    // paidAt is a MANUAL timestamp (frontend sends Colombia time) - no CONVERT_TZ needed
-    const [result] = await pool.query("select orders.id , DATE(orders.paidAt) as paidAt, orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(orders.paidAt) = ? and orders.paid = 1 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
-        req.params.date,
-    ]);
-    res.json(result)
+    try {
+        // paidAt is a MANUAL timestamp (frontend sends Colombia time) - no CONVERT_TZ needed
+        const [result] = await pool.query("select orders.id , DATE(orders.paidAt) as paidAt, orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(orders.paidAt) = ? and orders.paid = 1 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
+            req.params.date,
+        ]);
+        res.json(result)
+    } catch (error) {
+        sendErrorEmail(req, error, 'getCollectedOrders');
+        return res.status(500).json({ message: error.message });
+    }
 }
 
 export const getOrder = async (req, res) => {
@@ -158,9 +191,11 @@ export const getOrder = async (req, res) => {
 
         res.json(result[0]);
     } catch (error) {
+        sendErrorEmail(req, error, 'getOrder');
         return res.status(500).json({ message: error.message });
     }
 }
+
 export const createOrder = async (req, res) => {
     try {
         console.log(`[createOrder] Request body:`, req.body);
@@ -182,9 +217,11 @@ export const createOrder = async (req, res) => {
         })
     } catch (error) {
         console.error(`[createOrder] Error:`, error);
+        sendErrorEmail(req, error, 'createOrder');
         return res.status(500).json({ message: error.message });
     }
 }
+
 export const updateOrder = async (req, res) => {
     try {
         console.log(`[updateOrder] Request params:`, req.params);
@@ -203,30 +240,37 @@ export const updateOrder = async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error(`[updateOrder] Error:`, error);
+        sendErrorEmail(req, error, 'updateOrder');
         res.status(500).json({ message: error.message });
     }
 }
+
 export const getOrphanedOrders = async (req, res) => {
-    const [result] = await pool.query(`
-        SELECT
-            orders.id,
-            orders.deposit,
-            CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
-            orders.clientId,
-            orders.paid,
-            orders.collectedBy,
-            orders.items,
-            DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt
-        FROM
-            orders
-        LEFT JOIN
-            clients ON orders.clientId = clients.id
-        WHERE
-            clients.id IS NULL AND orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
-        ORDER BY
-            orders.createdAt DESC
-    `);
-    res.json(result);
+    try {
+        const [result] = await pool.query(`
+            SELECT
+                orders.id,
+                orders.deposit,
+                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
+                orders.clientId,
+                orders.paid,
+                orders.collectedBy,
+                orders.items,
+                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt
+            FROM
+                orders
+            LEFT JOIN
+                clients ON orders.clientId = clients.id
+            WHERE
+                clients.id IS NULL AND orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+            ORDER BY
+                orders.createdAt DESC
+        `);
+        res.json(result);
+    } catch (error) {
+        sendErrorEmail(req, error, 'getOrphanedOrders');
+        return res.status(500).json({ message: error.message });
+    }
 }
 
 export const deleteOrder = async (req, res) => {
@@ -238,6 +282,7 @@ export const deleteOrder = async (req, res) => {
             return res.status(404).json({ message: "Order not found" });
         return res.sendStatus(204);
     } catch (error) {
+        sendErrorEmail(req, error, 'deleteOrder');
         return res.status(500).json({ message: error.message });
     }
 };
@@ -281,6 +326,7 @@ export const markOrderAsAbandoned = async (req, res) => {
         });
     } catch (error) {
         console.error('Error marking order as abandoned:', error);
+        sendErrorEmail(req, error, 'markOrderAsAbandoned');
         return res.status(500).json({ message: error.message });
     }
 };
@@ -307,6 +353,7 @@ export const unmarkOrderAsAbandoned = async (req, res) => {
         });
     } catch (error) {
         console.error('Error reactivating order:', error);
+        sendErrorEmail(req, error, 'unmarkOrderAsAbandoned');
         return res.status(500).json({ message: error.message });
     }
 };
@@ -332,7 +379,7 @@ export const getAbandonedOrders = async (req, res) => {
         res.json(rows);
     } catch (error) {
         console.error('Error getting abandoned orders:', error);
+        sendErrorEmail(req, error, 'getAbandonedOrders');
         return res.status(500).json({ message: error.message });
     }
 };
-

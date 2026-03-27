@@ -1,9 +1,16 @@
 import pool from '../db.js'
+import { sendErrorEmail } from '../utils/emailNotifier.js'
 
 export const getProducts = async (req, res) => {
-    const [result] = await pool.query("SELECT id, productName , unitValue FROM products ORDER BY productName ASC")
-    res.json(result)
+    try {
+        const [result] = await pool.query("SELECT id, productName , unitValue FROM products ORDER BY productName ASC")
+        res.json(result)
+    } catch (error) {
+        sendErrorEmail(req, error, 'getProducts');
+        return res.status(500).json({ message: error.message });
+    }
 }
+
 export const getProduct = async (req, res) => {
     try {
         const [result] = await pool.query("SELECT * FROM products WHERE id = ?", [
@@ -15,9 +22,11 @@ export const getProduct = async (req, res) => {
 
         res.json(result[0]);
     } catch (error) {
+        sendErrorEmail(req, error, 'getProduct');
         return res.status(500).json({ message: error.message });
     }
 }
+
 export const createProduct = async (req, res) => {
     try {
         const { productName, unitValue } = req.body
@@ -30,9 +39,11 @@ export const createProduct = async (req, res) => {
             unitValue
         })
     } catch (error) {
+        sendErrorEmail(req, error, 'createProduct');
         return res.status(500).json({ message: error.message });
     }
 }
+
 export const updateProduct = async (req, res) => {
     try {
         const result = await pool.query("UPDATE products SET ? WHERE id = ?", [
@@ -41,9 +52,11 @@ export const updateProduct = async (req, res) => {
         ]);
         res.json(result);
     } catch (error) {
+        sendErrorEmail(req, error, 'updateProduct');
         return res.status(500).json({ message: error.message });
     }
 }
+
 export const deleteProduct = async (req, res) => {
     try {
         const [result] = await pool.query("DELETE FROM products WHERE id = ?", [
@@ -53,6 +66,7 @@ export const deleteProduct = async (req, res) => {
             return res.status(404).json({ message: "Product not found" });
         return res.sendStatus(204);
     } catch (error) {
+        sendErrorEmail(req, error, 'deleteProduct');
         return res.status(500).json({ message: error.message });
     }
 };

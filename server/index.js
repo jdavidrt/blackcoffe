@@ -3,6 +3,7 @@ import cors from "cors";
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { PORT } from "./config.js";
+import { sendErrorEmail } from "./utils/emailNotifier.js";
 
 import indexRoutes from "./routes/index.routes.js";
 import ordersRoutes from "./routes/orders.routes.js";
@@ -32,6 +33,16 @@ app.use(productRoutes)
 app.use(depositRoutes)
 app.use(clientRoutes)
 app.use(userRoutes)
+
+// ── Global error middleware ── must be after all routes, before the * fallback ──
+app.use(async (err, req, res, next) => {
+    console.error(`[${new Date().toISOString()}] Unhandled error on ${req.method} ${req.path}:`, err.message);
+    sendErrorEmail(req, err, 'GlobalErrorHandler'); // fire-and-forget (not awaited)
+    if (!res.headersSent) {
+        res.status(500).json({ message: err.message || 'Error interno del servidor' });
+    }
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Serve static files from React build
 app.use(express.static(join(__dirname, '../client/dist')))

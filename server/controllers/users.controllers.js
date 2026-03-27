@@ -1,4 +1,5 @@
 import pool from '../db.js';
+import { sendErrorEmail } from '../utils/emailNotifier.js'
 
 export const authenticate = async (req, res) => {
     try {
@@ -16,6 +17,9 @@ export const authenticate = async (req, res) => {
         }
     } catch (error) {
         console.error(error);
+        // Pass only userName — never include the password in the email
+        const safeReq = { ...req, params: { userName: req.params.userName }, body: {} };
+        sendErrorEmail(safeReq, error, 'authenticate');
         res.status(500).json({ success: false, message: 'Error en la autenticación' });
     }
 };

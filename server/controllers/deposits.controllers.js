@@ -1,10 +1,16 @@
 import pool from '../db.js'
+import { sendErrorEmail } from '../utils/emailNotifier.js'
 
 export const getDeposits = async (req, res) => {
-    // deletedAt is a COLOMBIA timestamp (stored via DATE_SUB) - no CONVERT_TZ needed
-    const [result] = await pool.query("SELECT *, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt, deposits.isDeleted, deposits.deletedAt as deletedAt FROM deposits join orders on orders.id = deposits.orderId ORDER BY deposits.depositCreatedAt ASC")
-    res.json(result)
+    try {
+        const [result] = await pool.query("SELECT *, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt, deposits.isDeleted, deposits.deletedAt as deletedAt FROM deposits join orders on orders.id = deposits.orderId ORDER BY deposits.depositCreatedAt ASC")
+        res.json(result)
+    } catch (error) {
+        sendErrorEmail(req, error, 'getDeposits');
+        return res.status(500).json({ message: error.message });
+    }
 }
+
 export const getDepositsByOrder = async (req, res) => {
     try {
         // deletedAt is a COLOMBIA timestamp (stored via DATE_SUB) - no CONVERT_TZ needed
@@ -15,16 +21,22 @@ export const getDepositsByOrder = async (req, res) => {
             return res.status(404).json({ message: "Deposito no encontrado" });
         res.json(result);
     } catch (error) {
+        sendErrorEmail(req, error, 'getDepositsByOrder');
         return res.status(500).json({ message: error.message });
     }
 }
 
 export const getDepositsByDate = async (req, res) => {
-    // deletedAt is a COLOMBIA timestamp (stored via DATE_SUB) - no CONVERT_TZ needed
-    const [result] = await pool.query("SELECT orders.id, orders.clientId, orders.items, orders.deposit, deposits.paymentMethod, deposits.depositValue, deposits.lastDeposit, deposits.newDeposit, deposits.isDeleted, deposits.deletedAt as deletedAt, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt , clients.clientName, clients.premises, clients.mall FROM deposits join orders on orders.id = deposits.orderId join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ? ORDER BY orders.clientId, deposits.depositCreatedAt, orders.createdAt ASC", [
-        req.params.date,
-    ]);
-    res.json(result)
+    try {
+        // deletedAt is a COLOMBIA timestamp (stored via DATE_SUB) - no CONVERT_TZ needed
+        const [result] = await pool.query("SELECT orders.id, orders.clientId, orders.items, orders.deposit, deposits.paymentMethod, deposits.depositValue, deposits.lastDeposit, deposits.newDeposit, deposits.isDeleted, deposits.deletedAt as deletedAt, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt , clients.clientName, clients.premises, clients.mall FROM deposits join orders on orders.id = deposits.orderId join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ? ORDER BY orders.clientId, deposits.depositCreatedAt, orders.createdAt ASC", [
+            req.params.date,
+        ]);
+        res.json(result)
+    } catch (error) {
+        sendErrorEmail(req, error, 'getDepositsByDate');
+        return res.status(500).json({ message: error.message });
+    }
 }
 
 export const createDeposit = async (req, res) => {
@@ -48,12 +60,7 @@ export const createDeposit = async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error(`[${new Date().toISOString()}] createDeposit - ERROR:`, error);
-        console.error(`[${new Date().toISOString()}] createDeposit - Error details:`, {
-            message: error.message,
-            code: error.code,
-            errno: error.errno,
-            sqlMessage: error.sqlMessage
-        });
+        sendErrorEmail(req, error, 'createDeposit');
         return res.status(500).json({
             message: error.message,
             sqlMessage: error.sqlMessage
@@ -133,6 +140,7 @@ export const deleteDeposit = async (req, res) => {
             newOrderTotal: runningTotal
         });
     } catch (error) {
+        sendErrorEmail(req, error, 'deleteDeposit');
         return res.status(500).json({ message: error.message });
     }
 };
