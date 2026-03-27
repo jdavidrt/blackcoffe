@@ -8,7 +8,7 @@ import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
 import { DeleteOutlined } from "@ant-design/icons";
 import { Modal, message } from "antd";
-import { formatDate } from '../utils/dateUtils';
+import { formatDate, extractDate, formatDepositDateTime } from '../utils/dateUtils';
 import ProgressiveProductList from '../components/ProgressiveProductList';
 import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 
@@ -293,7 +293,7 @@ function CollectOrderForm() {
               items: cart,
               clientName: order.clientName,
               premises: order.premises,
-              createdAt: order.createdAt.slice(0, 10),
+              createdAt: extractDate(order.createdAt),
               paid: order.paid,
               paidAt: order.paidAt ? formatDate(order.paidAt) : null,
               deposit: order.deposit,
@@ -306,7 +306,7 @@ function CollectOrderForm() {
               items: cart,
               clientName: order.clientName,
               premises: order.premises,
-              createdAt: order.createdAt.slice(0, 10),
+              createdAt: extractDate(order.createdAt),
               paid: order.paid,
               deposit: order.deposit,
               collectedBy: order.mall
@@ -613,7 +613,7 @@ function CollectOrderForm() {
                             ${deposit.dueOnDeposit?.toLocaleString()}
                           </td>
                           <td className="px-2 py-1 text-center">
-                            {deposit.depositCreatedAt.slice(11, 16) + ' ' + deposit.depositCreatedAt.slice(2, 10)}
+                            {formatDepositDateTime(deposit.depositCreatedAt)}
                           </td>
                           <td className="px-2 py-1 text-center">{deposit.paymentMeethd}</td>
                           <td className="px-2 py-1 text-center">
