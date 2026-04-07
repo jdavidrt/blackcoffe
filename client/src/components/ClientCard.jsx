@@ -24,6 +24,7 @@ function clientCard({ client, deleted = false }) {
       content: `El cliente del local ${client.premises} volverá a estar activo.`,
       okText: 'Restaurar',
       cancelText: 'Cancelar',
+      okButtonProps: { style: { backgroundColor: '#16a34a', borderColor: '#16a34a', color: '#fff' } },
       onOk: () => restoreClient(client.id),
     });
   };
