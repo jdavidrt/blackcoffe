@@ -3,7 +3,7 @@ import { sendErrorEmail } from '../utils/emailNotifier.js'
 
 export const getAllClients = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT * FROM clients ORDER BY CAST(premises AS SIGNED), clientname ASC")
+        const [result] = await pool.query("SELECT * FROM clients WHERE isDeleted = 0 ORDER BY CAST(premises AS SIGNED), clientname ASC")
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getAllClients');
@@ -13,7 +13,7 @@ export const getAllClients = async (req, res) => {
 
 export const getClients = async (req, res) => {
     try {
-        const [result] = await pool.query("SELECT id, premises, clientName,  phoneNumber FROM clients WHERE mall = ? ORDER BY CAST(premises AS SIGNED), clientname ASC", [
+        const [result] = await pool.query("SELECT id, premises, clientName, phoneNumber FROM clients WHERE mall = ? AND isDeleted = 0 ORDER BY CAST(premises AS SIGNED), clientname ASC", [
             req.params.mall,
         ]);
         res.json(result)
@@ -76,14 +76,42 @@ export const updateClient = async (req, res) => {
 
 export const deleteClient = async (req, res) => {
     try {
-        const [result] = await pool.query("DELETE FROM clients WHERE id = ?", [
-            req.params.id,
-        ]);
+        const [result] = await pool.query(
+            "UPDATE clients SET isDeleted = 1, deletedAt = NOW() WHERE id = ? AND isDeleted = 0",
+            [req.params.id]
+        );
         if (result.affectedRows === 0)
-            return res.status(404).json({ message: "Client not found" });
+            return res.status(404).json({ message: "Client not found or already deleted" });
         return res.sendStatus(204);
     } catch (error) {
         sendErrorEmail(req, error, 'deleteClient');
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+export const restoreClient = async (req, res) => {
+    try {
+        const [result] = await pool.query(
+            "UPDATE clients SET isDeleted = 0, deletedAt = NULL WHERE id = ? AND isDeleted = 1",
+            [req.params.id]
+        );
+        if (result.affectedRows === 0)
+            return res.status(404).json({ message: "Client not found or not deleted" });
+        return res.sendStatus(204);
+    } catch (error) {
+        sendErrorEmail(req, error, 'restoreClient');
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+export const getDeletedClients = async (req, res) => {
+    try {
+        const [result] = await pool.query(
+            "SELECT * FROM clients WHERE isDeleted = 1 ORDER BY deletedAt DESC"
+        );
+        res.json(result);
+    } catch (error) {
+        sendErrorEmail(req, error, 'getDeletedClients');
         return res.status(500).json({ message: error.message });
     }
 };

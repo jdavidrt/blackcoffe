@@ -20,3 +20,9 @@ export const toggleClientDoneRequest = async (id, done) =>
   await axios.put(`${API_CONFIG.RENDER_SERVER}/client/${id}`, {
     done,
   });
+
+export const getDeletedClientsRequest = async () =>
+  await axios.get(`${API_CONFIG.RENDER_SERVER}/clients/deleted/all`);
+
+export const restoreClientRequest = async (id) =>
+  await axios.put(`${API_CONFIG.RENDER_SERVER}/client/${id}/restore`);

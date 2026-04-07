@@ -21,7 +21,9 @@
       "Bash(find /c/Users/jutorres/Documents/Repos/BlackCofee/BLAKE3/blackcoffe -name .env* -type f)",
       "Bash(mysql --host=pedidos-do-user-16280854-0.c.db.ondigitalocean.com --port=25060 --user=doadmin --password=AVNS_j0uumiaHkFVlV8xxR43 --ssl-mode=REQUIRED defaultdb -e \"SELECT id, clientId, deposit, paid, paidAt, items FROM orders WHERE id = 18752;\")",
       "Bash(node -e \":*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(mysql --host=pedidos-do-user-16280854-0.c.db.ondigitalocean.com --port=25060 --user=doadmin --password=AVNS_j0uumiaHkFVlV8xxR43 --ssl-mode=REQUIRED defaultdb -e \"SELECT id, clientName, premises, mall FROM clients WHERE premises = ''167'' AND mall = ''Alta Tecnología'';\")",
+      "Bash(find c:Usersjdk_lOneDriveEscritorioBlackCoffeblackcoffe -type f \\\\\\(-name *.sql -o -name *init* -o -name *setup* \\\\\\))"
     ],
     "deny": [],
     "ask": []

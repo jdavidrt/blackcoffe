@@ -6,6 +6,8 @@ import {
   getClientRequest,
   updateClientRequest,
   toggleClientDoneRequest,
+  getDeletedClientsRequest,
+  restoreClientRequest,
 } from "../api/clients.api";
 import { ClientContext } from "./ClientContext";
 
@@ -20,6 +22,7 @@ export const useClients = () => {
 
 export const ClientContextProvider = ({ children }) => {
   const [clients, setClients] = useState([]);
+  const [deletedClients, setDeletedClients] = useState([]);
 
   async function loadClients(mall) {
     const response = await getClientsRequest(mall);
@@ -61,6 +64,24 @@ export const ClientContextProvider = ({ children }) => {
     }
   };
 
+  const loadDeletedClients = async () => {
+    try {
+      const response = await getDeletedClientsRequest();
+      setDeletedClients(response.data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const restoreClient = async (id) => {
+    try {
+      await restoreClientRequest(id);
+      setDeletedClients(deletedClients.filter((client) => client.id !== id));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const toggleClientDone = async (id) => {
     try {
       const clientFound = clients.find((client) => client.id === id);
@@ -85,6 +106,9 @@ export const ClientContextProvider = ({ children }) => {
         getClient,
         updateClient,
         toggleClientDone,
+        deletedClients,
+        loadDeletedClients,
+        restoreClient,
       }}
     >
       {children}

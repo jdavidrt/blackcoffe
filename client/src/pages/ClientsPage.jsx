@@ -9,11 +9,23 @@ function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [mall, setMall] = useState("Unilago");
-  const { clients, loadClients } = useClients();
+  const [showDeleted, setShowDeleted] = useState(false);
+  const { clients, loadClients, deletedClients, loadDeletedClients } = useClients();
 
   const selectMall = (selectedMall) => {
+    setShowDeleted(false);
     setMall(selectedMall);
     loadClients(selectedMall);
+  };
+
+  const handleShowDeleted = async () => {
+    setShowDeleted(true);
+    setLoading(true);
+    try {
+      await loadDeletedClients();
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -26,9 +38,14 @@ function ClientsPage() {
     };
 
     fetchData();
-  }, [mall]);
+  }, []);
 
   const filteredClients = clients.filter((client) =>
+    client.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.premises.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredDeleted = deletedClients.filter((client) =>
     client.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.premises.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -43,6 +60,11 @@ function ClientsPage() {
       );
     }
 
+    if (showDeleted) {
+      if (deletedClients.length === 0) return <h1 className="p-4 text-center">No hay clientes eliminados</h1>;
+      return filteredDeleted.map((client) => <ClientCard client={client} key={client.id} deleted={true} />);
+    }
+
     if (clients.length === 0) {
       return <h1>No hay clientes</h1>;
     }
@@ -50,55 +72,55 @@ function ClientsPage() {
     return filteredClients.map((client) => <ClientCard client={client} key={client.id} />);
   }
 
+  const headerCount = showDeleted
+    ? `Eliminados (${deletedClients.length})`
+    : `Clientes (${clients.length})`;
+
   return (
     <div>
       <div className="py-2">
-        <h4 className="text-2xl text-black text-center font-bold text-center">Clientes ({clients.length}) </h4>
-        <div className="flex">
+        <h4 className="text-2xl text-black text-center font-bold text-center">{headerCount}</h4>
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            style={{
-              backgroundColor: mall === 'Unilago' ? '#A6C4F0' : '#F3F1F1',
-            }}
-            className="bg-indigo-500 px-3 py-1 text-black rounded-md"
+            style={{ backgroundColor: !showDeleted && mall === 'Unilago' ? '#A6C4F0' : '#F3F1F1' }}
+            className="px-3 py-1 text-black rounded-md"
             onClick={() => selectMall('Unilago')}
           >
             Unilago
           </button>
-          <div className="px-2" />
           <button
             type="button"
-            style={{
-              backgroundColor: mall === 'Alta Tecnología' ? '#A6C4F0' : '#F3F1F1',
-            }}
-            className="bg-indigo-500 px-3 py-1 text-black rounded-md"
+            style={{ backgroundColor: !showDeleted && mall === 'Alta Tecnología' ? '#A6C4F0' : '#F3F1F1' }}
+            className="px-3 py-1 text-black rounded-md"
             onClick={() => selectMall('Alta Tecnología')}
           >
             Alta Tecnología
           </button>
-          <div className="px-2" />
           <button
             type="button"
-            style={{
-              backgroundColor: mall === 'Otros' ? '#A6C4F0' : '#F3F1F1',
-            }}
-            className="bg-indigo-500 px-3 py-1 text-black rounded-md"
+            style={{ backgroundColor: !showDeleted && mall === 'Otros' ? '#A6C4F0' : '#F3F1F1' }}
+            className="px-3 py-1 text-black rounded-md"
             onClick={() => selectMall('Otros')}
           >
             Otros
           </button>
-          <div className="px-2" />
+          <button
+            type="button"
+            style={{ backgroundColor: showDeleted ? '#FECACA' : '#F3F1F1' }}
+            className="px-3 py-1 text-red-700 rounded-md font-semibold"
+            onClick={handleShowDeleted}
+          >
+            Eliminados
+          </button>
           <div className="ml-auto">
             <Link to="/nuevoCliente">
-              <div>
-                <button
-                  type="button"
-                  className="bg-emerald-400 px-3 py-1 text-black rounded-md ml-auto"
-                  backgroundColor='#F3F1F1'
-                >
-                  Nuevo Cliente
-                </button>
-              </div>
+              <button
+                type="button"
+                className="bg-emerald-400 px-3 py-1 text-black rounded-md"
+              >
+                Nuevo Cliente
+              </button>
             </Link>
           </div>
         </div>
