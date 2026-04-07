@@ -7,6 +7,7 @@ export const pool = await createPool({
     port:     process.env.DB_PORT,
     host:     process.env.DB_HOST,
     password: process.env.DB_PASSWORD,
+    dateStrings: true,
     ssl: {
         rejectUnauthorized: false
     }
