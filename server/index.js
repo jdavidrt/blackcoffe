@@ -11,6 +11,7 @@ import productRoutes from "./routes/products.routes.js";
 import clientRoutes from "./routes/clients.routes.js";
 import userRoutes from "./routes/users.routes.js";
 import depositRoutes from "./routes/deposits.routes.js";
+import queryRoutes from "./routes/query.routes.js";
 
 
 const app = express();
@@ -33,6 +34,7 @@ app.use(productRoutes)
 app.use(depositRoutes)
 app.use(clientRoutes)
 app.use(userRoutes)
+app.use(queryRoutes)
 
 // ── Global error middleware ── must be after all routes, before the * fallback ──
 app.use(async (err, req, res, next) => {
