@@ -20,9 +20,10 @@ export const executeReadQuery = async (req, res) => {
             return res.status(400).json({ message: "La consulta no puede estar vacía" });
         }
 
-        // Must start with SELECT
-        if (!/^SELECT\b/i.test(sanitized)) {
-            return res.status(400).json({ message: "Solo se permiten consultas SELECT" });
+        // Allow read-only commands: SELECT, SHOW, DESCRIBE/DESC, EXPLAIN
+        const isReadOnly = /^(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b/i.test(sanitized);
+        if (!isReadOnly) {
+            return res.status(400).json({ message: "Solo se permiten consultas de lectura (SELECT, SHOW, DESCRIBE, EXPLAIN)" });
         }
 
         // Reject semicolons (prevents stacked queries)
@@ -39,11 +40,12 @@ export const executeReadQuery = async (req, res) => {
         ];
         const forbiddenRegex = new RegExp(`\\b(${forbidden.join('|')})\\b`, 'i');
         if (forbiddenRegex.test(sanitized)) {
-            return res.status(400).json({ message: "Solo se permiten consultas SELECT. Palabras clave de modificación no están permitidas." });
+            return res.status(400).json({ message: "Solo se permiten consultas de lectura. Palabras clave de modificación no están permitidas." });
         }
 
-        // Auto-append LIMIT 1000 if no LIMIT present
-        if (!/\bLIMIT\b/i.test(sanitized)) {
+        // Auto-append LIMIT 1000 only for SELECT queries without LIMIT
+        const isSelect = /^SELECT\b/i.test(sanitized);
+        if (isSelect && !/\bLIMIT\b/i.test(sanitized)) {
             sanitized += ' LIMIT 1000';
         }
 
