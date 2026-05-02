@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BlackCoffe — Auditoría de Problemas Críticos (1.1, 1.2, 1.7)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    overflow: hidden;
+    height: 100vh;
+  }
+  .slide {
+    display: none;
+    height: 100vh;
+    padding: 40px 60px;
+    overflow-y: auto;
+    animation: fadeIn 0.4s ease;
+  }
+  .slide.active { display: block; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  h1 {
+    font-size: 2.5em;
+    color: #f87171;
+    margin-bottom: 20px;
+    border-bottom: 3px solid #ef4444;
+    padding-bottom: 10px;
+  }
+  h2 {
+    font-size: 1.8em;
+    color: #fbbf24;
+    margin: 20px 0 15px;
+  }
+  h3 {
+    font-size: 1.3em;
+    color: #60a5fa;
+    margin: 15px 0 10px;
+  }
+  p { line-height: 1.7; margin-bottom: 12px; font-size: 1.05em; }
+  .severity {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 0.9em;
+    margin-right: 10px;
+  }
+  .critical { background: #dc2626; color: white; }
+  .medium { background: #f59e0b; color: black; }
+  .location {
+    background: #1e293b;
+    border-left: 4px solid #60a5fa;
+    padding: 12px 20px;
+    margin: 15px 0;
+    font-family: 'Consolas', monospace;
+    font-size: 0.95em;
+    color: #93c5fd;
+  }
+  pre {
+    background: #1e1e2e;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 18px;
+    margin: 15px 0;
+    overflow-x: auto;
+    font-size: 0.92em;
+    line-height: 1.6;
+  }
+  code { font-family: 'Consolas', 'Monaco', monospace; }
+  .bad { color: #f87171; }
+  .good { color: #4ade80; }
+  .keyword { color: #c084fc; }
+  .string { color: #fde047; }
+  .comment { color: #64748b; font-style: italic; }
+  .fn { color: #60a5fa; }
+  .highlight-bad {
+    background: rgba(239, 68, 68, 0.15);
+    border-left: 3px solid #ef4444;
+    padding: 2px 8px;
+    display: inline-block;
+  }
+  .highlight-good {
+    background: rgba(74, 222, 128, 0.15);
+    border-left: 3px solid #4ade80;
+    padding: 2px 8px;
+    display: inline-block;
+  }
+  .scenario {
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 15px 0;
+  }
+  .scenario-title {
+    color: #fbbf24;
+    font-weight: bold;
+    font-size: 1.1em;
+    margin-bottom: 10px;
+  }
+  .step {
+    display: flex;
+    align-items: flex-start;
+    margin: 10px 0;
+    padding: 8px;
+    background: rgba(96, 165, 250, 0.08);
+    border-radius: 6px;
+  }
+  .step-num {
+    background: #60a5fa;
+    color: #0f172a;
+    font-weight: bold;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    flex-shrink: 0;
+  }
+  .step-crash {
+    background: rgba(239, 68, 68, 0.2);
+    border: 2px dashed #ef4444;
+  }
+  .step-crash .step-num { background: #ef4444; color: white; }
+  .controls {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    background: rgba(15, 23, 42, 0.95);
+    padding: 10px 20px;
+    border-radius: 40px;
+    border: 1px solid #334155;
+    z-index: 1000;
+  }
+  button {
+    background: #60a5fa;
+    color: #0f172a;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  button:hover:not(:disabled) { background: #3b82f6; }
+  button:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+  .progress {
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+  }
+  .table-diff {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+  }
+  .table-diff th, .table-diff td {
+    padding: 10px 14px;
+    border: 1px solid #334155;
+    text-align: left;
+  }
+  .table-diff th {
+    background: #1e293b;
+    color: #fbbf24;
+  }
+  .fix-box {
+    background: linear-gradient(135deg, #064e3b, #022c22);
+    border: 1px solid #10b981;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 15px 0;
+  }
+  .fix-box h3 { color: #4ade80; margin-top: 0; }
+  ul { margin-left: 25px; margin-bottom: 10px; }
+  li { margin: 6px 0; line-height: 1.6; }
+  .big-impact {
+    background: rgba(239, 68, 68, 0.1);
+    border: 2px solid #ef4444;
+    padding: 15px 20px;
+    border-radius: 10px;
+    margin: 15px 0;
+    font-size: 1.05em;
+  }
+  kbd {
+    background: #334155;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    border: 1px solid #475569;
+  }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1: INTRO -->
+<div class="slide active" id="slide-1">
+  <h1>BlackCoffe — Problemas Críticos</h1>
+  <h2>Presentación enfocada: 1.1, 1.2, 1.7</h2>
+  <p style="font-size: 1.2em; color: #94a3b8;">Ejemplos del repositorio real. Cada diapositiva muestra:</p>
+  <ul style="font-size: 1.1em; margin-top: 20px;">
+    <li>📍 <strong>Ubicación exacta</strong> (archivo y línea)</li>
+    <li>💥 <strong>Escenario real</strong> que provoca el bug</li>
+    <li>🔧 <strong>Solución concreta</strong></li>
+  </ul>
+  <div class="scenario" style="margin-top: 40px;">
+    <div class="scenario-title">Navegación</div>
+    <p>Usa los botones <kbd>Anterior</kbd> / <kbd>Siguiente</kbd> abajo, o las flechas del teclado <kbd>←</kbd> <kbd>→</kbd>.</p>
+  </div>
+  <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #334155;">
+    <h3>Los 3 problemas</h3>
+    <table class="table-diff">
+      <tr><th>#</th><th>Problema</th><th>Severidad</th><th>Impacto</th></tr>
+      <tr><td>1.1</td><td>deleteDeposit no transaccional</td><td><span class="severity critical">CRITICAL</span></td><td>Dinero fantasma en depósitos</td></tr>
+      <tr><td>1.2</td><td>createDeposit no transaccional con updateOrder</td><td><span class="severity critical">CRITICAL</span></td><td>Depósito sin orden actualizada</td></tr>
+      <tr><td>1.7</td><td>Alias createdAt duplicado en getOrders</td><td><span class="severity medium">MEDIUM</span></td><td>Frontend pierde la hora</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- SLIDE 2: PROBLEMA 1.1 - Intro -->
+<div class="slide" id="slide-2">
+  <h1>Problema 1.1 — deleteDeposit no es transaccional</h1>
+  <p><span class="severity critical">CRITICAL</span> Dinero no reconciliable entre la tabla deposits y orders.deposit</p>
+  <div class="location">
+    📂 server/controllers/deposits.controllers.js:71–146
+  </div>
+  <h2>¿Qué hace deleteDeposit?</h2>
+  <p>Cuando el usuario elimina un depósito incorrecto, el código ejecuta <strong>4 queries independientes</strong> sobre el pool compartido:</p>
+  <div class="step"><div class="step-num">1</div><div><strong>SELECT</strong> el depósito (para ver si existe y no está ya borrado)</div></div>
+  <div class="step"><div class="step-num">2</div><div><strong>UPDATE deposits</strong> SET isDeleted = 1 (soft delete)</div></div>
+  <div class="step"><div class="step-num">3</div><div><strong>SELECT</strong> todos los depósitos activos de esa orden</div></div>
+  <div class="step"><div class="step-num">4</div><div>Loop <strong>UPDATE deposits</strong> uno por uno recalculando lastDeposit / newDeposit / dueOnDeposit</div></div>
+  <div class="step"><div class="step-num">5</div><div><strong>UPDATE orders</strong> SET deposit = runningTotal</div></div>
+  <div class="big-impact">
+    ⚠️ <strong>Ninguna de estas queries está envuelta en BEGIN/COMMIT</strong>. Cada una usa una conexión del pool, posiblemente DIFERENTE conexión cada vez.
+  </div>
+</div>
+
+<!-- SLIDE 3: PROBLEMA 1.1 - Código real -->
+<div class="slide" id="slide-3">
+  <h1>1.1 — Código real del bug</h1>
+  <p><code>server/controllers/deposits.controllers.js</code>:</p>
+<pre><code><span class="keyword">export const</span> <span class="fn">deleteDeposit</span> = <span class="keyword">async</span> (req, res) => {
+    <span class="keyword">const</span> depositId = req.params.id;
+
+    <span class="keyword">try</span> {
+        <span class="comment">// Step 1: obtener depósito</span>
+        <span class="keyword">const</span> [depositResult] = <span class="keyword">await</span> <span class="bad">pool.query(</span>
+            <span class="string">"SELECT * FROM deposits WHERE depositId = ? AND isDeleted = 0"</span>,
+            [depositId]
+        );
+        ...
+        <span class="comment">// Step 4: soft delete</span>
+        <span class="keyword">await</span> <span class="bad">pool.query(</span>
+            <span class="string">"UPDATE deposits SET isDeleted = 1, deletedAt = ..."</span>,
+            [depositId]
+        );
+
+        <span class="comment">// Step 5: traer todos los activos</span>
+        <span class="keyword">const</span> [allDeposits] = <span class="keyword">await</span> <span class="bad">pool.query(</span>
+            <span class="string">"SELECT depositId, depositValue FROM deposits WHERE orderId = ? AND isDeleted = 0"</span>,
+            [deposit.orderId]
+        );
+
+        <span class="comment">// Step 6: N updates, uno por depósito  ← N+1 query!</span>
+        <span class="keyword">let</span> runningTotal = 0;
+        <span class="keyword">for</span> (<span class="keyword">const</span> dep <span class="keyword">of</span> allDeposits) {
+            ...
+            <span class="keyword">await</span> <span class="bad">pool.query(</span>
+                <span class="string">"UPDATE deposits SET lastDeposit=?, newDeposit=?, dueOnDeposit=? WHERE depositId=?"</span>,
+                [previousTotal, runningTotal, newDebt, dep.depositId]
+            );
+        }
+
+        <span class="comment">// Step 9: actualizar orden</span>
+        <span class="keyword">await</span> <span class="bad">pool.query(</span>
+            <span class="string">"UPDATE orders SET deposit = ?, paid = 0 WHERE id = ?"</span>,
+            [runningTotal, deposit.orderId]
+        );
+
+        res.json({ message: <span class="string">"OK"</span>, newOrderTotal: runningTotal });
+    } <span class="keyword">catch</span> (error) {
+        <span class="comment">// NO ROLLBACK. Cualquier fallo deja los datos a mitad de camino.</span>
+        <span class="keyword">return</span> res.status(500).json({ message: error.message });
+    }
+};</code></pre>
+</div>
+
+<!-- SLIDE 4: PROBLEMA 1.1 - Escenario real -->
+<div class="slide" id="slide-4">
+  <h1>1.1 — Escenario real que corrompe datos</h1>
+  <div class="scenario">
+    <div class="scenario-title">📖 Contexto: Orden con 3 depósitos</div>
+    <table class="table-diff">
+      <tr><th>Depósito</th><th>depositValue</th><th>newDeposit (cumulativo)</th></tr>
+      <tr><td>#1</td><td>$20,000</td><td>$20,000</td></tr>
+      <tr><td>#2</td><td>$15,000</td><td>$35,000</td></tr>
+      <tr><td>#3</td><td>$10,000</td><td>$45,000</td></tr>
+    </table>
+    <p><strong>orders.deposit</strong> en la tabla orders: <span class="highlight-good">$45,000</span></p>
+  </div>
+  <h3>Operación: el usuario elimina el depósito #2</h3>
+  <div class="step"><div class="step-num">1</div><div>Step 4: UPDATE — depósito #2 marcado como eliminado ✓</div></div>
+  <div class="step"><div class="step-num">2</div><div>Step 5: SELECT — devuelve depósitos #1 y #3</div></div>
+  <div class="step"><div class="step-num">3</div><div>Step 6: UPDATE depósito #1 (sin cambios, runningTotal=$20,000)</div></div>
+  <div class="step step-crash"><div class="step-num">💥</div><div><strong>El servidor crashea aquí</strong> (OOM, connection reset, timeout del pool de Render, etc.)</div></div>
+  <div class="big-impact">
+    <strong>Estado resultante en la base de datos:</strong>
+    <ul style="margin-top: 10px;">
+      <li>❌ Depósito #2: <span class="highlight-bad">isDeleted = 1</span> (borrado)</li>
+      <li>❌ Depósito #3: <span class="highlight-bad">newDeposit = $45,000</span> (VIEJO, nunca recalculado)</li>
+      <li>❌ orders.deposit: <span class="highlight-bad">$45,000</span> (NUNCA actualizado al Step 9)</li>
+    </ul>
+    La suma de depósitos activos ($20k + $10k = $30k) NO coincide con orders.deposit ($45k). <strong>Dinero fantasma de $15,000.</strong>
+  </div>
+</div>
+
+<!-- SLIDE 5: PROBLEMA 1.1 - Otras formas de romperlo -->
+<div class="slide" id="slide-5">
+  <h1>1.1 — Más formas de romperlo (sin crash de servidor)</h1>
+  <h2>🔸 Concurrencia: dos usuarios, misma orden</h2>
+  <div class="scenario">
+    <div class="scenario-title">Escenario: Usuario A borra depósito #2 mientras Usuario B crea un depósito nuevo</div>
+    <table class="table-diff">
+      <tr><th>Tiempo</th><th>Usuario A (delete)</th><th>Usuario B (create)</th></tr>
+      <tr><td>T0</td><td>SELECT activos → [#1, #2, #3]</td><td>—</td></tr>
+      <tr><td>T1</td><td>UPDATE #2 isDeleted=1</td><td>—</td></tr>
+      <tr><td>T2</td><td>SELECT activos → [#1, #3]</td><td>INSERT deposit #4 (basado en orders.deposit viejo)</td></tr>
+      <tr><td>T3</td><td>Loop recalcula solo #1 y #3</td><td>UPDATE orders SET deposit = $45k + nuevo</td></tr>
+      <tr><td>T4</td><td>UPDATE orders SET deposit = $30k ← <span class="bad">PISA el update de B</span></td><td>—</td></tr>
+    </table>
+  </div>
+  <div class="big-impact">
+    ⚠️ El depósito #4 de Usuario B quedó registrado, pero <strong>orders.deposit</strong> terminó con el valor que escribió A (basado en una foto vieja de la tabla). <strong>Dinero perdido.</strong>
+  </div>
+  <h2>🔸 Pool connection drops</h2>
+  <p>Render.com recicla conexiones a MySQL (DigitalOcean) cuando hay idle timeout. Cada <code>pool.query()</code> puede tomar una conexión <strong>diferente</strong>. Si el pool drop-ea entre Step 4 y Step 5, el error queda silencioso (el pool reconecta solo) pero los updates posteriores trabajan con datos inconsistentes.</p>
+</div>
+
+<!-- SLIDE 6: PROBLEMA 1.1 - Solución -->
+<div class="slide" id="slide-6">
+  <h1>1.1 — Solución</h1>
+  <div class="fix-box">
+    <h3>✅ Paso 1: Transacción con una sola conexión</h3>
+<pre><code><span class="keyword">export const</span> <span class="fn">deleteDeposit</span> = <span class="keyword">async</span> (req, res) => {
+    <span class="keyword">const</span> conn = <span class="keyword">await</span> <span class="good">pool.getConnection()</span>;
+    <span class="keyword">try</span> {
+        <span class="keyword">await</span> <span class="good">conn.beginTransaction()</span>;
+
+        <span class="keyword">const</span> [depositResult] = <span class="keyword">await</span> conn.query(<span class="string">"SELECT ..."</span>);
+        <span class="keyword">await</span> conn.query(<span class="string">"UPDATE deposits SET isDeleted=1 ..."</span>);
+        ...
+        <span class="comment">// Reemplaza el loop N+1 con UN solo UPDATE con CASE:</span>
+        <span class="keyword">await</span> conn.query(<span class="good">`
+            UPDATE deposits
+            SET lastDeposit = CASE depositId WHEN ? THEN ? WHEN ? THEN ? END,
+                newDeposit  = CASE depositId WHEN ? THEN ? WHEN ? THEN ? END,
+                dueOnDeposit= CASE depositId WHEN ? THEN ? WHEN ? THEN ? END
+            WHERE depositId IN (?, ?)
+        `</span>, [...]);
+
+        <span class="keyword">await</span> conn.query(<span class="string">"UPDATE orders SET deposit=? ..."</span>);
+
+        <span class="keyword">await</span> <span class="good">conn.commit()</span>;
+        res.json({ message: <span class="string">"OK"</span> });
+    } <span class="keyword">catch</span> (error) {
+        <span class="keyword">await</span> <span class="good">conn.rollback()</span>;   <span class="comment">// ← RESTAURA todo si algo falla</span>
+        res.status(500).json({ message: <span class="string">"Error"</span> });
+    } <span class="keyword">finally</span> {
+        <span class="good">conn.release()</span>;                <span class="comment">// ← Devuelve conexión al pool</span>
+    }
+};</code></pre>
+  </div>
+  <h3>Beneficios:</h3>
+  <ul>
+    <li><strong>Atomicidad</strong> — o se completan TODOS los pasos, o NINGUNO.</li>
+    <li><strong>Aislamiento</strong> — Usuario B no ve estado intermedio de Usuario A.</li>
+    <li><strong>Performance</strong> — un UPDATE con CASE reemplaza N updates (menos round-trips a MySQL).</li>
+  </ul>
+</div>
+
+<!-- SLIDE 7: PROBLEMA 1.2 - Intro -->
+<div class="slide" id="slide-7">
+  <h1>Problema 1.2 — createDeposit no transaccional con la orden</h1>
+  <p><span class="severity critical">CRITICAL</span> Depósitos "huérfanos" que no actualizan la orden</p>
+  <div class="location">
+    📂 server/controllers/deposits.controllers.js:42–69<br>
+    📂 client/src/pages/CollectOrderForm.jsx:219–233
+  </div>
+  <h2>Flujo actual (frontend hace 2 llamadas separadas)</h2>
+  <div class="step"><div class="step-num">1</div><div>Frontend: <code>await createDeposit(neewDeposit)</code> — POST /deposits → INSERT</div></div>
+  <div class="step"><div class="step-num">2</div><div>Frontend: <code>await updateOrder(id, { deposit, paid, paidAt })</code> — PUT /order/:id → UPDATE</div></div>
+  <div class="big-impact">
+    ⚠️ Son <strong>2 requests HTTP independientes</strong>. Si el primero tiene éxito y el segundo falla (red, timeout, servidor reiniciado), queda una fila en <code>deposits</code> pero <code>orders.deposit</code> sigue viejo.
+  </div>
+</div>
+
+<!-- SLIDE 8: PROBLEMA 1.2 - Código real -->
+<div class="slide" id="slide-8">
+  <h1>1.2 — Código real del bug</h1>
+  <p><code>client/src/pages/CollectOrderForm.jsx</code> (abreviado):</p>
+<pre><code><span class="keyword">const</span> <span class="fn">handleConfirmPayment</span> = <span class="keyword">async</span> () => {
+  setIsRegistering(<span class="keyword">true</span>);
+  <span class="keyword">try</span> {
+    <span class="comment">// Request 1: insertar depósito</span>
+    <span class="keyword">await</span> <span class="bad">createDeposit</span>(neewDeposit);
+    <span class="comment">// ↑ Si aquí sale bien pero el siguiente falla... ↓</span>
+
+    <span class="comment">// Request 2: actualizar la orden</span>
+    <span class="keyword">await</span> <span class="bad">updateOrder</span>(params.id, {
+      deposit: values.deposit,
+      paid: values.paid,
+      paidAt: fechaActual,
+      ...
+    });
+
+    <span class="fn">setTimeout</span>(() => window.location.reload(), 2000);
+  } <span class="keyword">catch</span> (error) {
+    <span class="comment">// ← Solo muestra alerta. El depósito YA quedó en la DB.</span>
+    alert(<span class="string">"Error procesando el pago"</span>);
+  }
+};</code></pre>
+  <p><code>server/controllers/deposits.controllers.js</code>:</p>
+<pre><code><span class="keyword">export const</span> <span class="fn">createDeposit</span> = <span class="keyword">async</span> (req, res) => {
+  ...
+  <span class="keyword">const</span> result = <span class="keyword">await</span> <span class="bad">pool.query</span>(<span class="string">"INSERT INTO deposits SET ?"</span>, req.body);
+  <span class="comment">// ← Nunca toca la tabla orders. Confía en que el cliente hará la segunda llamada.</span>
+  res.json(result);
+};</code></pre>
+</div>
+
+<!-- SLIDE 9: PROBLEMA 1.2 - Escenario real -->
+<div class="slide" id="slide-9">
+  <h1>1.2 — Escenario real</h1>
+  <div class="scenario">
+    <div class="scenario-title">📖 Mesera en Unilago cobra $30,000 a un cliente</div>
+    <div class="step"><div class="step-num">1</div><div>Mesera teclea $30,000, confirma</div></div>
+    <div class="step"><div class="step-num">2</div><div>POST /deposits → <span class="highlight-good">INSERT OK</span>. Fila creada con depositValue=30000.</div></div>
+    <div class="step step-crash"><div class="step-num">📶</div><div>El wifi del mall se cae por 8 segundos (común en Unilago).</div></div>
+    <div class="step"><div class="step-num">3</div><div>PUT /order/:id → <span class="highlight-bad">TIMEOUT</span>. El cliente dispara el catch y muestra "Error procesando el pago".</div></div>
+    <div class="step"><div class="step-num">4</div><div>Mesera ve el error, reintenta. El sistema muestra la orden con <strong>deuda todavía de $30,000</strong> (porque orders.deposit nunca se actualizó).</div></div>
+    <div class="step"><div class="step-num">5</div><div>Mesera registra el pago <strong>otra vez</strong>: POST /deposits → INSERT OK #2. PUT /order/:id → esta vez sí funciona.</div></div>
+  </div>
+  <div class="big-impact">
+    <strong>Resultado:</strong>
+    <ul>
+      <li>2 filas en <code>deposits</code> de $30,000 cada una ($60,000 total)</li>
+      <li><code>orders.deposit</code> = $30,000 (solo el segundo UPDATE contó)</li>
+      <li>El reporte diario <code>/cobrosHoy</code> muestra <strong>$60,000 cobrados</strong> porque suma la tabla deposits</li>
+      <li>La caja real solo tiene $30,000</li>
+      <li>Al borrar uno de los depósitos duplicados, el recálculo de 1.1 falla porque las sumas no cuadran</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SLIDE 10: PROBLEMA 1.2 - Solución -->
+<div class="slide" id="slide-10">
+  <h1>1.2 — Solución: un solo endpoint atómico</h1>
+  <div class="fix-box">
+    <h3>✅ Mover toda la lógica al servidor en UNA transacción</h3>
+<pre><code><span class="comment">// Nueva ruta: POST /orders/:id/deposits</span>
+<span class="keyword">export const</span> <span class="fn">addDepositToOrder</span> = <span class="keyword">async</span> (req, res) => {
+    <span class="keyword">const</span> conn = <span class="keyword">await</span> pool.getConnection();
+    <span class="keyword">try</span> {
+        <span class="keyword">await</span> conn.beginTransaction();
+
+        <span class="comment">// 1) Traer la orden y bloquearla hasta el COMMIT</span>
+        <span class="keyword">const</span> [[order]] = <span class="keyword">await</span> conn.query(
+            <span class="string">"SELECT * FROM orders WHERE id = ? FOR UPDATE"</span>,
+            [req.params.id]
+        );
+        <span class="keyword">if</span> (!order || order.paid === 1) <span class="keyword">throw new</span> Error(<span class="string">"Orden ya pagada"</span>);
+
+        <span class="comment">// 2) Validar montos (no permitir sobrepago)</span>
+        <span class="keyword">const</span> total = <span class="fn">calculateOrderTotal</span>(order.items);
+        <span class="keyword">const</span> remaining = total - order.deposit;
+        <span class="keyword">if</span> (req.body.depositValue > remaining) <span class="keyword">throw new</span> Error(<span class="string">"Monto excede saldo"</span>);
+
+        <span class="comment">// 3) INSERT deposit</span>
+        <span class="keyword">await</span> conn.query(<span class="string">"INSERT INTO deposits SET ?"</span>, {
+            orderId: order.id,
+            clientId: order.clientId,
+            depositValue: req.body.depositValue,
+            lastDeposit: order.deposit,
+            newDeposit: order.deposit + req.body.depositValue,
+            ...
+        });
+
+        <span class="comment">// 4) UPDATE order en la MISMA transacción</span>
+        <span class="keyword">const</span> newDeposit = order.deposit + req.body.depositValue;
+        <span class="keyword">const</span> isPaid = newDeposit >= total ? 1 : 0;
+        <span class="keyword">await</span> conn.query(
+            <span class="string">"UPDATE orders SET deposit=?, paid=?, paidAt=? WHERE id=?"</span>,
+            [newDeposit, isPaid, isPaid ? <span class="fn">today</span>() : <span class="keyword">null</span>, order.id]
+        );
+
+        <span class="keyword">await</span> conn.commit();
+        res.json({ success: <span class="keyword">true</span>, paid: isPaid });
+    } <span class="keyword">catch</span> (error) {
+        <span class="keyword">await</span> conn.rollback();
+        res.status(500).json({ message: error.message });
+    } <span class="keyword">finally</span> { conn.release(); }
+};</code></pre>
+  </div>
+  <p>Frontend pasa de 2 llamadas a <strong>1 llamada</strong>: <code>await addDeposit(orderId, { depositValue, paymentMethod })</code>. Si falla, nada quedó en la DB. Problema resuelto.</p>
+</div>
+
+<!-- SLIDE 11: PROBLEMA 1.7 - Intro -->
+<div class="slide" id="slide-11">
+  <h1>Problema 1.7 — Alias duplicado createdAt</h1>
+  <p><span class="severity medium">MEDIUM</span> El frontend pierde la hora de creación de las órdenes</p>
+  <div class="location">
+    📂 server/controllers/orders.controllers.js:15 (getOrders)<br>
+    📂 Y se repite en líneas 34, 67, 147, 159, 259 (6 queries afectadas)
+  </div>
+  <h2>El bug</h2>
+  <p>La consulta SELECT lista DOS columnas con el alias <code>createdAt</code>. MySQL las devuelve ambas, pero cuando el driver <code>mysql2</code> las convierte a JavaScript object, las claves <strong>se colapsan en la última</strong>.</p>
+</div>
+
+<!-- SLIDE 12: PROBLEMA 1.7 - Código real -->
+<div class="slide" id="slide-12">
+  <h1>1.7 — Código real del bug</h1>
+  <p><code>server/controllers/orders.controllers.js:15</code> (getOrders):</p>
+<pre><code>SELECT
+  orders.id,
+  orders.deposit,
+  <span class="bad">CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')</span>,       <span class="comment">-- ← sin alias explícito, MySQL usa "CONVERT_TZ(...)"</span>
+  orders.clientId,
+  orders.paid,
+  orders.collectedBy,
+  orders.items,
+  <span class="bad">DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt</span>,  <span class="comment">-- ← ESTE gana</span>
+  clients.premises,
+  clients.clientName,
+  clients.mall
+FROM orders
+JOIN clients ON orders.clientId = clients.id
+WHERE orders.paid = 0 ...</code></pre>
+  <h3>Lo que devuelve la query vs lo que recibe el frontend</h3>
+  <table class="table-diff">
+    <tr><th>Columna SQL</th><th>Alias resultante</th><th>Valor</th></tr>
+    <tr><td>CONVERT_TZ(...)</td><td class="bad">"CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')"</td><td>"2026-04-22 17:08:30"</td></tr>
+    <tr><td>DATE(CONVERT_TZ(...))</td><td class="good">"createdAt"</td><td>"2026-04-22"</td></tr>
+  </table>
+  <p>El frontend accede a <code>order.createdAt</code> y recibe solo la <strong>fecha</strong> sin la hora. La columna del timestamp con hora queda bajo un nombre largo y feo que nadie lee.</p>
+</div>
+
+<!-- SLIDE 13: PROBLEMA 1.7 - Impacto real -->
+<div class="slide" id="slide-13">
+  <h1>1.7 — Impacto: el bug del <code>order.createAt</code></h1>
+  <div class="big-impact">
+    🔴 Este problema se <strong>compone</strong> con otro bug latente: <strong>6 componentes del frontend leen <code>order.createAt</code> (sin la 'd')</strong> en vez de <code>order.createdAt</code>.
+  </div>
+  <h3>Componentes afectados (verificado con Grep):</h3>
+<pre><code>client/src/components/ClientCard.jsx:56        &lt;span&gt;{<span class="bad">client.createAt</span>}&lt;/span&gt;
+client/src/components/DepositsCard.jsx:19      &lt;span&gt;{formatDate(<span class="bad">order.createAt</span>)}&lt;/span&gt;
+client/src/components/OrderCard.jsx:13         &lt;span&gt;{<span class="bad">order.createAt</span>}&lt;/span&gt;
+client/src/components/OrderCollectCard.jsx:17  &lt;span&gt;{formatDate(<span class="bad">order.createAt</span>)}&lt;/span&gt;
+client/src/components/OrderDeliveredCard.jsx:50 &lt;span&gt;{formatDate(<span class="bad">order.createAt</span>)}&lt;/span&gt;
+client/src/components/OrderDeliveryCard.jsx:50  &lt;span&gt;{formatDate(<span class="bad">order.createAt</span>)}&lt;/span&gt;</code></pre>
+  <h3>¿Qué pasa en producción?</h3>
+  <ul>
+    <li><code>order.createAt</code> → <strong>undefined</strong> (JavaScript no tira error, solo renderiza "")</li>
+    <li><code>formatDate(undefined)</code> → dayjs() interpreta undefined como "ahora" y renderiza la fecha de <strong>hoy</strong>.</li>
+  </ul>
+  <p>Resultado: en muchas tarjetas aparece la fecha del día corriente, no la fecha real de la orden. Nadie lo notó porque las órdenes abiertas son recientes.</p>
+  <p><strong>Estado real:</strong> El bug 1.7 impide acceder a la hora, y además hay un typo que impide leer la fecha correcta. Los dos bugs juntos hacen que esas tarjetas muestren basura.</p>
+</div>
+
+<!-- SLIDE 14: PROBLEMA 1.7 - Solución -->
+<div class="slide" id="slide-14">
+  <h1>1.7 — Solución (dos pasos)</h1>
+  <div class="fix-box">
+    <h3>✅ Paso 1: Aliases explícitos y distintos en el SQL</h3>
+<pre><code>SELECT
+  orders.id,
+  orders.deposit,
+  <span class="good">CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') AS createdAtTs</span>,   <span class="comment">-- timestamp con hora</span>
+  orders.clientId,
+  orders.paid,
+  orders.items,
+  <span class="good">DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) AS createdAtDate</span>, <span class="comment">-- solo fecha</span>
+  clients.premises,
+  clients.clientName,
+  clients.mall
+FROM orders ...</code></pre>
+    <p><strong>Aplicar en las 6 queries</strong> (líneas 15, 34, 67, 147, 159, 259 de orders.controllers.js).</p>
+  </div>
+  <div class="fix-box">
+    <h3>✅ Paso 2: Corregir el typo en 6 componentes</h3>
+<pre><code>-  &lt;span&gt;{formatDate(<span class="bad">order.createAt</span>)}&lt;/span&gt;
++  &lt;span&gt;{formatDate(<span class="good">order.createdAtDate</span>)}&lt;/span&gt;
+
+-  &lt;span&gt;{<span class="bad">order.createAt</span>}&lt;/span&gt;
++  &lt;span&gt;{<span class="good">order.createdAtTs</span>}&lt;/span&gt;   <span class="comment">// cuando quieras hora + fecha</span></code></pre>
+  </div>
+  <h3>Regla general para evitar que vuelva a pasar:</h3>
+  <ul>
+    <li>Nunca usar el mismo alias dos veces en un SELECT.</li>
+    <li>Prohibir columnas sin alias explícito cuando se usan funciones (CONVERT_TZ, DATE, etc.).</li>
+    <li>Agregar una regla de lint o un test de contrato que fallen si la API devuelve keys duplicadas.</li>
+  </ul>
+</div>
+
+<!-- SLIDE 15: RESUMEN -->
+<div class="slide" id="slide-15">
+  <h1>Resumen y prioridad</h1>
+  <table class="table-diff">
+    <tr><th>Problema</th><th>Severidad</th><th>Esfuerzo</th><th>Riesgo si no se arregla</th></tr>
+    <tr>
+      <td><strong>1.1</strong> deleteDeposit no transaccional</td>
+      <td><span class="severity critical">CRITICAL</span></td>
+      <td>1 día</td>
+      <td>Dinero fantasma, auditoría rota</td>
+    </tr>
+    <tr>
+      <td><strong>1.2</strong> createDeposit sin tx con updateOrder</td>
+      <td><span class="severity critical">CRITICAL</span></td>
+      <td>1 día</td>
+      <td>Dobles cobros por falla de red</td>
+    </tr>
+    <tr>
+      <td><strong>1.7</strong> Alias createdAt duplicado (x6 queries)</td>
+      <td><span class="severity medium">MEDIUM</span></td>
+      <td>2 horas</td>
+      <td>Fechas mostradas como "hoy" en lugar de fecha real</td>
+    </tr>
+  </table>
+  <div class="big-impact" style="margin-top: 30px;">
+    <strong>Recomendación:</strong> arreglar 1.7 primero (2 horas, bajo riesgo, alta visibilidad).
+    Luego 1.1 y 1.2 juntos — ambos requieren migrar a <code>pool.getConnection() + beginTransaction()</code>. Una vez que entiendes el patrón en uno, el otro es trivial.
+  </div>
+  <h3>Lecturas relacionadas en este repo:</h3>
+  <ul>
+    <li><code>AUDIT_2026-04-21.md</code> — auditoría completa con las 30+ findings</li>
+    <li><code>server/utils/emailNotifier.js</code> — ya existe el notificador de errores (usar para alertar de rollbacks)</li>
+    <li><code>CLAUDE.md</code> — sección "Delete Deposits Feature" documenta el flujo actual que estamos reemplazando</li>
+  </ul>
+</div>
+
+<div class="controls">
+  <button id="prev">← Anterior</button>
+  <span class="progress" id="progress">1 / 15</span>
+  <button id="next">Siguiente →</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  let current = 0;
+  const total = slides.length;
+  const prevBtn = document.getElementById('prev');
+  const nextBtn = document.getElementById('next');
+  const progress = document.getElementById('progress');
+
+  function show(i) {
+    slides.forEach(s => s.classList.remove('active'));
+    slides[i].classList.add('active');
+    progress.textContent = `${i + 1} / ${total}`;
+    prevBtn.disabled = i === 0;
+    nextBtn.disabled = i === total - 1;
+    window.scrollTo(0, 0);
+  }
+
+  prevBtn.addEventListener('click', () => { if (current > 0) show(--current); });
+  nextBtn.addEventListener('click', () => { if (current < total - 1) show(++current); });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' && current > 0) show(--current);
+    if (e.key === 'ArrowRight' && current < total - 1) show(++current);
+  });
+
+  show(0);
+</script>
+
+</body>
+</html>

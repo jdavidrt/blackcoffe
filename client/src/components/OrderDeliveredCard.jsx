@@ -1,6 +1,6 @@
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LoginOutlined } from '@ant-design/icons';
 import { getOrderItems } from '../utils/jsonUtils';
 import { calculateOrderTotal, getItemDisplayTime } from '../utils/orderUtils';
@@ -14,40 +14,35 @@ function OrderDeliveredCard({ order }) {
   const [cart, setCart] = useState([]);
   const deliveryDate = getCurrentDate();
 
-  const handleCheckboxChange = async (itemId) => {
-    setCart((prevCart) => {
-      const updatedCart = prevCart.map((item) => {
-        if (item.id === itemId) {
-          return {
-            ...item,
-            delivered: !item.delivered,
-            deliveredAt: deliveryDate
-          };
-        }
-        return item;
-      });
+  // Audit fix 1.6: serialize checkbox writes via a promise chain.
+  const latestCartRef = useRef([]);
+  const writeChainRef = useRef(Promise.resolve());
 
-      var values = {};
-      values.items = JSON.stringify(updatedCart);
+  const handleCheckboxChange = (itemId) => {
+    const updatedCart = latestCartRef.current.map((item) =>
+      item.id === itemId
+        ? { ...item, delivered: !item.delivered, deliveredAt: deliveryDate }
+        : item
+    );
+    latestCartRef.current = updatedCart;
+    setCart(updatedCart);
 
-      // Llama a tu función asíncrona aquí (en este caso, updateOrder)
-      updateOrder(order.id, values);
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
-      return updatedCart;
-    });
+    writeChainRef.current = writeChainRef.current
+      .then(() => updateOrder(order.id, { items: JSON.stringify(latestCartRef.current) }))
+      .catch((err) => console.error('[OrderDeliveredCard] updateOrder failed:', err));
   };
 
 
   useEffect(() => {
-    setCart(getOrderItems(order))
+    const initial = getOrderItems(order);
+    latestCartRef.current = initial;
+    setCart(initial);
   }, [])
 
   return (
     <div className={getMallCardStyle(order.mall)}>
       <div className="flex">
-        <span>{formatDate(order.createAt)}</span>
+        <span>{formatDate(order.createdAtTs)}</span>
         <b>
           <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p>
         </b>

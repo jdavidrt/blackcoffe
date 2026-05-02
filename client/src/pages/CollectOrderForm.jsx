@@ -2,7 +2,7 @@ import { Form, Formik } from "formik";
 import { useOrders } from "../context/OrderProvider";
 import { useDeposits } from "../context/DepositsProvider";
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
@@ -44,27 +44,23 @@ function CollectOrderForm() {
   const [loadingMessage, setLoadingMessage] = useState("");
 
 
-  const handleCheckboxChange = async (itemId) => {
-    setCart((prevCart) => {
-      const updatedCart = prevCart.map((item) => {
-        if (item.id === itemId) {
-          return {
-            ...item,
-            delivered: !item.delivered,
-            deliveredAt: fechaActual
-          };
-        }
-        return item;
-      });
+  // Audit fix 1.6: serialize checkbox writes through a promise chain so
+  // rapid taps cannot stomp on each other's items JSON.
+  const latestCartRef = useRef([]);
+  const writeChainRef = useRef(Promise.resolve());
 
-      var values = {};
-      values.items = JSON.stringify(updatedCart);
+  const handleCheckboxChange = (itemId) => {
+    const updatedCart = latestCartRef.current.map((item) =>
+      item.id === itemId
+        ? { ...item, delivered: !item.delivered, deliveredAt: fechaActual }
+        : item
+    );
+    latestCartRef.current = updatedCart;
+    setCart(updatedCart);
 
-      // Call async function here (in this case, updateOrder)
-      updateOrder(params.id, values);
-
-      return updatedCart;
-    });
+    writeChainRef.current = writeChainRef.current
+      .then(() => updateOrder(params.id, { items: JSON.stringify(latestCartRef.current) }))
+      .catch((err) => console.error('[CollectOrderForm] updateOrder failed:', err));
   };
 
   const calculateTotal = () => {
@@ -174,62 +170,35 @@ function CollectOrderForm() {
     if (!pendingFormData || !pendingActions) return;
 
     const values = pendingFormData;
-    const actions = pendingActions;
-
-    // Original submission logic
-    values.shopId = 1;
-    values.clientId = client;
-    values.items = JSON.stringify(cart)
 
     // Calculate the individual deposit amount (not cumulative)
     const individualDepositAmount = depositedTotal ? deposit : parseFloat(values.deposit);
 
-    // Calculate new cumulative total after this deposit
-    const newCumulativeTotal = order.deposit + individualDepositAmount;
+    // Resolve the user collecting the payment from localStorage (fixes 1.4 — was using order.mall).
+    const collectedBy = (localStorage.getItem('user') || 'Unknown').replace(/^"|"$/g, '');
 
-    var neewDeposit = {};
-    neewDeposit.orderId = params.id;
-    neewDeposit.clientId = order.clientId;
-    neewDeposit.paymentMethod = platformPayment ? 'Plataforma' : 'Efectivo';
-    neewDeposit.lastDeposit = order.deposit > 0 ? order.deposit : 0; // Previous cumulative total
-    neewDeposit.depositValue = individualDepositAmount; // Individual payment amount (what user entered)
-    neewDeposit.newDeposit = newCumulativeTotal; // New cumulative total after this deposit
-    neewDeposit.dueOnDeposit = calculateTotal() - newCumulativeTotal; // Remaining debt
-
-    // Update order deposit total
-    values.deposit = newCumulativeTotal;
-
-    if (values.deposit >= calculateTotal()) {
-      values.paid = 1;
-    } else {
-      values.paid = 0;
-    }
+    // Atomic endpoint: backend inserts deposit AND updates order in one transaction.
+    // Frontend sends only what it knows about the user's intent; the server computes
+    // lastDeposit/newDeposit/dueOnDeposit/paid/paidAt from the locked order row.
+    const depositPayload = {
+      orderId: params.id,
+      depositValue: individualDepositAmount,
+      paymentMethod: platformPayment ? 'Plataforma' : 'Efectivo',
+      collectedBy
+    };
 
     if (params.id) {
-      // Only send valid orders table columns to avoid "Unknown column" SQL errors
-      // Only set paidAt when the order is actually fully paid
-      const orderUpdate = {
-        deposit: values.deposit,
-        paid: values.paid,
-        collectedBy: values.collectedBy,
-        paymentMethod: values.paymentMethod,
-        ...(values.paid === 1 && { paidAt: fechaActual }),
-      };
-
       try {
-        console.log('[CollectOrderForm] Creating deposit:', neewDeposit);
-        await createDeposit(neewDeposit);
-        console.log('[CollectOrderForm] Deposit created successfully');
-
-        console.log('[CollectOrderForm] Updating order:', orderUpdate);
-        await updateOrder(params.id, orderUpdate);
-        console.log('[CollectOrderForm] Order updated successfully');
+        console.log('[CollectOrderForm] Creating deposit (atomic):', depositPayload);
+        await createDeposit(depositPayload);
+        console.log('[CollectOrderForm] Deposit + order update committed atomically');
       } catch (error) {
         console.error('[CollectOrderForm] ERROR during payment processing:', error);
-        alert(`Error al procesar el pago: ${error.message || 'Error desconocido'}. Por favor, verifique si el pago fue registrado correctamente.`);
+        const serverMsg = error?.response?.data?.message;
+        alert(`Error al procesar el pago: ${serverMsg || error.message || 'Error desconocido'}. La operación fue revertida.`);
         setIsRegistering(false);
         setLoadingMessage("");
-        return; // Don't reload if there was an error
+        return;
       }
     }
 
@@ -282,10 +251,14 @@ function CollectOrderForm() {
           }
 
           setDeposits(depositsRequest || []);
-          setCart(safeJSONParse(order.items, []))
+          const parsedItems = safeJSONParse(order.items, []);
+          latestCartRef.current = parsedItems;
+          setCart(parsedItems)
           if (order.paymentMethod == "Plataforma") {
             togglePlatform(true)
           }
+          // collectedBy is no longer derived from order.mall (audit fix 1.4) —
+          // the atomic deposit endpoint stamps it from localStorage('user') at submit time.
           if (order.paid) {
             setOrder({
               clientId: order.clientId,
@@ -293,11 +266,13 @@ function CollectOrderForm() {
               items: cart,
               clientName: order.clientName,
               premises: order.premises,
-              createdAt: extractDate(order.createdAt),
+              createdAt: extractDate(order.createdAtTs || order.createdAt),
               paid: order.paid,
               paidAt: order.paidAt ? formatDate(order.paidAt) : null,
               deposit: order.deposit,
-              collectedBy: order.mall
+              isAbandoned: order.isAbandoned,
+              abandonReason: order.abandonReason,
+              abandonedAt: order.abandonedAt
             });
           } else {
             setOrder({
@@ -306,10 +281,12 @@ function CollectOrderForm() {
               items: cart,
               clientName: order.clientName,
               premises: order.premises,
-              createdAt: extractDate(order.createdAt),
+              createdAt: extractDate(order.createdAtTs || order.createdAt),
               paid: order.paid,
               deposit: order.deposit,
-              collectedBy: order.mall
+              isAbandoned: order.isAbandoned,
+              abandonReason: order.abandonReason,
+              abandonedAt: order.abandonedAt
             });
           }
         } catch (error) {
@@ -526,17 +503,6 @@ function CollectOrderForm() {
                     className="m-2 px-2 py-1 rounded-sm rounded"
                     onChange={handleChange}
                   />
-                  {/*<button
-                    type="button"
-                    onClick={() => {
-                      depositTotal();
-                      // Clear the input field when using total payment
-                      setFieldValue('deposit', '');
-                    }}
-                    disabled={isSubmitting}
-                    className="block bg-indigo-500 my-1 px-2 py-1 text-white w-20% rounded-md ml-auto"  >
-                    Cobrar Total
-                  </button>*/}
                   <button
                     type="submit"
                     disabled={isSubmitting}

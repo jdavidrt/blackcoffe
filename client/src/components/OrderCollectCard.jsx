@@ -14,7 +14,7 @@ function orderCard({ order }) {
 
   return (
     <div className="flex bg-stone-100 text-black rounded-md m-2">
-      <span>{formatDate(order.createAt)}</span>
+      <span>{formatDate(order.createdAtTs)}</span>
       <b>
         <p className="p-2 flex items-center h-content">
           {order.premises} {order.clientName} - {order.mall}

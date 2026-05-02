@@ -12,21 +12,20 @@ const LoginForm = () => {
     });
 
     const handleLogin = async (values, { setSubmitting }) => {
-        // Aquí puedes manejar la lógica de autenticación con los valores del formulario (values)
-        var response = await autenticateUser(values.username, values.pass);
-        if (response.success == false) {
-            alert('Credenciales incorrectas')
+        // Audit fix 1.8: previously called autenticateUser TWICE — once for the
+        // success check and again to populate local state. The provider now
+        // updates its own context inside autenticateUser, so a single call
+        // is enough.
+        const response = await autenticateUser(values.username, values.pass);
+        if (!response || response.success === false) {
+            alert('Credenciales incorrectas');
             localStorage.setItem('user', '');
         } else {
-            setTimeout(() => {
-            }, 3000);
             localStorage.setItem('user', response.userName);
+            setUser(response);
             navigate("/");
         }
-        setUser(await autenticateUser(values.username, values.pass));
-        setTimeout(() => {
-            setSubmitting(false);
-        }, 1000);
+        setSubmitting(false);
     };
 
     return (

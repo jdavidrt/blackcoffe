@@ -20,8 +20,10 @@ export const UserContextProvider = ({ children }) => {
   const autenticateUser = async (userName, pass) => {
     try {
       const response = await autenticateUserRequest(userName, pass);
-      return response.data;
+      // Audit fix 1.8: setUser must run BEFORE the early return, otherwise
+      // the user context never populates on successful login.
       setUser(response.data);
+      return response.data;
     } catch (error) {
       console.error(error);
     }

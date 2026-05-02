@@ -1,6 +1,6 @@
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LoginOutlined } from '@ant-design/icons';
 import { getOrderItems } from '../utils/jsonUtils';
 import { calculateOrderTotal, getItemDisplayTime } from '../utils/orderUtils';
@@ -14,40 +14,39 @@ function OrderDeliveryCard({ order }) {
   const [cart, setCart] = useState([]);
   const deliveryDate = getCurrentDate();
 
-  const handleCheckboxChange = async (itemId) => {
-    setCart((prevCart) => {
-      const updatedCart = prevCart.map((item) => {
-        if (item.id === itemId) {
-          return {
-            ...item,
-            delivered: !item.delivered,
-            deliveredAt: deliveryDate
-          };
-        }
-        return item;
-      });
+  // Audit fix 1.6: serialize concurrent checkbox writes through a promise chain
+  // so two rapid clicks cannot overwrite each other's `items` JSON.
+  // - latestCartRef holds the source-of-truth cart shape between renders.
+  // - writeChainRef chains updateOrder calls; each waits for the previous.
+  const latestCartRef = useRef([]);
+  const writeChainRef = useRef(Promise.resolve());
 
-      var values = {};
-      values.items = JSON.stringify(updatedCart);
+  const handleCheckboxChange = (itemId) => {
+    const updatedCart = latestCartRef.current.map((item) =>
+      item.id === itemId
+        ? { ...item, delivered: !item.delivered, deliveredAt: deliveryDate }
+        : item
+    );
+    latestCartRef.current = updatedCart;
+    setCart(updatedCart);
 
-      // Llama a tu función asíncrona aquí (en este caso, updateOrder)
-      updateOrder(order.id, values);
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
-      return updatedCart;
-    });
+    // Queue the write — last-write-wins always sends latestCartRef.current.
+    writeChainRef.current = writeChainRef.current
+      .then(() => updateOrder(order.id, { items: JSON.stringify(latestCartRef.current) }))
+      .catch((err) => console.error('[OrderDeliveryCard] updateOrder failed:', err));
   };
 
 
   useEffect(() => {
-    setCart(getOrderItems(order))
+    const initial = getOrderItems(order);
+    latestCartRef.current = initial;
+    setCart(initial);
   }, [])
 
   return (
     <div className={getMallCardStyle(order.mall)}>
       <div className="flex">
-        <span>{formatDate(order.createAt)}</span>
+        <span>{formatDate(order.createdAtTs)}</span>
         <b>
           <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p>
         </b>
