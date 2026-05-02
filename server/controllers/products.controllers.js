@@ -1,5 +1,6 @@
 import pool from '../db.js'
 import { sendErrorEmail } from '../utils/emailNotifier.js'
+import { pickAndValidate, PRODUCT_UPDATE_SCHEMA } from '../utils/validation.js'
 
 export const getProducts = async (req, res) => {
     try {
@@ -7,7 +8,7 @@ export const getProducts = async (req, res) => {
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getProducts');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error procesando la solicitud' });
     }
 }
 
@@ -23,37 +24,46 @@ export const getProduct = async (req, res) => {
         res.json(result[0]);
     } catch (error) {
         sendErrorEmail(req, error, 'getProduct');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error procesando la solicitud' });
     }
 }
 
 export const createProduct = async (req, res) => {
     try {
-        const { productName, unitValue } = req.body
-        const result = await pool.query("INSERT INTO products(productName, unitValue) VALUES (?, ?)", [
-            productName,
-            unitValue]
+        // Audit fix 2.7: validate before insert.
+        const { value, errors } = pickAndValidate(req.body, PRODUCT_UPDATE_SCHEMA);
+        if (errors) return res.status(400).json({ message: errors[0] });
+        const { productName, unitValue } = value;
+        if (!productName || unitValue === undefined) {
+            return res.status(400).json({ message: 'productName y unitValue son requeridos' });
+        }
+        await pool.query(
+            "INSERT INTO products(productName, unitValue) VALUES (?, ?)",
+            [productName, unitValue]
         );
-        res.json({
-            productName,
-            unitValue
-        })
+        res.json({ productName, unitValue });
     } catch (error) {
         sendErrorEmail(req, error, 'createProduct');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error creando producto' });
     }
 }
 
 export const updateProduct = async (req, res) => {
     try {
+        // Audit fix 2.7: whitelist allowed columns.
+        const { value, errors } = pickAndValidate(req.body, PRODUCT_UPDATE_SCHEMA);
+        if (errors) return res.status(400).json({ message: errors[0] });
+        if (Object.keys(value).length === 0) {
+            return res.status(400).json({ message: 'No hay campos válidos para actualizar' });
+        }
         const result = await pool.query("UPDATE products SET ? WHERE id = ?", [
-            req.body,
+            value,
             req.params.id,
         ]);
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'updateProduct');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error actualizando producto' });
     }
 }
 
@@ -67,6 +77,6 @@ export const deleteProduct = async (req, res) => {
         return res.sendStatus(204);
     } catch (error) {
         sendErrorEmail(req, error, 'deleteProduct');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error procesando la solicitud' });
     }
 };

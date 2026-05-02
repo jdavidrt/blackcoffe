@@ -53,7 +53,6 @@ function clientCard({ client, deleted = false }) {
 
   return (
     <div className="flex bg-stone-100 items-center stext-black rounded-md m-2">
-      <span>{client.createAt}</span>
       <b><p className="p-2 flex items-center h-content">{client.premises} {client.clientName}</p></b>
       <div className="p-2 ml-auto">
         <button

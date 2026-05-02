@@ -16,7 +16,7 @@ function depositsCard({ order }) {
           : 'bg-stone-100 text-black'
       }`}
     >
-      <span>{formatDate(order.createAt)}</span>
+      <span>{formatDate(order.createdAtTs)}</span>
       <b>
         <p className="p-2 flex items-center h-content">
           {isDeleted && <span className="text-red-600 font-bold mr-2">[ELIMINADO]</span>}
