@@ -2,6 +2,7 @@ import { Form, Formik } from "formik";
 import { useClients } from "../context/ClientProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { Modal } from "antd";
 import CoffeePouringAnimation from "../components/CoffeePouringAnimation";
 
 function ClientForm() {
@@ -57,7 +58,22 @@ function ClientForm() {
               phoneNumber: ""
             });
           } catch (error) {
-            console.error("Error al guardar el cliente", error);
+            const orderId = error.response?.data?.orderId;
+            if (error.response?.status === 400 && orderId) {
+              Modal.error({
+                title: 'Cliente con órdenes activas',
+                content: (
+                  <div>
+                    <p>Este cliente tiene órdenes activas y no puede ser modificado.</p>
+                    <a href={`/cobrarOrden/${orderId}`} style={{ color: '#1677ff' }}>
+                      Ver orden #{orderId}
+                    </a>
+                  </div>
+                ),
+              });
+            } else {
+              console.error("Error al guardar el cliente", error);
+            }
           }
         }}
       >

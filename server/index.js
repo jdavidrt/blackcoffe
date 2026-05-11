@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { PORT } from "./config.js";
 import { sendErrorEmail } from "./utils/emailNotifier.js";
 
+import { runMigrations } from "./migrations/add_client_snapshot.js";
 import indexRoutes from "./routes/index.routes.js";
 import ordersRoutes from "./routes/orders.routes.js";
 import productRoutes from "./routes/products.routes.js";
@@ -55,5 +56,7 @@ app.get('*', (req, res) => {
   res.sendFile(join(__dirname, '../client/dist', 'index.html'));
 });
 
-app.listen(PORT)
-console.log(`[${new Date().toISOString()}] BlackCoffe Server running on port ${PORT}`);
+runMigrations().then(() => {
+    app.listen(PORT);
+    console.log(`[${new Date().toISOString()}] BlackCoffe Server running on port ${PORT}`);
+});

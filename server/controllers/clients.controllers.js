@@ -63,6 +63,13 @@ export const createClient = async (req, res) => {
 
 export const updateClient = async (req, res) => {
     try {
+        const [activeOrders] = await pool.query(
+            "SELECT id FROM orders WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL) LIMIT 1",
+            [req.params.id]
+        );
+        if (activeOrders.length > 0) {
+            return res.status(400).json({ message: "Client has active orders", orderId: activeOrders[0].id });
+        }
         const result = await pool.query("UPDATE clients SET ? WHERE id = ?", [
             req.body,
             req.params.id,
@@ -76,6 +83,13 @@ export const updateClient = async (req, res) => {
 
 export const deleteClient = async (req, res) => {
     try {
+        const [activeOrders] = await pool.query(
+            "SELECT id FROM orders WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL) LIMIT 1",
+            [req.params.id]
+        );
+        if (activeOrders.length > 0) {
+            return res.status(400).json({ message: "Client has active orders", orderId: activeOrders[0].id });
+        }
         const [result] = await pool.query(
             "UPDATE clients SET isDeleted = 1, deletedAt = NOW() WHERE id = ? AND isDeleted = 0",
             [req.params.id]
