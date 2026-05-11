@@ -65,7 +65,10 @@ function ClientForm() {
                 content: (
                   <div>
                     <p>Este cliente tiene órdenes activas y no puede ser modificado.</p>
-                    <a href={`/cobrarOrden/${orderId}`} style={{ color: '#1677ff' }}>
+                    <a
+                      href={`/cobrarOrden/${orderId}`}
+                      style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}
+                    >
                       Ver orden #{orderId}
                     </a>
                   </div>

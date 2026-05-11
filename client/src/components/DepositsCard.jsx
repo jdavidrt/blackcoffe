@@ -10,45 +10,45 @@ function depositsCard({ order }) {
 
   return (
     <div
-      className={`flex rounded-md m-2 ${
+      className={`flex items-center rounded-md m-2 ${
         isDeleted
           ? 'bg-gray-300 text-gray-500 opacity-60 line-through'
           : 'bg-stone-100 text-black'
       }`}
     >
-      <span>{formatDate(order.createAt)}</span>
+      <span className="text-xs text-gray-500 px-2 whitespace-nowrap">{formatDate(order.createAt)}</span>
       <b>
         <p className="p-2 flex items-center h-content">
           {isDeleted && <span className="text-red-600 font-bold mr-2">[ELIMINADO]</span>}
           {order.premises} {order.clientName} - {order.mall}/ {formatDepositDateTime(order.depositCreatedAt)} ({order.paymentMethod})
         </p>
       </b>
-      <div className="flex p-2 ml-auto">
+      <div className="flex flex-col p-2 ml-auto text-right shrink-0">
         <b>
           {order.deposit ? (
             <>
-              <p>Abono: ${order.depositValue}
-                <p>Abonado Anterior: ${order.lastDeposit}</p>
-                <p className={isDeleted ? "text-gray-600" : "text-red-500"}>
-                  Debe: ${calculateOrderTotal(order) - order.newDeposit}
-                </p>
-              </p>
+              <span className="block">Abono: ${order.depositValue}</span>
+              <span className="block">Abonado Anterior: ${order.lastDeposit}</span>
+              <span className={`block ${isDeleted ? 'text-gray-600' : 'text-red-500'}`}>
+                Debe: ${calculateOrderTotal(order) - order.newDeposit}
+              </span>
             </>
           ) : ''}
         </b>
-        <button
-          className={`flex px-2 py-1 ml-auto ${
-            isDeleted
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-slate-300 text-black'
-          }`}
-          onClick={() => !isDeleted && navigate(`/cobrarOrden/${order.id}`)}
-          disabled={isDeleted}
-        >
-          <DollarOutlined />
-        </button>
       </div>
-    </div >
+      <button
+        type="button"
+        className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ml-2 ${
+          isDeleted
+            ? 'bg-gray-400 cursor-not-allowed'
+            : 'bg-slate-300 text-black'
+        }`}
+        onClick={() => !isDeleted && navigate(`/cobrarOrden/${order.id}`)}
+        disabled={isDeleted}
+      >
+        <DollarOutlined />
+      </button>
+    </div>
   );
 }
 

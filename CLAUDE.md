@@ -1783,6 +1783,7 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 - **PDF Generation**: React-PDF for invoice generation
 - **Authentication**: localStorage-based session management with route protection
 - **Button Types**: ⚠️ **CRITICAL** - Always use `type="button"` for buttons inside forms that should NOT submit the form. Only buttons intended to submit should omit the type attribute or use `type="submit"`. This prevents accidental form submissions when interacting with UI elements like "Mostrar más", "+/-" quantity controls, delete buttons, etc.
+- **Links inside Ant Design Modals**: ⚠️ **RECURRING BUG** - Never rely solely on `style={{ color: '...' }}` for `<a>` tags inside `Modal.error()` / `Modal.confirm()` content. Tailwind's base reset (`color: inherit`) overrides it, making the link invisible (white on white) until hover. Always use the full style set: `style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}`. This bug has recurred multiple times.
 
 ### Database Query Patterns
 - **Timezone Awareness**: All datetime queries use CONVERT_TZ for Colombia timezone

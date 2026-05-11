@@ -25,7 +25,10 @@ function clientCard({ client, deleted = false }) {
               content: (
                 <div>
                   <p>Este cliente tiene órdenes activas y no puede ser eliminado.</p>
-                  <a href={`/cobrarOrden/${orderId}`} style={{ color: '#1677ff' }}>
+                  <a
+                    href={`/cobrarOrden/${orderId}`}
+                    style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}
+                  >
                     Ver orden #{orderId}
                   </a>
                 </div>
@@ -50,7 +53,7 @@ function clientCard({ client, deleted = false }) {
 
   if (deleted) {
     return (
-      <div className="flex bg-gray-200 items-center text-gray-500 opacity-70 rounded-md m-2">
+      <div className="flex items-center bg-gray-200 text-gray-500 opacity-70 rounded-md m-2">
         <span className="text-red-600 font-bold text-xs px-2">[ELIMINADO]</span>
         <b><p className="p-2 flex items-center line-through">{client.premises} {client.clientName}</p></b>
         <span className="text-xs text-gray-400 px-2">{client.mall}</span>
@@ -60,7 +63,7 @@ function clientCard({ client, deleted = false }) {
         <div className="p-2 ml-auto">
           <button
             type="button"
-            className="bg-green-200 hover:bg-green-300 px-2 py-1 text-green-800 rounded"
+            className="w-8 h-8 rounded-md flex items-center justify-center bg-green-200 hover:bg-green-300 text-green-800"
             onClick={handleRestore}
           >
             <UndoOutlined />
@@ -71,20 +74,20 @@ function clientCard({ client, deleted = false }) {
   }
 
   return (
-    <div className="flex bg-stone-100 items-center stext-black rounded-md m-2">
+    <div className="flex items-center bg-stone-100 text-black rounded-md m-2">
       <span>{client.createAt}</span>
       <b><p className="p-2 flex items-center h-content">{client.premises} {client.clientName}</p></b>
-      <div className="p-2 ml-auto">
+      <div className="flex gap-2 p-2 ml-auto">
         <button
           type="button"
-          className="bg-slate-300 px-2 mx-8 py-1 text-black"
+          className="w-8 h-8 rounded-md flex items-center justify-center bg-slate-300 text-black"
           onClick={handleDelete}
         >
           <DeleteOutlined />
         </button>
         <button
           type="button"
-          className="bg-slate-300 px-2 py-1 text-black"
+          className="w-8 h-8 rounded-md flex items-center justify-center bg-slate-300 text-black"
           onClick={() => navigate(`/editarCliente/${client.id}`)}
         >
           <EditOutlined />

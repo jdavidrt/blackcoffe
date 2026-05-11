@@ -7,20 +7,22 @@ function productCard({ product }) {
   const navigate = useNavigate();
 
   return (
-    <div className="flex bg-stone-100 text-black rounded-md m-2">
+    <div className="flex items-center bg-stone-100 text-black rounded-md m-2">
       <p className="p-2 flex items-center h-content font-bold">{product.productName} - ${product.unitValue}</p>
       <p className="p-2 text-sm text-gray-500 flex items-center justify-center font-bold h-content">
         {product.dateAdded}
       </p>
-      <div className="p-2 ml-auto">
+      <div className="flex gap-2 p-2 ml-auto">
         <button
-          className="bg-slate-300 px-2 mx-8 py-1 text-black"
+          type="button"
+          className="w-8 h-8 rounded-md flex items-center justify-center bg-slate-300 text-black"
           onClick={() => deleteProduct(product.id)}
         >
           <DeleteOutlined />
         </button>
         <button
-          className="bg-slate-300 px-2 py-1 text-black"
+          type="button"
+          className="w-8 h-8 rounded-md flex items-center justify-center bg-slate-300 text-black"
           onClick={() => navigate(`/editarProducto/${product.id}`)}
         >
           <EditOutlined />

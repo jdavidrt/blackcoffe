@@ -13,6 +13,7 @@ function OrderDeliveryCard({ order }) {
   const { updateOrder } = useOrders();
   const [cart, setCart] = useState([]);
   const deliveryDate = getCurrentDate();
+  const isPaid = order.paid === 1;
 
   const handleCheckboxChange = async (itemId) => {
     setCart((prevCart) => {
@@ -30,7 +31,6 @@ function OrderDeliveryCard({ order }) {
       var values = {};
       values.items = JSON.stringify(updatedCart);
 
-      // Llama a tu función asíncrona aquí (en este caso, updateOrder)
       updateOrder(order.id, values);
       setTimeout(() => {
         window.location.reload();
@@ -39,47 +39,55 @@ function OrderDeliveryCard({ order }) {
     });
   };
 
-
   useEffect(() => {
     setCart(getOrderItems(order))
   }, [])
 
   return (
     <div className={getMallCardStyle(order.mall)}>
-      <div className="flex">
-        <span>{formatDate(order.createAt)}</span>
+      <div className="flex items-center">
+        <span className="text-xs text-gray-500 px-2 whitespace-nowrap">{formatDate(order.createAt)}</span>
         <b>
           <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p>
         </b>
-        <div className="flex p-2 ml-auto">
+        <div className="flex flex-col p-2 ml-auto text-right shrink-0">
           <b>
             {order.deposit ? (
               <>
-                <p>Abono: ${order.deposit} <p className="text-red-500">Debe: ${calculateOrderTotal(order) - order.deposit}</p></p>
+                <span>Abono: ${order.deposit}</span>
+                <span className="text-red-500 block">Debe: ${calculateOrderTotal(order) - order.deposit}</span>
               </>
             ) : (
-              <p className="text-zinc-950 px-2"> Total: ${calculateOrderTotal(order)}</p>
+              <span className="text-zinc-950 px-2">Total: ${calculateOrderTotal(order)}</span>
             )}
           </b>
-          <button
-            className="flex bg-slate-300 px-2 py-1 text-black ml-auto"
-            onClick={() => navigate(`/cobrarOrden/${order.id}`)}
-          >
-            <LoginOutlined onClick={() => navigate(`/cobrarOrden/${order.id}`)} />
-          </button>
         </div>
+        <button
+          type="button"
+          className="w-8 h-8 rounded-md flex items-center justify-center bg-slate-300 text-black shrink-0 ml-2"
+          onClick={() => navigate(`/cobrarOrden/${order.id}`)}
+        >
+          <LoginOutlined />
+        </button>
       </div>
+
+      {isPaid && (
+        <p className="text-xs text-gray-400 px-4 pb-1">Pagado – sin modificaciones</p>
+      )}
+
       <ProgressiveProductList
         products={getOrderItems(order).filter(item => !item.delivered).reverse()}
         renderProduct={(item) => (
           <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
-            <input
-              type="checkbox"
-              className="ml-2"
-              value={item.delivered}
-              checked={item.delivered}
-              onChange={() => handleCheckboxChange(item.id)}
-            />
+            {!isPaid && (
+              <input
+                type="checkbox"
+                className="ml-2"
+                value={item.delivered}
+                checked={item.delivered}
+                onChange={() => handleCheckboxChange(item.id)}
+              />
+            )}
             <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
             <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
               {getItemDisplayTime(item.id)}
@@ -89,7 +97,6 @@ function OrderDeliveryCard({ order }) {
         )}
       />
     </div>
-
   );
 }
 
