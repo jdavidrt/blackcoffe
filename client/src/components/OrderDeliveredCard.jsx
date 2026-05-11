@@ -30,7 +30,6 @@ function OrderDeliveredCard({ order }) {
       var values = {};
       values.items = JSON.stringify(updatedCart);
 
-      // Llama a tu función asíncrona aquí (en este caso, updateOrder)
       updateOrder(order.id, values);
       setTimeout(() => {
         window.location.reload();
@@ -39,35 +38,36 @@ function OrderDeliveredCard({ order }) {
     });
   };
 
-
   useEffect(() => {
     setCart(getOrderItems(order))
   }, [])
 
   return (
     <div className={getMallCardStyle(order.mall)}>
-      <div className="flex">
-        <span>{formatDate(order.createAt)}</span>
+      <div className="flex items-center">
+        <span className="text-xs text-gray-500 px-2 whitespace-nowrap">{formatDate(order.createAt)}</span>
         <b>
           <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p>
         </b>
-        <div className="flex p-2 ml-auto">
+        <div className="flex flex-col p-2 ml-auto text-right shrink-0">
           <b>
             {order.deposit ? (
               <>
-                <p>Abono: ${order.deposit} <p className="text-red-500">Debe: ${calculateOrderTotal(order) - order.deposit}</p></p>
+                <span className="block">Abono: ${order.deposit}</span>
+                <span className="block text-red-500">Debe: ${calculateOrderTotal(order) - order.deposit}</span>
               </>
             ) : (
-              <p className="text-zinc-950 px-2"> Total: ${calculateOrderTotal(order)}</p>
+              <span className="text-zinc-950 px-2">Total: ${calculateOrderTotal(order)}</span>
             )}
           </b>
-          <button
-            className="flex bg-slate-300 px-2 py-1 text-black ml-auto"
-            onClick={() => navigate(`/cobrarOrden/${order.id}`)}
-          >
-            <LoginOutlined onClick={() => navigate(`/cobrarOrden/${order.id}`)} />
-          </button>
         </div>
+        <button
+          type="button"
+          className="w-8 h-8 rounded-md flex items-center justify-center bg-slate-300 text-black shrink-0 ml-2"
+          onClick={() => navigate(`/cobrarOrden/${order.id}`)}
+        >
+          <LoginOutlined />
+        </button>
       </div>
       <ProgressiveProductList
         products={getOrderItems(order)
@@ -94,7 +94,6 @@ function OrderDeliveredCard({ order }) {
         )}
       />
     </div>
-
   );
 }
 
