@@ -14,7 +14,26 @@ function clientCard({ client, deleted = false }) {
       okText: 'Eliminar',
       okType: 'danger',
       cancelText: 'Cancelar',
-      onOk: () => deleteClient(client.id),
+      onOk: async () => {
+        try {
+          await deleteClient(client.id);
+        } catch (error) {
+          const orderId = error.response?.data?.orderId;
+          if (error.response?.status === 400 && orderId) {
+            Modal.error({
+              title: 'Cliente con órdenes activas',
+              content: (
+                <div>
+                  <p>Este cliente tiene órdenes activas y no puede ser eliminado.</p>
+                  <a href={`/cobrarOrden/${orderId}`} style={{ color: '#1677ff' }}>
+                    Ver orden #{orderId}
+                  </a>
+                </div>
+              ),
+            });
+          }
+        }
+      },
     });
   };
 

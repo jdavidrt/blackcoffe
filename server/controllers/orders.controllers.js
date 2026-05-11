@@ -12,7 +12,20 @@ const hasDuplicateItemIds = (itemsJson) => {
 
 export const getOrders = async (req, res) => {
     try {
-        const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC");
+        const [result] = await pool.query(`
+            SELECT
+                orders.id, orders.deposit,
+                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'),
+                orders.clientId, orders.paid, orders.collectedBy, orders.items,
+                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) AS createdAt,
+                COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
+                COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
+            FROM orders
+            JOIN clients ON orders.clientId = clients.id
+            WHERE orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+            ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC
+        `);
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getOrders');
@@ -32,9 +45,9 @@ export const getNotDeliveredOrders = async (req, res) => {
                 orders.collectedBy,
                 orders.items,
                 DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
-                clients.premises,
-                clients.clientName,
-                clients.mall
+                COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
+                COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
             FROM
                 orders
             JOIN
@@ -65,9 +78,9 @@ export const getDeliveredOrders = async (req, res) => {
                 orders.collectedBy,
                 orders.items,
                 DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
-                clients.premises,
-                clients.clientName,
-                clients.mall
+                COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
+                COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
             FROM
                 orders
             JOIN
@@ -114,9 +127,9 @@ export const getDepositedOrdersByDate = async (req, res) => {
                 orders.items,
                 orders.deposit,
                 orders.paid,
-                clients.premises,
-                clients.clientName,
-                clients.mall
+                COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
+                COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
             FROM
                 orders
             JOIN
@@ -144,9 +157,20 @@ export const getDepositedOrdersByDate = async (req, res) => {
 
 export const getUnPaidOrders = async (req, res) => {
     try {
-        const [result] = await pool.query("select orders.id,orders.deposit, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE clients.mall = ? and orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
-            req.params.mall,
-        ]);
+        const [result] = await pool.query(`
+            SELECT
+                orders.id, orders.deposit,
+                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'),
+                orders.clientId, orders.paid, orders.collectedBy, orders.items,
+                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) AS createdAt,
+                COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
+                COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
+            FROM orders
+            JOIN clients ON orders.clientId = clients.id
+            WHERE clients.mall = ? AND orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+            ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC
+        `, [req.params.mall]);
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getUnPaidOrders');
@@ -156,9 +180,20 @@ export const getUnPaidOrders = async (req, res) => {
 
 export const getUnPaidOrdersbyClientId = async (req, res) => {
     try {
-        const [result] = await pool.query("select orders.id, CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'), orders.clientId, orders.paid, orders.collectedBy, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE orders.clientId = ? and orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
-            req.params.clientId,
-        ]);
+        const [result] = await pool.query(`
+            SELECT
+                orders.id,
+                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'),
+                orders.clientId, orders.paid, orders.collectedBy, orders.items,
+                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) AS createdAt,
+                COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
+                COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
+            FROM orders
+            JOIN clients ON orders.clientId = clients.id
+            WHERE orders.clientId = ? AND orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+            ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC
+        `, [req.params.clientId]);
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getUnPaidOrdersbyClientId');
@@ -169,9 +204,19 @@ export const getUnPaidOrdersbyClientId = async (req, res) => {
 export const getCollectedOrders = async (req, res) => {
     try {
         // paidAt is a MANUAL timestamp (frontend sends Colombia time) - no CONVERT_TZ needed
-        const [result] = await pool.query("select orders.id , DATE(orders.paidAt) as paidAt, orders.clientId, orders.collectedBy, orders.paid, orders.items, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, clients.premises, clients.clientName, clients.mall from orders join clients on orders.clientId = clients.id WHERE DATE(orders.paidAt) = ? and orders.paid = 1 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL) ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC", [
-            req.params.date,
-        ]);
+        const [result] = await pool.query(`
+            SELECT
+                orders.id, DATE(orders.paidAt) AS paidAt,
+                orders.clientId, orders.collectedBy, orders.paid, orders.items,
+                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) AS createdAt,
+                COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
+                COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
+            FROM orders
+            JOIN clients ON orders.clientId = clients.id
+            WHERE DATE(orders.paidAt) = ? AND orders.paid = 1 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+            ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC
+        `, [req.params.date]);
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getCollectedOrders');
@@ -182,9 +227,20 @@ export const getCollectedOrders = async (req, res) => {
 export const getOrder = async (req, res) => {
     try {
         // paidAt and abandonedAt are MANUAL/COLOMBIA timestamps - no CONVERT_TZ needed
-        const [result] = await pool.query("SELECT orders.id, DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt, orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod, orders.paidAt as paidAt, orders.items, orders.isAbandoned, orders.abandonReason, orders.abandonedAt as abandonedAt, orders.abandonedBy, clients.premises, clients.clientName, clients.mall FROM orders join clients on orders.clientId = clients.id WHERE orders.id = ?", [
-            req.params.id,
-        ]);
+        const [result] = await pool.query(`
+            SELECT
+                orders.id,
+                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) AS createdAt,
+                orders.clientId, orders.collectedBy, orders.paid, orders.deposit, orders.paymentMethod,
+                orders.paidAt AS paidAt, orders.items, orders.isAbandoned, orders.abandonReason,
+                orders.abandonedAt AS abandonedAt, orders.abandonedBy,
+                COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
+                COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
+            FROM orders
+            JOIN clients ON orders.clientId = clients.id
+            WHERE orders.id = ?
+        `, [req.params.id]);
 
         if (result.length === 0)
             return res.status(404).json({ message: "Order not found" });
@@ -231,8 +287,25 @@ export const updateOrder = async (req, res) => {
             return res.status(400).json({ message: 'Error: items duplicados detectados. Operación cancelada.' });
         }
 
+        const updateData = { ...req.body };
+
+        if (Number(req.body.paid) === 1) {
+            const [orderRows] = await pool.query('SELECT clientId FROM orders WHERE id = ?', [req.params.id]);
+            if (orderRows.length > 0) {
+                const [clientRows] = await pool.query(
+                    'SELECT clientName, premises, mall FROM clients WHERE id = ?',
+                    [orderRows[0].clientId]
+                );
+                if (clientRows.length > 0) {
+                    updateData.clientNameSnapshot = clientRows[0].clientName;
+                    updateData.clientPremisesSnapshot = clientRows[0].premises;
+                    updateData.clientMallSnapshot = clientRows[0].mall;
+                }
+            }
+        }
+
         const result = await pool.query("UPDATE orders SET ? WHERE id = ?", [
-            req.body,
+            updateData,
             req.params.id,
         ]);
 
@@ -365,9 +438,9 @@ export const getAbandonedOrders = async (req, res) => {
         const [rows] = await pool.query(
             `SELECT
                 orders.*,
-                clients.clientName AS clientName,
-                clients.premises AS premises,
-                clients.mall AS mall,
+                COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
+                COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall,
                 CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') AS createdAt,
                 orders.abandonedAt AS abandonedAt
             FROM orders

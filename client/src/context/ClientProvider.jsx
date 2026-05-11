@@ -30,12 +30,8 @@ export const ClientContextProvider = ({ children }) => {
   }
 
   const deleteClient = async (id) => {
-    try {
-      const response = await deleteClientRequest(id);
-      setClients(clients.filter((client) => client.id !== id));
-    } catch (error) {
-      console.error(error);
-    }
+    await deleteClientRequest(id);
+    setClients(clients.filter((client) => client.id !== id));
   };
 
   const createClient = async (client) => {
@@ -57,11 +53,7 @@ export const ClientContextProvider = ({ children }) => {
   };
 
   const updateClient = async (id, newFields) => {
-    try {
-      const response = await updateClientRequest(id, newFields);
-    } catch (error) {
-      console.error(error);
-    }
+    await updateClientRequest(id, newFields);
   };
 
   const loadDeletedClients = async () => {
