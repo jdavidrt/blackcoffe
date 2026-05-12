@@ -63,12 +63,8 @@ export const OrderContextProvider = ({ children }) => {
   }
 
   const deleteOrder = async (id) => {
-    try {
-      const response = await deleteOrderRequest(id);
-      setOrders(orders.filter((order) => order.id !== id));
-    } catch (error) {
-      console.error(error);
-    }
+    await deleteOrderRequest(id);
+    setOrders(orders.filter((order) => order.id !== id));
   };
 
   async function loadUnPaidOrders(mall) {

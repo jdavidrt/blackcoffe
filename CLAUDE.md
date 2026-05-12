@@ -484,6 +484,39 @@ if (values.deposit >= calculateTotal()) {
 #### 7. Known Bug: collectedBy Field
 `collectedBy` is currently set to `order.mall` (e.g., "Unilago") in `CollectOrderForm.jsx:299,311` instead of the actual username who collected the payment. This should be fixed to capture `localStorage.getItem('user')`.
 
+#### 8. Client Protection + Snapshot on Payment ✅ (Implemented in commit 3f68348)
+Two paired rules that keep historical orders readable even as the client master record changes:
+
+- **Block client edit/delete while client has active orders.** Both `updateClient` and `deleteClient` (server/controllers/clients.controllers.js:64-104) check `SELECT id FROM orders WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL) LIMIT 1` and return `400 { message, orderId }` if any active order is found. `deleteClient` uses a soft delete (`isDeleted = 1`).
+- **Snapshot client fields onto the order when fully paid.** `updateOrder` (orders.controllers.js:281) captures `clientNameSnapshot`, `clientPremisesSnapshot`, `clientMallSnapshot` from the clients table when `paid` transitions to 1. All SELECT queries read display values via `COALESCE(orders.clientNameSnapshot, clients.clientName)` so historical orders survive subsequent client edits/deletes. Pre-fix orders have NULL snapshots — COALESCE falls back to live client data.
+- **Frontend pattern.** ClientCard / ClientForm catch `error.response?.status === 400 && error.response?.data?.orderId` and render a `Modal.error` with a link to `/cobrarOrden/:orderId`. The provider methods re-throw rather than swallowing.
+
+#### 9. Order Deletion Protection + Paid Order Immutability ✅ (Implemented 2026-05-12)
+Extends rule #8 to the orders table itself. Once an order has accumulated payment history or has been fully paid, it becomes immutable.
+
+- **Block order deletion when any deposits exist.** `deleteOrder` (orders.controllers.js:349) queries `SELECT depositId FROM deposits WHERE orderId = ? LIMIT 1` and returns `400 { message: "Order has deposits", orderId }` if found. **Includes soft-deleted deposits** (`isDeleted = 1`) — those rows exist precisely to preserve audit history, which is meaningless if the parent order is hard-deleted.
+- **Block all modifications to paid orders.** `updateOrder` (orders.controllers.js:281) reads the current `paid` value before applying changes; if `paid = 1`, returns `400 { message: "Order is already paid and cannot be modified", orderId }`. This is intentionally a full freeze:
+  - Items, quantities, `unitValue`, `clientId`, `deposit`, etc. cannot be changed.
+  - **Delivery toggles are also blocked.** `OrderDeliveryCard` and `OrderDeliveredCard` both hide the checkbox when `order.paid === 1` and show a "Pagado – sin modificaciones" label. If a toggle somehow reaches the backend, both cards catch the 400 and surface a `Modal.error` linking to `/factura/:id`.
+- **Frontend guard points.**
+  - `OrderCard.jsx` (Edit button): pre-checks `order.paid === 1` and shows `Modal.error` instead of navigating to `/editarOrden/:id`.
+  - `OrderForm.jsx` (edit mode): on order load, if `order.paid === 1`, shows `Modal.error` and navigates back to `/`. The submit catch also handles the 400 distinctly.
+  - `OrphanedOrdersPage.jsx`: delete now uses `Modal.confirm` with `okType: 'danger'` (matching `ClientCard`) and surfaces the deposit-block error with a link to `/cobrarOrden/:orderId`.
+  - `OrderProvider.deleteOrder` re-throws errors rather than swallowing (matches `updateOrder` pattern).
+
+**Frontend error message catalog** (what users see for these guards):
+
+| Trigger | Title | Body | Link target |
+|---------|-------|------|-------------|
+| Edit a paid order (OrderCard) | "Orden ya pagada" | "Esta orden ya fue pagada y no puede ser modificada." | `/factura/:id` |
+| Navigate to `/editarOrden/:id` for a paid order | "Orden ya pagada" | "Esta orden ya fue pagada y no puede ser modificada." | `/factura/:id` (modal OK navigates back to `/`) |
+| Submit form for a paid order (race condition) | "Orden ya pagada" | "Esta orden ya fue pagada y no puede ser modificada." | `/factura/:id` |
+| Toggle item delivery on a paid order | "Orden ya pagada" | "Esta orden ya fue pagada y no puede modificarse, incluyendo el estado de entrega de sus productos." | `/factura/:id` |
+| Delete an orphaned order with deposits | "Orden con abonos registrados" | "Esta orden tiene abonos registrados y no puede ser eliminada." | `/cobrarOrden/:id` |
+
+All links use the full style set per the "Links inside Ant Design Modals" pattern below:
+`style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}`.
+
 ### Deposits and Payment System
 The BlackCoffe system implements a comprehensive payment tracking system that supports both partial payments (deposits) and full order payments. This system allows café managers to handle complex payment scenarios where customers may pay in installments or make partial payments over time.
 
@@ -1811,6 +1844,10 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 3. **Comprehensive Utility Functions** ✅ **COMPLETED**: Created 8 comprehensive utility files with 25+ functions. Updated 15+ high and medium impact components. Eliminated 50+ lines of duplicate code across order calculations, date formatting, mall styling, cart management, and API configuration.
 
 4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic. See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning details.
+
+5. **Client Protection + Snapshot on Payment** ✅ **COMPLETED** (commit 3f68348): Clients cannot be edited or deleted while they have active (unpaid + non-abandoned) orders — both `updateClient` and `deleteClient` return `400 { orderId }` when blocked, and the UI surfaces a `Modal.error` linking to the offending order. When an order transitions to `paid = 1`, `clientNameSnapshot`/`clientPremisesSnapshot`/`clientMallSnapshot` are captured onto the order row. All order read queries use `COALESCE(snapshot, live)` so historical orders survive client edits/deletes. Pre-fix orders fall back to live data via COALESCE — no destructive backfill. See Rule #8 in "Core Business Rules" above.
+
+6. **Order Deletion Protection + Paid Order Immutability** ✅ **COMPLETED** (2026-05-12): Extends the integrity pattern from #5 to the orders table. `deleteOrder` rejects with `400 { orderId }` when ANY deposit row exists for the order (including soft-deleted ones — required to keep the audit trail anchored). `updateOrder` reads the existing `paid` value before any change; if `paid = 1`, returns `400 { orderId }` with no exceptions (delivery toggles included, matching the "Pagado – sin modificaciones" UI label). Frontend: `OrderCard` pre-checks `paid` on Edit click; `OrderForm` guards in edit mode on load and on submit; `OrphanedOrdersPage` uses `Modal.confirm` (`okType: 'danger'`) for delete + surfaces the deposit-block 400; `OrderProvider.deleteOrder` re-throws errors. `OrderDeliveredCard` now hides the checkbox when `paid = 1`, matching `OrderDeliveryCard`. Files modified: 7 (1 backend, 6 frontend). See Rule #9 in "Core Business Rules" above for the full error message catalog.
 
 **Implementation Summary**:
 - ✅ Backend: Query already included `OR DATE(orders.paidAt) = ?` condition (no changes needed)

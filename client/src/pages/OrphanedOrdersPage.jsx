@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { DeleteOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
+import { Modal } from 'antd';
 import { calculateOrderTotal, getItemDisplayTime } from '../utils/orderUtils';
 import { safeJSONParse } from '../utils/jsonUtils';
 import SearchBar from "../components/SearchBar";
@@ -32,10 +33,37 @@ function OrphanedOrdersPage() {
     loadOrders();
   }, []);
 
-  const handleDelete = async (id) => {
-    if (window.confirm('¿Está seguro de eliminar esta orden sin cliente asociado?')) {
-      await deleteOrder(id);
-    }
+  const handleDelete = (id) => {
+    Modal.confirm({
+      title: '¿Eliminar esta orden?',
+      content: 'Esta orden sin cliente asociado será eliminada permanentemente.',
+      okText: 'Eliminar',
+      okType: 'danger',
+      cancelText: 'Cancelar',
+      onOk: async () => {
+        try {
+          await deleteOrder(id);
+        } catch (error) {
+          const orderId = error.response?.data?.orderId;
+          if (error.response?.status === 400 && orderId) {
+            Modal.error({
+              title: 'Orden con abonos registrados',
+              content: (
+                <div>
+                  <p>Esta orden tiene abonos registrados y no puede ser eliminada.</p>
+                  <a
+                    href={`/cobrarOrden/${orderId}`}
+                    style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}
+                  >
+                    Ver abonos de la orden #{orderId}
+                  </a>
+                </div>
+              ),
+            });
+          }
+        }
+      },
+    });
   };
 
   const toggleExpand = (orderId) => {

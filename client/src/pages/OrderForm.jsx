@@ -5,7 +5,7 @@ import { useProducts } from "../context/ProductProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { PlusCircleOutlined, MinusCircleOutlined } from "@ant-design/icons";
-import { Select } from "antd"
+import { Select, Modal } from "antd"
 import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
@@ -99,6 +99,24 @@ function OrderForm() {
     const loadOrder = async () => {
       if (params.id) {
         const order = await getOrder(params.id);
+        if (order && order.paid === 1) {
+          Modal.error({
+            title: 'Orden ya pagada',
+            content: (
+              <div>
+                <p>Esta orden ya fue pagada y no puede ser modificada.</p>
+                <a
+                  href={`/factura/${params.id}`}
+                  style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}
+                >
+                  Ver factura #{params.id}
+                </a>
+              </div>
+            ),
+            onOk: () => navigate('/'),
+          });
+          return;
+        }
         loadClients([])
         setMall(order.mall)
         setClient(order.clientId)
@@ -176,7 +194,26 @@ function OrderForm() {
       }
     } catch (error) {
       console.error('[OrderForm] Error during order submission:', error);
-      alert("Error al procesar la orden. Intenta de nuevo.");
+      const paidOrderId = error.response?.status === 400 && error.response?.data?.orderId;
+      if (paidOrderId) {
+        Modal.error({
+          title: 'Orden ya pagada',
+          content: (
+            <div>
+              <p>Esta orden ya fue pagada y no puede ser modificada.</p>
+              <a
+                href={`/factura/${paidOrderId}`}
+                style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}
+              >
+                Ver factura #{paidOrderId}
+              </a>
+            </div>
+          ),
+          onOk: () => navigate('/'),
+        });
+      } else {
+        alert("Error al procesar la orden. Intenta de nuevo.");
+      }
     } finally {
       submittingRef.current = false;
       setLoadingMessage("");

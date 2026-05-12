@@ -2,6 +2,7 @@ import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { LoginOutlined } from '@ant-design/icons';
+import { Modal } from 'antd';
 import { getOrderItems } from '../utils/jsonUtils';
 import { calculateOrderTotal, getItemDisplayTime } from '../utils/orderUtils';
 import { getCurrentDate, formatDate } from '../utils/dateUtils';
@@ -13,29 +14,45 @@ function OrderDeliveredCard({ order }) {
   const { updateOrder } = useOrders();
   const [cart, setCart] = useState([]);
   const deliveryDate = getCurrentDate();
+  const isPaid = order.paid === 1;
 
   const handleCheckboxChange = async (itemId) => {
-    setCart((prevCart) => {
-      const updatedCart = prevCart.map((item) => {
-        if (item.id === itemId) {
-          return {
-            ...item,
-            delivered: !item.delivered,
-            deliveredAt: deliveryDate
-          };
-        }
-        return item;
-      });
+    const updatedCart = cart.map((item) => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          delivered: !item.delivered,
+          deliveredAt: deliveryDate
+        };
+      }
+      return item;
+    });
 
-      var values = {};
-      values.items = JSON.stringify(updatedCart);
-
-      updateOrder(order.id, values);
+    try {
+      await updateOrder(order.id, { items: JSON.stringify(updatedCart) });
+      setCart(updatedCart);
       setTimeout(() => {
         window.location.reload();
       }, 3000);
-      return updatedCart;
-    });
+    } catch (error) {
+      const paidOrderId = error.response?.status === 400 && error.response?.data?.orderId;
+      if (paidOrderId) {
+        Modal.error({
+          title: 'Orden ya pagada',
+          content: (
+            <div>
+              <p>Esta orden ya fue pagada y no puede modificarse, incluyendo el estado de entrega de sus productos.</p>
+              <a
+                href={`/factura/${paidOrderId}`}
+                style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}
+              >
+                Ver factura #{paidOrderId}
+              </a>
+            </div>
+          ),
+        });
+      }
+    }
   };
 
   useEffect(() => {
@@ -69,19 +86,24 @@ function OrderDeliveredCard({ order }) {
           <LoginOutlined />
         </button>
       </div>
+      {isPaid && (
+        <p className="text-xs text-gray-400 px-4 pb-1">Pagado – sin modificaciones</p>
+      )}
       <ProgressiveProductList
         products={getOrderItems(order)
           .filter((item) => item.delivered && item.deliveredAt === localStorage.getItem('dateFilter'))
           .reverse()}
         renderProduct={(item) => (
           <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
-            <input
-              type="checkbox"
-              className="ml-2"
-              value={item.delivered}
-              checked={item.delivered}
-              onChange={() => handleCheckboxChange(item.id)}
-            />
+            {!isPaid && (
+              <input
+                type="checkbox"
+                className="ml-2"
+                value={item.delivered}
+                checked={item.delivered}
+                onChange={() => handleCheckboxChange(item.id)}
+              />
+            )}
             <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
             <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
               {getItemDisplayTime(item.id)}

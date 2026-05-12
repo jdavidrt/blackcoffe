@@ -287,20 +287,25 @@ export const updateOrder = async (req, res) => {
             return res.status(400).json({ message: 'Error: items duplicados detectados. Operación cancelada.' });
         }
 
+        const [existing] = await pool.query('SELECT paid, clientId FROM orders WHERE id = ?', [req.params.id]);
+        if (existing.length === 0) {
+            return res.status(404).json({ message: "Order not found" });
+        }
+        if (Number(existing[0].paid) === 1) {
+            return res.status(400).json({ message: "Order is already paid and cannot be modified", orderId: Number(req.params.id) });
+        }
+
         const updateData = { ...req.body };
 
         if (Number(req.body.paid) === 1) {
-            const [orderRows] = await pool.query('SELECT clientId FROM orders WHERE id = ?', [req.params.id]);
-            if (orderRows.length > 0) {
-                const [clientRows] = await pool.query(
-                    'SELECT clientName, premises, mall FROM clients WHERE id = ?',
-                    [orderRows[0].clientId]
-                );
-                if (clientRows.length > 0) {
-                    updateData.clientNameSnapshot = clientRows[0].clientName;
-                    updateData.clientPremisesSnapshot = clientRows[0].premises;
-                    updateData.clientMallSnapshot = clientRows[0].mall;
-                }
+            const [clientRows] = await pool.query(
+                'SELECT clientName, premises, mall FROM clients WHERE id = ?',
+                [existing[0].clientId]
+            );
+            if (clientRows.length > 0) {
+                updateData.clientNameSnapshot = clientRows[0].clientName;
+                updateData.clientPremisesSnapshot = clientRows[0].premises;
+                updateData.clientMallSnapshot = clientRows[0].mall;
             }
         }
 
@@ -348,6 +353,16 @@ export const getOrphanedOrders = async (req, res) => {
 
 export const deleteOrder = async (req, res) => {
     try {
+        const [deposits] = await pool.query(
+            "SELECT depositId FROM deposits WHERE orderId = ? LIMIT 1",
+            [req.params.id]
+        );
+        if (deposits.length > 0) {
+            return res.status(400).json({
+                message: "Order has deposits",
+                orderId: Number(req.params.id),
+            });
+        }
         const [result] = await pool.query("DELETE FROM orders WHERE id = ?", [
             req.params.id,
         ]);
