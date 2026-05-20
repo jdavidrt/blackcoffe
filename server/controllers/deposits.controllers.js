@@ -14,11 +14,10 @@ export const getDeposits = async (req, res) => {
 export const getDepositsByOrder = async (req, res) => {
     try {
         // deletedAt is a COLOMBIA timestamp (stored via DATE_SUB) - no CONVERT_TZ needed
+        // An order with zero deposits is a valid state — return [] (not 404).
         const [result] = await pool.query("SELECT *, deposits.paymentMethod as paymentMeethd , CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt, deposits.isDeleted, deposits.deletedAt as deletedAt FROM deposits join orders on orders.id = deposits.orderId WHERE deposits.orderId = ?", [
             req.params.id,
         ]);
-        if (result.length === 0)
-            return res.status(404).json({ message: "Deposito no encontrado" });
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'getDepositsByOrder');
