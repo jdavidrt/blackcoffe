@@ -1,6 +1,5 @@
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { LoginOutlined } from '@ant-design/icons';
 import { Modal } from 'antd';
 import { getOrderItems } from '../utils/jsonUtils';
@@ -12,12 +11,16 @@ import ProgressiveProductList from './ProgressiveProductList';
 function OrderDeliveredCard({ order }) {
   const navigate = useNavigate();
   const { updateOrder } = useOrders();
-  const [cart, setCart] = useState([]);
   const deliveryDate = getCurrentDate();
   const isPaid = order.paid === 1;
 
   const handleCheckboxChange = async (itemId) => {
-    const updatedCart = cart.map((item) => {
+    const currentItems = getOrderItems(order);
+    if (currentItems.length === 0) {
+      Modal.error({ title: 'Error', content: 'No se pudieron leer los productos de la orden. Recargue la página.' });
+      return;
+    }
+    const updatedCart = currentItems.map((item) => {
       if (item.id === itemId) {
         return {
           ...item,
@@ -30,7 +33,6 @@ function OrderDeliveredCard({ order }) {
 
     try {
       await updateOrder(order.id, { items: JSON.stringify(updatedCart) });
-      setCart(updatedCart);
       setTimeout(() => {
         window.location.reload();
       }, 3000);
@@ -54,10 +56,6 @@ function OrderDeliveredCard({ order }) {
       }
     }
   };
-
-  useEffect(() => {
-    setCart(getOrderItems(order))
-  }, [])
 
   return (
     <div className={getMallCardStyle(order.mall)}>

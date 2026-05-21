@@ -32,6 +32,7 @@ function OrderForm() {
   const submittingRef = useRef(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [formKey, setFormKey] = useState(0);
+  const [orderLoaded, setOrderLoaded] = useState(false);
   const params = useParams();
   const navigate = useNavigate();
   const dateFormat = 'YYYY-MM-DD';
@@ -98,6 +99,7 @@ function OrderForm() {
 
     const loadOrder = async () => {
       if (params.id) {
+        setOrderLoaded(false);
         const order = await getOrder(params.id);
         if (order && order.paid === 1) {
           Modal.error({
@@ -128,6 +130,7 @@ function OrderForm() {
           clientName: order.clientName,
           premises: order.premises
         });
+        setOrderLoaded(true);
       } else {
         setMall("Alta Tecnología");
         loadClients("Alta Tecnología");
@@ -139,6 +142,7 @@ function OrderForm() {
           items: ""
         });
         setClientChanged(false);
+        setOrderLoaded(true);
       }
     };
     loadOrder();
@@ -151,6 +155,17 @@ function OrderForm() {
 
     try {
       if (params.id) {
+        if (!orderLoaded) {
+          alert("La orden aún se está cargando. Por favor espere un momento.");
+          return;
+        }
+        if (cart.length === 0) {
+          Modal.error({
+            title: 'Orden vacía',
+            content: 'No se puede guardar una orden sin productos. Si desea cancelar la orden, use la opción "Marcar como Abandonada" desde la pantalla de cobro.',
+          });
+          return;
+        }
         setLoadingMessage("Modificando orden...");
         await updateOrder(params.id, {
           clientId: client || values.clientId,
@@ -161,6 +176,10 @@ function OrderForm() {
       } else {
         if (!client) {
           alert("Por favor selecciona un cliente.");
+          return;
+        }
+        if (cart.length === 0) {
+          alert("Agrega al menos un producto al carrito antes de crear la orden.");
           return;
         }
 

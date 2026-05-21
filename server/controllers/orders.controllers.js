@@ -287,12 +287,33 @@ export const updateOrder = async (req, res) => {
             return res.status(400).json({ message: 'Error: items duplicados detectados. Operación cancelada.' });
         }
 
-        const [existing] = await pool.query('SELECT paid, clientId FROM orders WHERE id = ?', [req.params.id]);
+        const [existing] = await pool.query('SELECT paid, clientId, items FROM orders WHERE id = ?', [req.params.id]);
         if (existing.length === 0) {
             return res.status(404).json({ message: "Order not found" });
         }
         if (Number(existing[0].paid) === 1) {
             return res.status(400).json({ message: "Order is already paid and cannot be modified", orderId: Number(req.params.id) });
+        }
+
+        // Data-loss guard: refuse to overwrite a non-empty items array with an empty one.
+        // Real edits go through OrderForm (which validates cart.length > 0) and delivery toggles
+        // (which preserve every item). An incoming items="[]" indicates a stale-state race —
+        // never a legitimate update. Empty incoming + already-empty existing is also a no-op write.
+        if (req.body.items !== undefined) {
+            let incomingItems;
+            try { incomingItems = JSON.parse(req.body.items); } catch { incomingItems = null; }
+            if (Array.isArray(incomingItems) && incomingItems.length === 0) {
+                const existingItems = (() => {
+                    try { return JSON.parse(existing[0].items || '[]'); } catch { return []; }
+                })();
+                if (existingItems.length > 0) {
+                    console.error(`[updateOrder] BLOCKED empty-items overwrite for order ${req.params.id}. Existing had ${existingItems.length} items.`);
+                    return res.status(400).json({
+                        message: "Empty items array rejected to prevent data loss",
+                        orderId: Number(req.params.id)
+                    });
+                }
+            }
         }
 
         const updateData = { ...req.body };
