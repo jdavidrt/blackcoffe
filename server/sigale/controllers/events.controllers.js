@@ -287,6 +287,15 @@ export const updateEvent = async (req, res) => {
     const existingIdSet = new Set(existingStages.map((s) => s.id));
     const submittedIdSet = new Set(b.stages.filter((s) => s.id).map((s) => Number(s.id)));
 
+    // Shift all existing sortOrders out of the way so the update loop can write
+    // real values without hitting the (eventId, sortOrder) unique constraint.
+    if (existingStages.length > 0) {
+      await conn.query(
+        'UPDATE ticket_stages SET sortOrder = sortOrder + 10000 WHERE eventId = ?',
+        [eventId],
+      );
+    }
+
     // Delete stages no longer in the form, only when no purchases reference them.
     for (const id of existingIdSet) {
       if (!submittedIdSet.has(id)) {
