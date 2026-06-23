@@ -318,7 +318,25 @@ export const updateOrder = async (req, res) => {
 
         const updateData = { ...req.body };
 
-        if (Number(req.body.paid) === 1) {
+        // Guard against a race condition: an item can be merged into this order
+        // (OrderForm) between the moment a payment form snapshots the order total
+        // and the moment the payment is submitted. Re-verify "paid" against the
+        // CURRENT items in the DB instead of trusting the client, so the order can
+        // never get locked as paid=1 while still carrying a real balance.
+        if (Number(updateData.paid) === 1) {
+            let currentItems = [];
+            try { currentItems = JSON.parse(existing[0].items || '[]'); } catch { currentItems = []; }
+            const currentTotal = currentItems.reduce(
+                (total, item) => total + (Number(item.unitValue) || 0) * (Number(item.quantity) || 0),
+                0
+            );
+            if (!(Number(updateData.deposit) >= currentTotal)) {
+                updateData.paid = 0;
+                delete updateData.paidAt;
+            }
+        }
+
+        if (Number(updateData.paid) === 1) {
             const [clientRows] = await pool.query(
                 'SELECT clientName, premises, mall FROM clients WHERE id = ?',
                 [existing[0].clientId]
