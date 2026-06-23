@@ -368,8 +368,8 @@ export const createWalkInSale = async (req, res) => {
 
 /**
  * DELETE /api/admin/purchases  (organizer)
- * Hard-reset: delete all confirmed purchases + their tickets for all events,
- * and restore soldQuantity on each affected stage. Intended for dev resets
+ * Hard-reset: delete ALL purchases + their tickets regardless of status,
+ * and restore stage inventory (sold + reserved). Intended for dev resets
  * and post-event cleanup — not reversible. Stays behind requireOrganizer.
  */
 export const deleteAllPurchases = async (req, res) => {
@@ -377,9 +377,9 @@ export const deleteAllPurchases = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // Grab all confirmed purchases with stageId + quantity to restore inventory.
+    // All purchases — every status — with stageId + quantity to restore inventory.
     const [purchases] = await conn.query(
-      "SELECT id, stageId, quantity FROM purchases WHERE status = 'confirmed'",
+      'SELECT id, stageId, quantity, status FROM purchases',
     );
 
     if (purchases.length === 0) {
@@ -393,19 +393,30 @@ export const deleteAllPurchases = async (req, res) => {
     // Delete child tickets first (FK: tickets.purchaseId -> purchases.id).
     await conn.query(`DELETE FROM tickets WHERE purchaseId IN (${placeholders})`, ids);
 
-    // Restore soldQuantity per stage.
-    const stageQty = {};
+    // Restore soldQuantity (confirmed) and reservedQuantity (non-confirmed) per stage.
+    const stageSold = {};
+    const stageReserved = {};
     for (const p of purchases) {
-      stageQty[p.stageId] = (stageQty[p.stageId] || 0) + p.quantity;
+      if (p.status === 'confirmed') {
+        stageSold[p.stageId] = (stageSold[p.stageId] || 0) + p.quantity;
+      } else {
+        stageReserved[p.stageId] = (stageReserved[p.stageId] || 0) + p.quantity;
+      }
     }
-    for (const [stageId, qty] of Object.entries(stageQty)) {
+    for (const [stageId, qty] of Object.entries(stageSold)) {
       await conn.query(
         'UPDATE ticket_stages SET soldQuantity = GREATEST(soldQuantity - ?, 0) WHERE id = ?',
         [qty, stageId],
       );
     }
+    for (const [stageId, qty] of Object.entries(stageReserved)) {
+      await conn.query(
+        'UPDATE ticket_stages SET reservedQuantity = GREATEST(reservedQuantity - ?, 0) WHERE id = ?',
+        [qty, stageId],
+      );
+    }
 
-    // Now delete the purchases themselves.
+    // Delete all purchases.
     await conn.query(`DELETE FROM purchases WHERE id IN (${placeholders})`, ids);
 
     await conn.commit();
@@ -413,6 +424,49 @@ export const deleteAllPurchases = async (req, res) => {
   } catch (error) {
     await conn.rollback();
     sendErrorEmail(req, error, 'deleteAllPurchases');
+    return res.status(500).json({ message: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
+/**
+ * DELETE /api/admin/tickets/:id  (organizer)
+ * Remove a single minted ticket and restore 1 unit of sold inventory on
+ * its stage. Used by the /tickets page trash button.
+ */
+export const deleteAdminTicket = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[ticket]] = await conn.query(
+      `SELECT t.id, p.stageId, p.status
+       FROM tickets t
+       JOIN purchases p ON p.id = t.purchaseId
+       WHERE t.id = ?`,
+      [req.params.id],
+    );
+    if (!ticket) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Boleta no encontrada' });
+    }
+
+    await conn.query('DELETE FROM tickets WHERE id = ?', [req.params.id]);
+
+    // Restore one sold unit (only confirmed purchases have sold inventory).
+    if (ticket.status === 'confirmed') {
+      await conn.query(
+        'UPDATE ticket_stages SET soldQuantity = GREATEST(soldQuantity - 1, 0) WHERE id = ?',
+        [ticket.stageId],
+      );
+    }
+
+    await conn.commit();
+    res.json({ ok: true });
+  } catch (error) {
+    await conn.rollback();
+    sendErrorEmail(req, error, 'deleteAdminTicket');
     return res.status(500).json({ message: error.message });
   } finally {
     conn.release();

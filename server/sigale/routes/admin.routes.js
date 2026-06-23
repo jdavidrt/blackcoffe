@@ -20,6 +20,7 @@ import {
   createWalkInSale,
   updateAdminTicket,
   deleteAllPurchases,
+  deleteAdminTicket,
 } from '../controllers/admin.controllers.js';
 
 const router = Router();
@@ -38,6 +39,7 @@ router.get('/api/admin/purchases', requireOrganizer, getAdminPurchases);
 router.delete('/api/admin/purchases', requireOrganizer, deleteAllPurchases);
 router.get('/api/admin/tickets', requireOrganizer, getAdminTickets);
 router.patch('/api/admin/tickets/:id', requireOrganizer, updateAdminTicket);
+router.delete('/api/admin/tickets/:id', requireOrganizer, deleteAdminTicket);
 router.post('/api/admin/purchases/:id/confirm', requireOrganizer, confirmPurchase);
 router.post('/api/admin/purchases/:id/reject', requireOrganizer, rejectPurchase);
 router.post('/api/admin/sales', requireOrganizer, createWalkInSale);
