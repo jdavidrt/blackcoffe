@@ -228,11 +228,15 @@ export const createEvent = async (req, res) => {
 
 /**
  * PUT /api/events/:id  (organizer — requireOrganizer at the route)
- * Edits the event's fields and replaces its stages, in one transaction.
+ * Edits the event's fields and reconciles its stages in one transaction.
  *
- * NOTE (Phase 2+): replacing stages wholesale is safe only while no
- * purchases reference them. Once purchases exist, switch to a reconciling
- * update (match by id, preserve sold/reserved) instead of delete-and-insert.
+ * Stage reconciliation (safe when purchases exist):
+ *   - Submitted stage has an id that matches an existing stage → UPDATE in-place
+ *     (soldQuantity / reservedQuantity / status are preserved).
+ *   - Submitted stage has no id (or id not found) → INSERT new stage.
+ *   - Existing stage not present in the submitted list:
+ *       • No purchases reference it → DELETE.
+ *       • Purchases exist → leave it (organizer must handle manually).
  */
 export const updateEvent = async (req, res) => {
   const validationError = validateEventPayload(req.body);
@@ -245,6 +249,8 @@ export const updateEvent = async (req, res) => {
     await conn.beginTransaction();
 
     const b = req.body;
+    const eventId = req.params.id;
+
     const [result] = await conn.query(
       `UPDATE events SET
          name = ?, description = ?, artists = CAST(? AS JSON),
@@ -264,7 +270,7 @@ export const updateEvent = async (req, res) => {
         b.flyerImageUrl || null,
         b.bankQrImageUrl || null,
         b.whatsappNumber || null,
-        req.params.id,
+        eventId,
       ],
     );
 
@@ -273,12 +279,72 @@ export const updateEvent = async (req, res) => {
       return res.status(404).json({ message: 'Evento no encontrado' });
     }
 
-    await conn.query('DELETE FROM ticket_stages WHERE eventId = ?', [req.params.id]);
-    await insertStages(conn, req.params.id, b.stages);
+    // ── Reconcile stages ────────────────────────────────────────────────────────
+    const [existingStages] = await conn.query(
+      'SELECT id FROM ticket_stages WHERE eventId = ?',
+      [eventId],
+    );
+    const existingIdSet = new Set(existingStages.map((s) => s.id));
+    const submittedIdSet = new Set(b.stages.filter((s) => s.id).map((s) => Number(s.id)));
+
+    // Delete stages no longer in the form, only when no purchases reference them.
+    for (const id of existingIdSet) {
+      if (!submittedIdSet.has(id)) {
+        const [[{ cnt }]] = await conn.query(
+          'SELECT COUNT(*) AS cnt FROM purchases WHERE stageId = ?',
+          [id],
+        );
+        if (Number(cnt) === 0) {
+          await conn.query('DELETE FROM ticket_stages WHERE id = ?', [id]);
+        }
+        // If purchases exist, leave the orphaned stage in place.
+      }
+    }
+
+    // Update existing stages or insert new ones.
+    for (let i = 0; i < b.stages.length; i++) {
+      const s = b.stages[i];
+      const stageId = s.id ? Number(s.id) : null;
+
+      if (stageId && existingIdSet.has(stageId)) {
+        // UPDATE — preserve soldQuantity, reservedQuantity, and status.
+        await conn.query(
+          `UPDATE ticket_stages SET
+             name = ?, price = ?, totalQuantity = ?, sortOrder = ?,
+             activatesAt = CONVERT_TZ(?, '${BOGOTA}', '${UTC}')
+           WHERE id = ? AND eventId = ?`,
+          [
+            s.name,
+            s.price,
+            s.totalQuantity,
+            s.sortOrder ?? i,
+            s.activatesAt || null,
+            stageId,
+            eventId,
+          ],
+        );
+      } else {
+        // INSERT — brand new stage, starts with zero sold/reserved.
+        await conn.query(
+          `INSERT INTO ticket_stages
+             (eventId, name, price, totalQuantity, soldQuantity, reservedQuantity, sortOrder, activatesAt, status)
+           VALUES (?, ?, ?, ?, 0, 0, ?, CONVERT_TZ(?, '${BOGOTA}', '${UTC}'), ?)`,
+          [
+            eventId,
+            s.name,
+            s.price,
+            s.totalQuantity,
+            s.sortOrder ?? i,
+            s.activatesAt || null,
+            i === 0 ? 'active' : 'upcoming',
+          ],
+        );
+      }
+    }
 
     await conn.commit();
 
-    const [[event]] = await conn.query(`${EVENT_SELECT} WHERE id = ? LIMIT 1`, [req.params.id]);
+    const [[event]] = await conn.query(`${EVENT_SELECT} WHERE id = ? LIMIT 1`, [eventId]);
     res.json(await buildEventPayload(conn, event));
   } catch (error) {
     await conn.rollback();
