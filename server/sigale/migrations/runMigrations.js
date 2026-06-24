@@ -42,9 +42,10 @@ function splitStatements(sql) {
 }
 
 export async function runMigrations() {
-  if (process.env.DB_NAME !== 'sigale') {
+  const resolvedDbName = process.env.SIGALE_DB_NAME ?? process.env.DB_NAME;
+  if (resolvedDbName !== 'sigale') {
     throw new Error(
-      `[sigale/migrations] Refusing to run: DB_NAME must be 'sigale' (got '${process.env.DB_NAME ?? 'undefined'}').`,
+      `[sigale/migrations] Refusing to run: SIGALE_DB_NAME (or DB_NAME) must be 'sigale' (got '${resolvedDbName ?? 'undefined'}').`,
     );
   }
 

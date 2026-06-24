@@ -21,10 +21,13 @@ import { createPool } from 'mysql2/promise';
 import fs from 'node:fs';
 
 // ── Guardrail: dedicated `sigale` database only ────────────────────────────────
-const DB_NAME = process.env.DB_NAME;
+// On the shared BlackCoffe server, DB_NAME is already taken by BlackCoffe
+// ('defaultdb'). Set SIGALE_DB_NAME=sigale in that environment so Sígale
+// reads its own var without conflicting. Standalone mode keeps DB_NAME=sigale.
+const DB_NAME = process.env.SIGALE_DB_NAME ?? process.env.DB_NAME;
 if (DB_NAME !== 'sigale') {
   throw new Error(
-    `[sigale/db] Refusing to connect: DB_NAME must be 'sigale' (got '${DB_NAME ?? 'undefined'}'). ` +
+    `[sigale/db] Refusing to connect: SIGALE_DB_NAME (or DB_NAME) must be 'sigale' (got '${DB_NAME ?? 'undefined'}'). ` +
       'Sígale never touches the BlackCoffe database — see SIGALE_2.0_IMPLEMENTATION_PLAN §3.1.',
   );
 }
