@@ -316,6 +316,19 @@ export const updateEvent = async (req, res) => {
       const stageId = s.id ? Number(s.id) : null;
 
       if (stageId && existingIdSet.has(stageId)) {
+        // Guard: totalQuantity must not drop below already-sold + reserved inventory.
+        const [[inv]] = await conn.query(
+          'SELECT soldQuantity, reservedQuantity FROM ticket_stages WHERE id = ?',
+          [stageId],
+        );
+        const floor = Number(inv?.soldQuantity || 0) + Number(inv?.reservedQuantity || 0);
+        if (Number(s.totalQuantity) < floor) {
+          await conn.rollback();
+          return res.status(409).json({
+            message: `La etapa "${s.name}" tiene ${floor} cupos vendidos/reservados; no se puede reducir el aforo a ${s.totalQuantity}.`,
+          });
+        }
+
         // UPDATE — preserve soldQuantity, reservedQuantity, and status.
         await conn.query(
           `UPDATE ticket_stages SET
@@ -331,6 +344,12 @@ export const updateEvent = async (req, res) => {
             stageId,
             eventId,
           ],
+        );
+        // If the organizer raised totalQuantity above the sold+reserved floor,
+        // reopen a sold_out stage so buyers can reserve the new spots.
+        await conn.query(
+          'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
+          ['active', stageId, 'sold_out'],
         );
       } else {
         // INSERT — brand new stage, starts with zero sold/reserved.

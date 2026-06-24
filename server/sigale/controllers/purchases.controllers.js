@@ -105,6 +105,11 @@ export const createPurchase = async (req, res) => {
       'UPDATE ticket_stages SET reservedQuantity = reservedQuantity + ? WHERE id = ?',
       [qty, stageId],
     );
+    // Mark sold_out if no spots remain after this reservation.
+    await conn.query(
+      'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity >= totalQuantity',
+      ['sold_out', stageId, 'active'],
+    );
 
     const totalAmount = Number(stage.price) * qty;
 

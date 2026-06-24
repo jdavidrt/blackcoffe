@@ -83,6 +83,11 @@ export async function sweepExpiredHolds() {
         'UPDATE ticket_stages SET reservedQuantity = GREATEST(reservedQuantity - ?, 0) WHERE id = ?',
         [p.quantity, p.stageId],
       );
+      // Reopen the stage if the released hold creates available spots.
+      await conn.query(
+        'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
+        ['active', p.stageId, 'sold_out'],
+      );
       await conn.query("UPDATE purchases SET status = 'expired' WHERE id = ?", [p.id]);
     }
 

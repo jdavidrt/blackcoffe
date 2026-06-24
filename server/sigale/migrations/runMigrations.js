@@ -10,8 +10,7 @@
  * shared-server redeploy can never run destructive DDL.
  *
  * GUARDRAIL (SIGALE_2.0_IMPLEMENTATION_PLAN 3.1): refuses to
- * run unless SIGALE_DB_NAME=sigale (shared-server build -
- * BlackCoffe owns DB_NAME). db.js enforces the same on the
+ * run unless DB_NAME=sigale. db.js enforces the same on the
  * pool; this is defense in depth.
  * ============================================================
  */
@@ -43,12 +42,9 @@ function splitStatements(sql) {
 }
 
 export async function runMigrations() {
-  // Shared-server build: Sigale's schema name comes from SIGALE_DB_NAME so it
-  // never collides with BlackCoffe's DB_NAME in the host process environment.
-  const sigaleDbName = process.env.SIGALE_DB_NAME || 'sigale';
-  if (sigaleDbName !== 'sigale') {
+  if (process.env.DB_NAME !== 'sigale') {
     throw new Error(
-      `[sigale/migrations] Refusing to run: SIGALE_DB_NAME must be 'sigale' (got '${sigaleDbName}').`,
+      `[sigale/migrations] Refusing to run: DB_NAME must be 'sigale' (got '${process.env.DB_NAME ?? 'undefined'}').`,
     );
   }
 

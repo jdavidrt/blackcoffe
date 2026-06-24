@@ -1,51 +1,50 @@
 /*
  * ============================================================
- * SIGALE - DATABASE POOL  (shared-server build)
- * One mysql2/promise pool, reused across every Sigale handler.
+ * SÍGALE — DATABASE POOL
+ * One mysql2/promise pool, reused across the whole app.
  *
- * GUARDRAIL: must connect to the `sigale` schema only.
- * In the merged BlackCoffe deployment the host process already
- * uses DB_NAME for BlackCoffe, so Sigale reads its own schema
- * name from SIGALE_DB_NAME and reuses the shared host/port/
- * credentials. See SIGALE_MERGE_INTO_SHARED_SERVER.md S5.
+ * Two modes:
+ *   LOCAL  — DB_CA_CERT empty → plain TCP to 127.0.0.1:3306, no SSL.
+ *            Safe: the socket never leaves the machine.
+ *   PROD   — DB_CA_CERT set   → TLS with the DigitalOcean CA cert;
+ *            rejectUnauthorized stays true (ADR-0001 §9).
  *
- * SSL: matches BlackCoffe's working DigitalOcean config
- * (rejectUnauthorized:false). If a CA cert path is provided
- * via DB_CA_CERT it is used instead - useful for stricter envs.
+ * GUARDRAIL: DB_NAME must be 'sigale'. This pool must NEVER connect
+ * to BlackCoffe's database. See SIGALE_2.0_IMPLEMENTATION_PLAN §3.1.
  *
  * dateStrings:true keeps DATETIME as strings so the driver never
- * shifts them by the Node process timezone (ADR-0001 S8).
+ * shifts them by the Node process timezone (ADR-0001 §8).
  * ============================================================
  */
 
 import { createPool } from 'mysql2/promise';
 import fs from 'node:fs';
 
-// -- Guardrail: dedicated `sigale` database only -------------------------------
-const DB_NAME = process.env.SIGALE_DB_NAME || 'sigale';
+// ── Guardrail: dedicated `sigale` database only ────────────────────────────────
+const DB_NAME = process.env.DB_NAME;
 if (DB_NAME !== 'sigale') {
   throw new Error(
-    `[sigale/db] Refusing to connect: SIGALE_DB_NAME must be 'sigale' (got '${DB_NAME}'). ` +
-      'Sigale never touches the BlackCoffe database - see SIGALE_2.0_IMPLEMENTATION_PLAN S3.1.',
+    `[sigale/db] Refusing to connect: DB_NAME must be 'sigale' (got '${DB_NAME ?? 'undefined'}'). ` +
+      'Sígale never touches the BlackCoffe database — see SIGALE_2.0_IMPLEMENTATION_PLAN §3.1.',
   );
 }
 
-// -- SSL: prefer optional CA cert; otherwise mirror BlackCoffe's working config -
+// ── SSL: prod uses DigitalOcean CA cert; local skips SSL entirely ──────────────
 let ssl;
 if (process.env.DB_CA_CERT) {
   ssl = { ca: fs.readFileSync(process.env.DB_CA_CERT) };
-  console.log('[sigale/db] SSL enabled - using CA cert from DB_CA_CERT.');
+  console.log('[sigale/db] SSL enabled — using CA cert from DB_CA_CERT.');
 } else {
-  ssl = { rejectUnauthorized: false };
-  console.log('[sigale/db] SSL enabled (rejectUnauthorized:false) - matching shared DigitalOcean config.');
+  ssl = false; // plain TCP; safe for localhost-only connections
+  console.log('[sigale/db] DB_CA_CERT not set — connecting without SSL (local dev mode).');
 }
 
 export const pool = createPool({
-  host:        process.env.DB_HOST,                            // shared instance
-  port:        Number(process.env.DB_PORT) || 25060,
-  user:        process.env.DB_USER,                            // shared credentials
+  host:        process.env.DB_HOST || '127.0.0.1',
+  port:        Number(process.env.DB_PORT) || 3306,
+  user:        process.env.DB_USER,
   password:    process.env.DB_PASSWORD,
-  database:    DB_NAME,                                        // 'sigale' - the separate schema
+  database:    DB_NAME,
   dateStrings: true,
   ssl,
   waitForConnections: true,
@@ -56,11 +55,10 @@ export const pool = createPool({
 try {
   const conn = await pool.getConnection();
   conn.release();
-  const portStr = process.env.DB_PORT || 25060;
-  console.log(`[${new Date().toISOString()}] [sigale] Connected to MySQL (db=${DB_NAME}, host=${process.env.DB_HOST}:${portStr})`);
+  console.log(`[${new Date().toISOString()}] [sigale] Connected to MySQL (db=${DB_NAME}, host=${process.env.DB_HOST}:${process.env.DB_PORT || 3306})`);
 } catch (err) {
   console.error(`[sigale/db] Cannot connect to MySQL: ${err.message}`);
-  console.error('[sigale/db] Check DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, SIGALE_DB_NAME in the host environment');
+  console.error('[sigale/db] Check DB_HOST, DB_PORT, DB_USER, DB_PASSWORD in server/.env');
   throw err;
 }
 

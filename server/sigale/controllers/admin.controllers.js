@@ -254,11 +254,23 @@ export const rejectPurchase = async (req, res) => {
       await conn.commit();
       return res.json({ id: purchase.id, status: 'rejected' });
     }
+    // 'expired' purchases had their reservedQuantity decremented by sweepExpiredHolds.
+    // Attempting the decrement again would cause GREATEST(0 - N, 0) unsigned underflow
+    // → CHECK constraint violation. Treat as idempotent: nothing left to release.
+    if (purchase.status === 'expired') {
+      await conn.commit();
+      return res.json({ id: purchase.id, status: 'expired' });
+    }
 
     // Release the held cupo back to the stage.
     await conn.query(
       'UPDATE ticket_stages SET reservedQuantity = GREATEST(reservedQuantity - ?, 0) WHERE id = ?',
       [purchase.quantity, purchase.stageId],
+    );
+    // Restore to active if the released spot opens availability.
+    await conn.query(
+      'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
+      ['active', purchase.stageId, 'sold_out'],
     );
     await conn.query("UPDATE purchases SET status = 'rejected' WHERE id = ?", [purchase.id]);
 
@@ -304,6 +316,11 @@ export const createWalkInSale = async (req, res) => {
     }
 
     await conn.query('UPDATE ticket_stages SET soldQuantity = soldQuantity + ? WHERE id = ?', [qty, stageId]);
+    // Mark sold_out if walk-in filled the last spot.
+    await conn.query(
+      'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity >= totalQuantity',
+      ['sold_out', stageId, 'active'],
+    );
 
     // Sequential orderId (shared sequence with public purchases), retry on collision.
     const totalAmount = Number(stage.price) * qty;
@@ -393,15 +410,20 @@ export const deleteAllPurchases = async (req, res) => {
     // Delete child tickets first (FK: tickets.purchaseId -> purchases.id).
     await conn.query(`DELETE FROM tickets WHERE purchaseId IN (${placeholders})`, ids);
 
-    // Restore soldQuantity (confirmed) and reservedQuantity (non-confirmed) per stage.
+    // Restore soldQuantity (confirmed) and reservedQuantity (pending/submitted) per stage.
+    // IMPORTANT: 'rejected' and 'expired' purchases have already had their
+    // reservedQuantity decremented (by rejectPurchase / sweepExpiredHolds).
+    // Including them here would cause unsigned underflow on the INT UNSIGNED column
+    // (GREATEST(0 - N, 0) wraps to ~4B), triggering the chkStageCapacity CHECK.
     const stageSold = {};
     const stageReserved = {};
     for (const p of purchases) {
       if (p.status === 'confirmed') {
         stageSold[p.stageId] = (stageSold[p.stageId] || 0) + p.quantity;
-      } else {
+      } else if (p.status === 'pending_payment' || p.status === 'payment_submitted') {
         stageReserved[p.stageId] = (stageReserved[p.stageId] || 0) + p.quantity;
       }
+      // 'rejected' and 'expired': inventory already released — nothing to restore.
     }
     for (const [stageId, qty] of Object.entries(stageSold)) {
       await conn.query(
@@ -418,6 +440,12 @@ export const deleteAllPurchases = async (req, res) => {
 
     // Delete all purchases.
     await conn.query(`DELETE FROM purchases WHERE id IN (${placeholders})`, ids);
+
+    // Reopen any stage whose inventory was fully cleared by this reset.
+    await conn.query(
+      'UPDATE ticket_stages SET status = ? WHERE status = ? AND soldQuantity + reservedQuantity < totalQuantity',
+      ['active', 'sold_out'],
+    );
 
     await conn.commit();
     res.json({ ok: true, deleted: purchases.length });
@@ -440,11 +468,14 @@ export const deleteAdminTicket = async (req, res) => {
   try {
     await conn.beginTransaction();
 
+    // FOR UPDATE locks the ticket row so concurrent deletes of the same ticket
+    // cannot both decrement soldQuantity (double-decrement bug).
     const [[ticket]] = await conn.query(
       `SELECT t.id, p.stageId, p.status
        FROM tickets t
        JOIN purchases p ON p.id = t.purchaseId
-       WHERE t.id = ?`,
+       WHERE t.id = ?
+       FOR UPDATE`,
       [req.params.id],
     );
     if (!ticket) {
@@ -459,6 +490,11 @@ export const deleteAdminTicket = async (req, res) => {
       await conn.query(
         'UPDATE ticket_stages SET soldQuantity = GREATEST(soldQuantity - 1, 0) WHERE id = ?',
         [ticket.stageId],
+      );
+      // Reopen the stage if this deletion freed the last needed spot.
+      await conn.query(
+        'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
+        ['active', ticket.stageId, 'sold_out'],
       );
     }
 

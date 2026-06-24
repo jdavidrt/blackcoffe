@@ -1,0 +1,24 @@
+{
+  "name": "sigale-server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Sigale 2.0 backend - Express + MySQL (sigale DB). Separate from BlackCoffe; merges into the shared server in Phase 6.",
+  "scripts": {
+    "dev": "node --env-file=.env index.js",
+    "start": "node index.js",
+    "seed:organizer": "node --env-file=.env seed/seedOrganizer.js",
+    "seed:event": "node --env-file=.env seed/seedSampleEvent.js",
+    "seed:all": "npm run seed:organizer && npm run seed:event"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "mysql2": "^3.11.5",
+    "node-cron": "^3.0.3",
+    "resend": "^4.0.1"
+  }
+}
