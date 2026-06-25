@@ -106,10 +106,22 @@ export const createPurchase = async (req, res) => {
       [qty, stageId],
     );
     // Mark sold_out if no spots remain after this reservation.
-    await conn.query(
+    const [fillResult] = await conn.query(
       'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity >= totalQuantity',
       ['sold_out', stageId, 'active'],
     );
+
+    // Cascade: if this stage just sold out and the next upcoming stage on the
+    // same event has no activatesAt (i.e. it will never auto-activate via the
+    // scheduler), promote it to active so buyers can continue purchasing.
+    if (fillResult.affectedRows > 0) {
+      await conn.query(
+        `UPDATE ticket_stages SET status = 'active'
+          WHERE eventId = ? AND status = 'upcoming' AND activatesAt IS NULL
+          ORDER BY sortOrder ASC LIMIT 1`,
+        [stage.eventId],
+      );
+    }
 
     const totalAmount = Number(stage.price) * qty;
 

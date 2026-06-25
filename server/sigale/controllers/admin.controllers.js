@@ -317,10 +317,21 @@ export const createWalkInSale = async (req, res) => {
 
     await conn.query('UPDATE ticket_stages SET soldQuantity = soldQuantity + ? WHERE id = ?', [qty, stageId]);
     // Mark sold_out if walk-in filled the last spot.
-    await conn.query(
+    const [fillResult] = await conn.query(
       'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity >= totalQuantity',
       ['sold_out', stageId, 'active'],
     );
+
+    // Cascade: if this stage just sold out, activate the next upcoming stage
+    // that has no activatesAt (scheduler-exempt stages need explicit promotion).
+    if (fillResult.affectedRows > 0) {
+      await conn.query(
+        `UPDATE ticket_stages SET status = 'active'
+          WHERE eventId = ? AND status = 'upcoming' AND activatesAt IS NULL
+          ORDER BY sortOrder ASC LIMIT 1`,
+        [eventId],
+      );
+    }
 
     // Sequential orderId (shared sequence with public purchases), retry on collision.
     const totalAmount = Number(stage.price) * qty;
