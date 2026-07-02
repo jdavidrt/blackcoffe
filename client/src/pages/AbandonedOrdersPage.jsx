@@ -43,6 +43,7 @@ function AbandonedOrdersPage() {
       okText: 'Reactivar',
       okType: 'primary',
       cancelText: 'Cancelar',
+      okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
       onOk: async () => {
         try {
           await unmarkOrderAsAbandoned(orderId);

@@ -1,0 +1,8 @@
+Copia de seguridad:
+- Local y en la nube
+- Del 23 en adelante
+- 15 de mayo para atras borrar
+- Copias por día a las 11 noche
+- Que reestablezca a el día seleccionado
+Debe haber una tabla para referenciar los cambios hechos con copias de seguridad ejemplo "El día X se reestableció la cuenta X con el backup del día X"
+

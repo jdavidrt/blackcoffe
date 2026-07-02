@@ -934,6 +934,11 @@ Relaxes the edit half of entry #5. Clients could not previously be renamed or ha
 2. **Live linkage consequence**: unpaid orders have no snapshot (snapshots are only written when `paid` becomes `1`, see #5), so their displayed `clientName`/`premises`/`mall` are always read live via `COALESCE(orders.*Snapshot, clients.*)`. This means changing a client's `mall` while they have an active order immediately moves that order between mall-filtered collection views (`/cobrarOrdenes/:mall`) — expected behavior of the live FK, not a bug.
 3. **Frontend** (`client/src/pages/ClientForm.jsx`): on submit in edit mode, calls `loadUnPaidOrdersbyClient(id)` (existing endpoint, reused) before saving. If an active order is found, shows `Modal.confirm` naming the order and warning that the change is live, before proceeding. The previous dead-end `400`/`orderId` `Modal.error` handler (which only ever fired for the now-removed backend check) was removed.
 
+### Post-Release Fix (2026-07-02): Invisible "Continuar" Button
+The `Modal.confirm` added in step 3 initially shipped without `okButtonProps`, and its "Continuar" button rendered white-on-white (invisible) because Tailwind's base reset (`background-color: transparent` on buttons) overrides Ant Design's zero-specificity `:where` styles. This is the same root cause as the recurring invisible-link bug already documented for modals. Fix: added `okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } }`. The same latent bug was fixed in `AbandonedOrdersPage.jsx` ("Reactivar" confirm, `okType: 'primary'`).
+
+⚠️ **MANDATORY RULE (extends the "Links inside Ant Design Modals" pattern)**: every `Modal.confirm()` whose `okType` is NOT `'danger'` MUST set an explicit `okButtonProps` style (blue `#1677ff` for confirm/continue actions; green `#16a34a` for restore-type actions, see `ClientCard.jsx`). `okType: 'danger'` renders visibly red and is the only exemption. See CLAUDE.md → Development Patterns → "Styling inside Ant Design Modals (links AND buttons)" for the canonical rule.
+
 ### Files Modified
 - `server/controllers/clients.controllers.js`
 - `client/src/pages/ClientForm.jsx`

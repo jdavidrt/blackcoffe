@@ -54,6 +54,7 @@ function ClientForm() {
                   content: `Este cliente tiene una orden activa (#${activeOrders[0].id}). Los cambios se verán reflejados de inmediato en esa orden. ¿Desea continuar?`,
                   okText: "Continuar",
                   cancelText: "Cancelar",
+                  okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
                   onOk: async () => {
                     await updateClient(params.id, values);
                     navigate("/clientes");
