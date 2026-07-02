@@ -63,13 +63,8 @@ export const createClient = async (req, res) => {
 
 export const updateClient = async (req, res) => {
     try {
-        const [activeOrders] = await pool.query(
-            "SELECT id FROM orders WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL) LIMIT 1",
-            [req.params.id]
-        );
-        if (activeOrders.length > 0) {
-            return res.status(400).json({ message: "Client has active orders", orderId: activeOrders[0].id });
-        }
+        // Orders link to clients via clientId (a stable FK), never by name/premises/mall,
+        // so editing those fields is always safe even while the client has an active order.
         const result = await pool.query("UPDATE clients SET ? WHERE id = ?", [
             req.body,
             req.params.id,

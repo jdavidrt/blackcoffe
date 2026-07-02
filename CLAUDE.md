@@ -66,7 +66,7 @@ This is a monorepo with separate client (React) and server (Express) application
   - **MANUAL Timestamps** (`paidAt`, `deliveredAt`): Sent by frontend in Colombia time
   - **COLOMBIA Timestamps** (`abandonedAt`, `deletedAt`): Stored using `DATE_SUB(NOW(), INTERVAL 5 HOUR)`
   - **Date Filtering**: Always use `DATE(CONVERT_TZ(field, '+00:00', '-05:00'))` for correct timezone
-  - See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#timezone-implementation) for complete implementation guide
+  - See [PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md#timezone-implementation) for complete implementation guide
 - **Key Tables**: orders, clients, products, users, deposits
 - **Order States**: Orders track paid status, delivery status, and collection status
 
@@ -484,12 +484,15 @@ if (values.deposit >= calculateTotal()) {
 #### 7. Known Bug: collectedBy Field
 `collectedBy` is currently set to `order.mall` (e.g., "Unilago") in `CollectOrderForm.jsx:299,311` instead of the actual username who collected the payment. This should be fixed to capture `localStorage.getItem('user')`.
 
-#### 8. Client Protection + Snapshot on Payment ✅ (Implemented in commit 3f68348)
-Two paired rules that keep historical orders readable even as the client master record changes:
+#### 8. Client Protection + Snapshot on Payment ✅ (Implemented in commit 3f68348; edit-lock relaxed 2026-07-02)
+Two paired rules that keep historical orders readable even as the client master record changes. Orders always link to a client via the stable `clientId` FK (`orders.clientId → clients.id`) — never by matching name/premises/mall text — so editing a client's display fields never breaks that link, only *deleting* a client is destructive enough to warrant a hard block.
 
-- **Block client edit/delete while client has active orders.** Both `updateClient` and `deleteClient` (server/controllers/clients.controllers.js:64-104) check `SELECT id FROM orders WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL) LIMIT 1` and return `400 { message, orderId }` if any active order is found. `deleteClient` uses a soft delete (`isDeleted = 1`).
-- **Snapshot client fields onto the order when fully paid.** `updateOrder` (orders.controllers.js:281) captures `clientNameSnapshot`, `clientPremisesSnapshot`, `clientMallSnapshot` from the clients table when `paid` transitions to 1. All SELECT queries read display values via `COALESCE(orders.clientNameSnapshot, clients.clientName)` so historical orders survive subsequent client edits/deletes. Pre-fix orders have NULL snapshots — COALESCE falls back to live client data.
-- **Frontend pattern.** ClientCard / ClientForm catch `error.response?.status === 400 && error.response?.data?.orderId` and render a `Modal.error` with a link to `/cobrarOrden/:orderId`. The provider methods re-throw rather than swallowing.
+- **Block client deletion while client has active orders.** `deleteClient` (server/controllers/clients.controllers.js:84-104) checks `SELECT id FROM orders WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL) LIMIT 1` and returns `400 { message, orderId }` if any active order is found. Uses a soft delete (`isDeleted = 1`).
+- **Client edits are NOT blocked by active orders (changed 2026-07-02).** `updateClient` (server/controllers/clients.controllers.js:64-69) no longer runs an active-order check — `clientName`/`premises`/`mall`/`phoneNumber` can be changed freely even while the client has an active order, since `clientId` itself is never modified. Previously this was a hard `400` block, matching `deleteClient`'s behavior; that block was removed because it was preventing legitimate corrections (typo fixes, premises reassignment) with no integrity benefit.
+- **Live linkage for active (unpaid) orders.** Unpaid orders never get a snapshot (see below), so their displayed `clientName`/`premises`/`mall` are always read live via `COALESCE(orders.*Snapshot, clients.*)`, which falls through to the current `clients` row. Consequence: editing a client's `mall` while they have an active order immediately moves that order between mall-filtered collection views (`/cobrarOrdenes/:mall`) — this is expected live-FK behavior, not a bug.
+- **Frontend warns before editing a client with an active order.** `ClientForm.jsx` (edit mode) calls `loadUnPaidOrdersbyClient(id)` on submit; if an active order is found, it shows `Modal.confirm` ("Cliente con orden activa... ¿Desea continuar?", naming the order) before saving, since the change is live and immediately affects that order's display. No backend error round-trip is involved — this is a proactive check, not error handling.
+- **Snapshot client fields onto the order when fully paid.** `updateOrder` (orders.controllers.js:281) captures `clientNameSnapshot`, `clientPremisesSnapshot`, `clientMallSnapshot` from the clients table when `paid` transitions to 1. All SELECT queries read display values via `COALESCE(orders.clientNameSnapshot, clients.clientName)` so historical (paid) orders survive subsequent client edits/deletes. Pre-fix orders have NULL snapshots — COALESCE falls back to live client data.
+- **Frontend pattern for delete.** `ClientCard` still catches `error.response?.status === 400 && error.response?.data?.orderId` from `deleteClient` and renders a `Modal.error` with a link to `/cobrarOrden/:orderId`. This 400 path no longer applies to edits (see above). The provider methods re-throw rather than swallowing.
 
 #### 9. Order Deletion Protection + Paid Order Immutability ✅ (Implemented 2026-05-12)
 Extends rule #8 to the orders table itself. Once an order has accumulated payment history or has been fully paid, it becomes immutable.
@@ -1422,7 +1425,7 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 - Route configured with `<Navigate>` redirect in `App.jsx` (line 56)
 - Backend: `getDepositedOrdersByDate()` in `orders.controllers.js` (lines 65-105)
 - Frontend: Enhanced `DepositedOrdersPage.jsx` and `OrderCollectCard.jsx`
-- See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning and implementation details
+- See [PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning and implementation details
 
 ---
 
@@ -1843,11 +1846,13 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 
 3. **Comprehensive Utility Functions** ✅ **COMPLETED**: Created 8 comprehensive utility files with 25+ functions. Updated 15+ high and medium impact components. Eliminated 50+ lines of duplicate code across order calculations, date formatting, mall styling, cart management, and API configuration.
 
-4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic. See [PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning details.
+4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic. See [PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning details.
 
-5. **Client Protection + Snapshot on Payment** ✅ **COMPLETED** (commit 3f68348): Clients cannot be edited or deleted while they have active (unpaid + non-abandoned) orders — both `updateClient` and `deleteClient` return `400 { orderId }` when blocked, and the UI surfaces a `Modal.error` linking to the offending order. When an order transitions to `paid = 1`, `clientNameSnapshot`/`clientPremisesSnapshot`/`clientMallSnapshot` are captured onto the order row. All order read queries use `COALESCE(snapshot, live)` so historical orders survive client edits/deletes. Pre-fix orders fall back to live data via COALESCE — no destructive backfill. See Rule #8 in "Core Business Rules" above.
+5. **Client Protection + Snapshot on Payment** ✅ **COMPLETED** (commit 3f68348; edit-lock relaxed 2026-07-02, see #7): Clients cannot be deleted while they have active (unpaid + non-abandoned) orders — `deleteClient` returns `400 { orderId }` when blocked, and `ClientCard` surfaces a `Modal.error` linking to the offending order. **Editing is no longer blocked** — see #7 below. When an order transitions to `paid = 1`, `clientNameSnapshot`/`clientPremisesSnapshot`/`clientMallSnapshot` are captured onto the order row. All order read queries use `COALESCE(snapshot, live)` so historical (paid) orders survive client edits/deletes. Pre-fix orders fall back to live data via COALESCE — no destructive backfill. See Rule #8 in "Core Business Rules" above.
 
 6. **Order Deletion Protection + Paid Order Immutability** ✅ **COMPLETED** (2026-05-12): Extends the integrity pattern from #5 to the orders table. `deleteOrder` rejects with `400 { orderId }` when ANY deposit row exists for the order (including soft-deleted ones — required to keep the audit trail anchored). `updateOrder` reads the existing `paid` value before any change; if `paid = 1`, returns `400 { orderId }` with no exceptions (delivery toggles included, matching the "Pagado – sin modificaciones" UI label). Frontend: `OrderCard` pre-checks `paid` on Edit click; `OrderForm` guards in edit mode on load and on submit; `OrphanedOrdersPage` uses `Modal.confirm` (`okType: 'danger'`) for delete + surfaces the deposit-block 400; `OrderProvider.deleteOrder` re-throws errors. `OrderDeliveredCard` now hides the checkbox when `paid = 1`, matching `OrderDeliveryCard`. Files modified: 7 (1 backend, 6 frontend). See Rule #9 in "Core Business Rules" above for the full error message catalog.
+
+7. **Client Edit Unlocked While Active Order Exists** ✅ **COMPLETED** (2026-07-02): Relaxed the edit half of Rule #8. `updateClient` (clients.controllers.js:64) no longer blocks edits when the client has an active (unpaid, non-abandoned) order — orders link to clients via the stable `clientId` FK, which `updateClient` never touches, so renaming a client or changing their `premises`/`mall`/`phoneNumber` is safe regardless of order status. `deleteClient` is unchanged and still blocks deletion. Frontend (`ClientForm.jsx`) now proactively calls `loadUnPaidOrdersbyClient(id)` before submitting an edit and shows a `Modal.confirm` warning (naming the active order) if one exists, since the change is live and will immediately be reflected on that order's display — including moving it between mall-filtered collection views if `mall` changes. The old dead-end `400`/`orderId` `Modal.error` handler in `ClientForm.jsx` (which only ever fired for this now-removed backend check) was removed. Files modified: 2 (1 backend, 1 frontend). See Rule #8 in "Core Business Rules" above for full details.
 
 **Implementation Summary**:
 - ✅ Backend: Query already included `OR DATE(orders.paidAt) = ?` condition (no changes needed)
@@ -1910,10 +1915,11 @@ All unsafe `JSON.parse(order.items)` calls have been successfully replaced with 
 ## 📚 Additional Documentation
 
 ### Technical Documentation
-- **[PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md)** - Comprehensive technical documentation consolidating all implementation guides
+- **[PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md)** - Comprehensive technical documentation consolidating all implementation guides
   - **Deployment Guide**: Production deployment configuration, build process, and environment setup
+  - **Database Schema**: Full table definitions, relationships, and soft-delete/protection rules for clients, orders, and deposits
   - **Timezone Implementation**: Complete timezone handling for Colombia (UTC-5) with database patterns and best practices
-  - **Completed Improvements**: Full documentation of implemented features including delete deposits, safe JSON parsing, utility functions, and page merges
+  - **Completed Improvements**: Full documentation of implemented features including delete deposits, safe JSON parsing, utility functions, page merges, client/order protection rules, and the client edit unlock
   - **Feature Implementation Guides**: Invoice payment enhancements, progressive product reveal, and UI improvements
   - **Code Improvement Opportunities**: Security enhancements, error handling, performance optimizations
   - **Implementation Guides**: Step-by-step instructions for all improvements with code examples

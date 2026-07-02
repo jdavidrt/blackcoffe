@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Modal } from "antd";
 import CoffeePouringAnimation from "../components/CoffeePouringAnimation";
+import { loadUnPaidOrdersbyClient } from "../api/orders.api";
 
 function ClientForm() {
   const { createClient, getClient, updateClient } = useClients();
@@ -46,37 +47,34 @@ function ClientForm() {
         onSubmit={async (values, actions) => {
           try {
             if (params.id) {
-              await updateClient(params.id, values);
+              const { data: activeOrders } = await loadUnPaidOrdersbyClient(params.id);
+              if (activeOrders.length > 0) {
+                Modal.confirm({
+                  title: "Cliente con orden activa",
+                  content: `Este cliente tiene una orden activa (#${activeOrders[0].id}). Los cambios se verán reflejados de inmediato en esa orden. ¿Desea continuar?`,
+                  okText: "Continuar",
+                  cancelText: "Cancelar",
+                  onOk: async () => {
+                    await updateClient(params.id, values);
+                    navigate("/clientes");
+                  },
+                });
+              } else {
+                await updateClient(params.id, values);
+                navigate("/clientes");
+              }
             } else {
               await createClient(values);
-            }
-            navigate("/clientes");
-            setClient({
-              premises: "",
-              clientName: "",
-              mall: "",
-              phoneNumber: ""
-            });
-          } catch (error) {
-            const orderId = error.response?.data?.orderId;
-            if (error.response?.status === 400 && orderId) {
-              Modal.error({
-                title: 'Cliente con órdenes activas',
-                content: (
-                  <div>
-                    <p>Este cliente tiene órdenes activas y no puede ser modificado.</p>
-                    <a
-                      href={`/cobrarOrden/${orderId}`}
-                      style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}
-                    >
-                      Ver orden #{orderId}
-                    </a>
-                  </div>
-                ),
+              navigate("/clientes");
+              setClient({
+                premises: "",
+                clientName: "",
+                mall: "",
+                phoneNumber: ""
               });
-            } else {
-              console.error("Error al guardar el cliente", error);
             }
+          } catch (error) {
+            console.error("Error al guardar el cliente", error);
           }
         }}
       >

@@ -150,7 +150,9 @@ if (unPaidOrder && unPaidOrder.id) {
 
 ### M2 — `updateClient` / `updateProduct` accept arbitrary partial bodies
 
-[server/controllers/clients.controllers.js:64-82 updateClient](server/controllers/clients.controllers.js#L64-L82) and [server/controllers/products.controllers.js:47-58 updateProduct](server/controllers/products.controllers.js#L47-L58) use `UPDATE clients SET ?` / `UPDATE products SET ?` directly from `req.body`. Frontend never sends this today, but a malformed request like `{ clientName: "" }` would wipe a client's name.
+[server/controllers/clients.controllers.js:64-77 updateClient](server/controllers/clients.controllers.js#L64-L77) and [server/controllers/products.controllers.js:47-58 updateProduct](server/controllers/products.controllers.js#L47-L58) use `UPDATE clients SET ?` / `UPDATE products SET ?` directly from `req.body`. Frontend never sends this today, but a malformed request like `{ clientName: "" }` would wipe a client's name.
+
+*(2026-07-02: `updateClient` also dropped its active-order guard — see the "already do well" list below. This finding is unaffected: the missing body validation applies regardless of order status.)*
 
 **Recommended fix:** validate the body shape — reject empty required strings, reject unknown columns, and explicitly destructure expected fields rather than splatting `req.body` into the SET clause.
 
@@ -217,8 +219,8 @@ This sets the order state to `{ order: <the previous order object> }` instead of
 - Items duplication is rejected in `createOrder` and `updateOrder` via `hasDuplicateItemIds`.
 - Paid orders are immutable (`updateOrder` and the new empty-items guard).
 - Orders with deposits cannot be hard-deleted (`deleteOrder`).
-- Clients with active orders cannot be edited or deleted (`updateClient`, `deleteClient`).
-- Client identity at payment time is snapshotted onto the order (`clientNameSnapshot` etc.).
+- Clients with active orders cannot be **deleted** (`deleteClient`). ~~Cannot be edited~~ — *(changed 2026-07-02)* `updateClient` no longer blocks edits while a client has an active order: orders reference clients by `clientId` (a stable FK never touched by `updateClient`), so the block was pure friction with no integrity benefit. The frontend (`ClientForm.jsx`) now warns before saving instead, since the edit is reflected live on any active order. See [PROJECT_IMPROVEMENTS.md#-7-client-edit-unlocked-while-active-order-exists-completed](PROJECT_IMPROVEMENTS.md#-7-client-edit-unlocked-while-active-order-exists-completed).
+- Client identity at payment time is snapshotted onto the order (`clientNameSnapshot` etc.) — this is what actually protects **paid** orders from client edits; unpaid orders always show live client data by design.
 - Deposits are soft-deleted with full audit trail.
 - Date handling consistently uses Colombia timezone with documented conventions.
 

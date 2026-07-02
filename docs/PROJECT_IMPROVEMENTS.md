@@ -161,11 +161,15 @@ Stores customer information and location assignments.
 | `mall`        | VARCHAR(100) | NOT NULL           | Mall location (Unilago, Alta Tecnología, etc.) |
 | `email`       | VARCHAR(255) | NULL               | Customer email address (optional)     |
 | `createdAt`   | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP | Client registration timestamp |
+| `isDeleted`   | TINYINT(1)   | DEFAULT 0          | Soft delete flag (0=active, 1=deleted) |
+| `deletedAt`   | DATETIME     | NULL               | When client was soft-deleted          |
 
 **Notes**:
 - `premises` typically stores "Local X" (store number)
 - `mall` values: "Unilago", "Alta Tecnología", "Cliente Frecuente", "Otros"
-- Cannot delete clients with active orders (enforced in application logic)
+- Clients use soft delete (`isDeleted`), same pattern as deposits; deleted clients can be restored
+- **Deletion** is blocked while the client has an active (unpaid, non-abandoned) order (enforced in application logic)
+- **Editing** (`clientName`/`premises`/`mall`/`phone`) is always allowed, even with an active order — orders reference clients by `id`, never by these fields, so edits can't break the link. See [Completed Improvements #7](#-7-client-edit-unlocked-while-active-order-exists-completed)
 
 ---
 
@@ -206,6 +210,9 @@ Central table managing all order operations and state tracking.
 | `abandonedAt`   | DATETIME      | NULL               | When order was marked as abandoned (Colombia time) |
 | `abandonedBy`   | VARCHAR(255)  | NULL               | User who marked order as abandoned    |
 | `abandonReason` | TEXT          | NULL               | Reason for abandonment (optional)     |
+| `clientNameSnapshot`     | VARCHAR(255) | NULL        | Client name captured at the moment `paid` became 1 |
+| `clientPremisesSnapshot` | VARCHAR(100) | NULL        | Client premises captured at the moment `paid` became 1 |
+| `clientMallSnapshot`     | VARCHAR(100) | NULL        | Client mall captured at the moment `paid` became 1 |
 
 **JSON Items Structure**:
 ```json
@@ -225,6 +232,9 @@ Central table managing all order operations and state tracking.
 - `paid = 1` when `deposit >= order total`
 - `isAbandoned = 1` excludes order from active order queries
 - Abandoned orders maintained for audit trail and potential reactivation
+- `clientId` is a permanent reference — orders are never re-linked to a different client, and editing a client's name/premises/mall never changes it
+- `client*Snapshot` columns are populated once, when `paid` transitions to `1`; every SELECT reads display fields via `COALESCE(orders.client*Snapshot, clients.*)`, so a paid order keeps showing the client info as of payment time even if the client is later edited. **Unpaid orders have no snapshot**, so they always display the client's *current* (live) info — see [Completed Improvements #7](#-7-client-edit-unlocked-while-active-order-exists-completed)
+- Once `paid = 1`, the order is immutable — `updateOrder` rejects any further changes (items, quantities, delivery status, `clientId`, etc.) with `400`
 
 **Foreign Keys**:
 - `clientId` → `clients.id`
@@ -288,7 +298,16 @@ products (N) ────────────┘ (via JSON items)
 ### Soft Delete Support
 Tables with soft delete capability:
 - **users**: `isDeleted` flag preserves user history
+- **clients**: `isDeleted`, `deletedAt` — deletion blocked while the client has an active order; restorable via `restoreClient`
 - **deposits**: `isDeleted`, `deletedAt`, `deletedBy` maintains payment audit trail
+
+### Client & Order Protection Rules
+- **Client edits are never blocked** — `updateClient` has no active-order check, since `clientId` (the FK orders actually use) is untouched by renaming a client or changing their premises/mall/phone
+- **Client deletion is blocked** while the client has any active (unpaid, non-abandoned) order
+- **Order deletion is blocked** if the order has any deposit history, including soft-deleted deposits
+- **Order edits are blocked entirely** once `paid = 1` (full freeze, including delivery toggles)
+
+See [Completed Improvements #5, #6, #7](#completed-improvements) for the implementation history of these rules.
 
 ### Abandoned Order Support
 - **orders**: `isAbandoned`, `abandonedAt`, `abandonedBy`, `abandonReason`
@@ -846,6 +865,78 @@ Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enha
 - `client/src/components/Navbar.jsx`
 - `client/src/App.jsx`
 - `client/src/components/OrderCollectCard.jsx`
+
+---
+
+## ✅ 5. Client Protection + Snapshot on Payment (COMPLETED)
+
+**Implementation Date**: commit `3f68348`
+**Status**: ✅ **COMPLETED** (edit-lock relaxed 2026-07-02, see #7 below)
+
+### Overview
+Two paired rules that keep historical orders readable even as the client master record changes. Orders always reference clients via the permanent `clientId` foreign key, never by matching name/premises/mall text.
+
+### What Was Built
+1. **Deletion guard** (`server/controllers/clients.controllers.js` — `deleteClient`): checks `SELECT id FROM orders WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL) LIMIT 1` and returns `400 { message, orderId }` if an active order exists. Uses a soft delete (`isDeleted = 1`).
+2. **Payment-time snapshot** (`server/controllers/orders.controllers.js` — `updateOrder`): when `paid` transitions to `1`, captures `clientNameSnapshot`, `clientPremisesSnapshot`, `clientMallSnapshot` from the `clients` table onto the order row.
+3. **Display fallback**: every order SELECT reads `COALESCE(orders.clientNameSnapshot, clients.clientName)` (and equivalents for premises/mall), so a paid order keeps showing the client info as it was at payment time even if the client record is edited afterward. Pre-fix orders have `NULL` snapshots and simply fall back to live client data — no destructive backfill was needed.
+4. **Frontend**: `ClientCard` catches the `400`/`orderId` response from `deleteClient` and renders a `Modal.error` linking to `/cobrarOrden/:orderId`.
+
+> **Note**: This entry originally also described an edit-time block (`updateClient` returning the same `400`). That block was removed on 2026-07-02 — see entry #7.
+
+### Files Modified
+- `server/controllers/clients.controllers.js`
+- `server/controllers/orders.controllers.js`
+- `client/src/components/ClientCard.jsx`
+- `client/src/pages/ClientForm.jsx`
+
+---
+
+## ✅ 6. Order Deletion Protection + Paid Order Immutability (COMPLETED)
+
+**Implementation Date**: 2026-05-12
+**Status**: ✅ **COMPLETED**
+
+### Overview
+Extends the integrity pattern from #5 to the `orders` table itself. Once an order has accumulated payment history or has been fully paid, it becomes immutable.
+
+### What Was Built
+1. **Deletion guard** (`orders.controllers.js` — `deleteOrder`): rejects with `400 { message: "Order has deposits", orderId }` when ANY deposit row exists for the order, **including soft-deleted ones** — those rows exist specifically to preserve audit history, which would be meaningless if the parent order were hard-deleted.
+2. **Paid order freeze** (`orders.controllers.js` — `updateOrder`): reads the existing `paid` value before applying any change; if `paid = 1`, returns `400 { message: "Order is already paid and cannot be modified", orderId }` with no exceptions — items, quantities, `unitValue`, `clientId`, `deposit`, and delivery toggles are all blocked.
+3. **Frontend guard points**:
+   - `OrderCard` pre-checks `paid` on the Edit button and shows a `Modal.error` instead of navigating to the edit form.
+   - `OrderForm` re-checks on load (in edit mode) and again on submit, in case the order was paid mid-edit.
+   - `OrderDeliveryCard` / `OrderDeliveredCard` hide the delivery checkbox once `paid = 1` and show a "Pagado – sin modificaciones" label; if a toggle somehow reaches the backend, both surface the `400` via `Modal.error`.
+   - `OrphanedOrdersPage` uses `Modal.confirm` (`okType: 'danger'`) for delete and surfaces the deposit-block `400` with a link to `/cobrarOrden/:orderId`.
+   - `OrderProvider.deleteOrder` re-throws errors instead of swallowing them, matching `updateOrder`.
+
+### Files Modified
+- `server/controllers/orders.controllers.js`
+- `client/src/components/OrderCard.jsx`
+- `client/src/pages/OrderForm.jsx`
+- `client/src/components/OrderDeliveryCard.jsx`
+- `client/src/components/OrderDeliveredCard.jsx`
+- `client/src/pages/OrphanedOrdersPage.jsx`
+- `client/src/context/OrderProvider.jsx`
+
+---
+
+## ✅ 7. Client Edit Unlocked While Active Order Exists (COMPLETED)
+
+**Implementation Date**: 2026-07-02
+**Status**: ✅ **COMPLETED**
+
+### Overview
+Relaxes the edit half of entry #5. Clients could not previously be renamed or have their premises/mall corrected while they had an active order, even though that block provided no real integrity benefit — orders link to clients via `clientId`, which `updateClient` never touches. The block was preventing legitimate corrections (typo fixes, premises reassignment) with no upside, so it was removed.
+
+### What Changed
+1. **Backend** (`server/controllers/clients.controllers.js` — `updateClient`): the active-order check was removed entirely. `clientName`, `premises`, `mall`, and `phoneNumber` can now be edited regardless of order status. `deleteClient` is unchanged and still blocks deletion (see #5).
+2. **Live linkage consequence**: unpaid orders have no snapshot (snapshots are only written when `paid` becomes `1`, see #5), so their displayed `clientName`/`premises`/`mall` are always read live via `COALESCE(orders.*Snapshot, clients.*)`. This means changing a client's `mall` while they have an active order immediately moves that order between mall-filtered collection views (`/cobrarOrdenes/:mall`) — expected behavior of the live FK, not a bug.
+3. **Frontend** (`client/src/pages/ClientForm.jsx`): on submit in edit mode, calls `loadUnPaidOrdersbyClient(id)` (existing endpoint, reused) before saving. If an active order is found, shows `Modal.confirm` naming the order and warning that the change is live, before proceeding. The previous dead-end `400`/`orderId` `Modal.error` handler (which only ever fired for the now-removed backend check) was removed.
+
+### Files Modified
+- `server/controllers/clients.controllers.js`
+- `client/src/pages/ClientForm.jsx`
 
 ---
 

@@ -288,7 +288,7 @@ Customer registration form with required fields (name, phone, premises, mall) an
 #### Edit Customer (`/editarCliente/:id`)
 **Component**: `ClientForm.jsx` | **Access**: "Editar" button on customer cards
 
-Update existing customer information with pre-populated form and validation. Cannot change customer ID.
+Update existing customer information with pre-populated form and validation. Cannot change customer ID. Editing is allowed even if the client has an active order — orders reference clients by ID, not by name/premises — but a confirmation prompt warns the operator first, since the change is reflected immediately on that order.
 
 #### Product Catalog (`/productos`)
 **Component**: `ProductsPage.jsx` | **Navigation**: Sky blue "Productos" button
@@ -644,7 +644,7 @@ All datetime fields use **Colombia timezone (UTC-5)** with proper conversion:
 - **MANUAL timestamps** (paidAt, deliveredAt): Sent by frontend in Colombia time
 - **COLOMBIA timestamps** (abandonedAt, deletedAt): Stored using `DATE_SUB(NOW(), INTERVAL 5 HOUR)`
 
-See **[PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md#timezone-implementation)** for complete timezone implementation guide.
+See **[PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md#timezone-implementation)** for complete timezone implementation guide.
 
 ---
 
@@ -755,6 +755,12 @@ The system automatically marks an order as fully paid when the cumulative deposi
 ### Payment Method Per Deposit
 Each individual deposit (payment) can use a different payment method — either **Cash ("Efectivo")** or **Digital Platform ("Plataforma")**. The payment method is not fixed at the order level, so a customer might pay part in cash and part via platform across multiple deposits.
 
+### Client Edit & Delete Protection
+Orders link to clients through a permanent internal ID, never by name or location, so a client's name, premises, mall, or phone number can always be edited — even while they have an active order. Editing while an active order exists shows a warning first, since the change is reflected immediately on that order (e.g. changing `mall` moves the order to a different collection view). **Deleting** a client is still blocked while they have an active (unpaid, non-abandoned) order, since that would remove the record rather than just change a field.
+
+### Order Immutability After Payment
+Once an order is fully paid it is locked — items, quantities, delivery status, and client assignment can no longer be changed, including via the delivery checklist. Orders also cannot be deleted once they have any payment history, including deleted/corrected payments, since that history is the financial audit trail. Paid clients and their orders remain accurate and untouched by later edits elsewhere in the system.
+
 ---
 
 ## 📋 Prerequisites
@@ -829,10 +835,11 @@ The application is configured for deployment with:
   - Code improvements and implementation progress
 
 ### Technical Documentation & Improvements
-- **[PROJECT_IMPROVEMENTS.md](PROJECT_IMPROVEMENTS.md)** - Comprehensive technical documentation
+- **[PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md)** - Comprehensive technical documentation
   - **Deployment Guide**: Production deployment configuration and setup
+  - **Database Schema**: Full table definitions and client/order protection rules
   - **Timezone Implementation**: Complete timezone handling for Colombia (UTC-5)
-  - **Completed Improvements**: Delete deposits, safe JSON parsing, utility functions, page merges
+  - **Completed Improvements**: Delete deposits, safe JSON parsing, utility functions, page merges, client/order protection, client edit unlock
   - **Feature Implementation Guides**: Invoice enhancements, progressive product reveal
   - **Code Improvement Opportunities**: Error handling, security, performance optimizations
   - **Implementation Guides**: Step-by-step instructions for all improvements
