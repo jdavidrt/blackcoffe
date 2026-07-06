@@ -53,6 +53,6 @@ export const executeReadQuery = async (req, res) => {
         res.json({ rows, rowCount: rows.length });
     } catch (error) {
         sendErrorEmail(req, error, 'executeReadQuery');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error ejecutando la consulta' });
     }
 }

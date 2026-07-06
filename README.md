@@ -24,6 +24,8 @@ BlackCoffe is an elegant and efficient order management system designed for caf�
 
 ## 📁 Project Structure
 
+> ⚠️ **`server/sigale/` is a different project** ("Sígale 2.0", a ticketing platform) that is co-hosted in this repo's Express process purely to share hosting costs. It has its own database, its own `package.json`, and its own migrations, and is mounted through [server/sigale/integration.js](server/sigale/integration.js). **Do not modify files under `server/sigale/` while working on BlackCoffe** — see the guardrail section at the top of [CLAUDE.md](CLAUDE.md) and that folder's own [README.md](server/sigale/README.md).
+
 ```
 blackcoffe/
 ├── 📁 client/                    # Frontend React application
@@ -94,7 +96,8 @@ blackcoffe/
 │   │   └── users.routes.js      # User API endpoints
 │   ├── config.js                # Server configuration
 │   ├── db.js                    # Database connection setup
-│   └── index.js                 # Server entry point
+│   ├── index.js                 # Server entry point
+│   └── 📁 sigale/               # ⚠️ FOREIGN SUB-SERVER — not part of BlackCoffe, do not edit (see below)
 ├── 📁 .vscode/                  # VS Code configuration
 ├── package.json                 # Backend dependencies
 ├── package-lock.json            # Dependency lock files
@@ -644,7 +647,7 @@ All datetime fields use **Colombia timezone (UTC-5)** with proper conversion:
 - **MANUAL timestamps** (paidAt, deliveredAt): Sent by frontend in Colombia time
 - **COLOMBIA timestamps** (abandonedAt, deletedAt): Stored using `DATE_SUB(NOW(), INTERVAL 5 HOUR)`
 
-See **[PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md#timezone-implementation)** for complete timezone implementation guide.
+See **[REFERENCE.md](docs/REFERENCE.md#timezone-implementation)** for complete timezone implementation guide.
 
 ---
 
@@ -835,13 +838,8 @@ The application is configured for deployment with:
   - Code improvements and implementation progress
 
 ### Technical Documentation & Improvements
-- **[PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md)** - Comprehensive technical documentation
-  - **Deployment Guide**: Production deployment configuration and setup
-  - **Database Schema**: Full table definitions and client/order protection rules
-  - **Timezone Implementation**: Complete timezone handling for Colombia (UTC-5)
-  - **Completed Improvements**: Delete deposits, safe JSON parsing, utility functions, page merges, client/order protection, client edit unlock
-  - **Feature Implementation Guides**: Invoice enhancements, progressive product reveal
-  - **Code Improvement Opportunities**: Error handling, security, performance optimizations
+- **[REFERENCE.md](docs/REFERENCE.md)** - Deployment Guide, Database Schema, and Timezone Implementation reference
+- **[PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md)** - Consolidated tracker for pending improvements and audit findings (data integrity, security, scalability, performance), including what's already coded on the unmerged `claude/friendly-burnell-b334da` branch
   - **Implementation Guides**: Step-by-step instructions for all improvements
 
 ## 📄 License

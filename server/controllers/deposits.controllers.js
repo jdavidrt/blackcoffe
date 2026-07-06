@@ -1,13 +1,23 @@
 import pool from '../db.js'
 import { sendErrorEmail } from '../utils/emailNotifier.js'
 
+const computeOrderTotal = (itemsJson) => {
+    try {
+        const items = JSON.parse(itemsJson || '[]');
+        if (!Array.isArray(items)) return 0;
+        return items.reduce((sum, it) => sum + (Number(it.unitValue) || 0) * (Number(it.quantity) || 0), 0);
+    } catch {
+        return 0;
+    }
+};
+
 export const getDeposits = async (req, res) => {
     try {
         const [result] = await pool.query("SELECT *, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt, deposits.isDeleted, deposits.deletedAt as deletedAt FROM deposits join orders on orders.id = deposits.orderId ORDER BY deposits.depositCreatedAt ASC")
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getDeposits');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo los abonos' });
     }
 }
 
@@ -21,7 +31,7 @@ export const getDepositsByOrder = async (req, res) => {
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'getDepositsByOrder');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo los abonos de la orden' });
     }
 }
 
@@ -34,112 +44,239 @@ export const getDepositsByDate = async (req, res) => {
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getDepositsByDate');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo los abonos por fecha' });
     }
 }
 
+/**
+ * createDeposit — ATOMIC (audit fix H1).
+ *
+ * Inserts the deposit row AND updates the order's deposit/paid/paidAt inside a
+ * single transaction with SELECT ... FOR UPDATE on the order, so a network
+ * failure between "create deposit" and "update order" (previously two separate
+ * calls) can no longer leave a deposit row with a stale order total.
+ *
+ * Request body: { orderId, depositValue, paymentMethod, collectedBy }.
+ * The server (not the client) computes lastDeposit/newDeposit/dueOnDeposit/
+ * paid/paidAt from the locked order row's current items + deposit total.
+ */
 export const createDeposit = async (req, res) => {
+    const conn = await pool.getConnection();
     try {
-        console.log(`[${new Date().toISOString()}] createDeposit - Received data:`, req.body);
+        await conn.beginTransaction();
 
-        // Validate required fields
-        const requiredFields = ['orderId', 'clientId', 'depositValue', 'lastDeposit', 'newDeposit'];
-        for (const field of requiredFields) {
-            if (req.body[field] === undefined || req.body[field] === null) {
-                console.error(`[${new Date().toISOString()}] createDeposit - Missing required field: ${field}`);
-                return res.status(400).json({
-                    message: `Missing required field: ${field}`,
-                    receivedData: req.body
-                });
+        const { orderId, depositValue, paymentMethod, collectedBy } = req.body;
+
+        if (!orderId) {
+            await conn.rollback();
+            return res.status(400).json({ message: "orderId requerido" });
+        }
+        const dv = Number(depositValue);
+        if (!Number.isFinite(dv) || dv <= 0) {
+            await conn.rollback();
+            return res.status(400).json({ message: "depositValue debe ser un número positivo" });
+        }
+        if (!paymentMethod) {
+            await conn.rollback();
+            return res.status(400).json({ message: "paymentMethod requerido" });
+        }
+
+        // Lock the order row until commit so concurrent deposits on the same order serialize.
+        const [orderRows] = await conn.query(
+            "SELECT id, clientId, deposit, paid, items FROM orders WHERE id = ? FOR UPDATE",
+            [orderId]
+        );
+        if (orderRows.length === 0) {
+            await conn.rollback();
+            return res.status(404).json({ message: "Orden no encontrada" });
+        }
+        const order = orderRows[0];
+        if (order.paid === 1) {
+            await conn.rollback();
+            return res.status(400).json({
+                message: "No se puede registrar un abono en una orden ya pagada"
+            });
+        }
+
+        const orderTotal = computeOrderTotal(order.items);
+        const lastDeposit = Number(order.deposit) || 0;
+        const newCumulative = lastDeposit + dv;
+
+        if (newCumulative > orderTotal) {
+            await conn.rollback();
+            return res.status(400).json({
+                message: `El abono excede el saldo pendiente ($${orderTotal - lastDeposit}).`
+            });
+        }
+
+        const dueOnDeposit = orderTotal - newCumulative;
+        const isFullyPaid = newCumulative >= orderTotal ? 1 : 0;
+
+        const [insertResult] = await conn.query(
+            `INSERT INTO deposits
+             (orderId, clientId, paymentMethod, depositValue, lastDeposit, newDeposit, dueOnDeposit)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [orderId, order.clientId, paymentMethod, dv, lastDeposit, newCumulative, dueOnDeposit]
+        );
+
+        // paidAt is a MANUAL timestamp (Colombia local YYYY-MM-DD) — only set on the 0 -> 1 transition.
+        const orderUpdate = {
+            deposit: newCumulative,
+            paid: isFullyPaid,
+            paymentMethod,
+            collectedBy: collectedBy || null,
+        };
+
+        if (isFullyPaid) {
+            const colombiaToday = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+            orderUpdate.paidAt = colombiaToday;
+
+            const [clientRows] = await conn.query(
+                'SELECT clientName, premises, mall FROM clients WHERE id = ?',
+                [order.clientId]
+            );
+            if (clientRows.length > 0) {
+                orderUpdate.clientNameSnapshot = clientRows[0].clientName;
+                orderUpdate.clientPremisesSnapshot = clientRows[0].premises;
+                orderUpdate.clientMallSnapshot = clientRows[0].mall;
             }
         }
 
-        const result = await pool.query("INSERT INTO deposits SET ?", req.body);
-        console.log(`[${new Date().toISOString()}] createDeposit - Deposit created successfully:`, result[0].insertId);
-        res.json(result);
+        await conn.query("UPDATE orders SET ? WHERE id = ?", [orderUpdate, orderId]);
+
+        await conn.commit();
+
+        res.json({
+            depositId: insertResult.insertId,
+            orderId,
+            depositValue: dv,
+            lastDeposit,
+            newDeposit: newCumulative,
+            dueOnDeposit,
+            paid: isFullyPaid
+        });
     } catch (error) {
+        await conn.rollback();
         console.error(`[${new Date().toISOString()}] createDeposit - ERROR:`, error);
         sendErrorEmail(req, error, 'createDeposit');
-        return res.status(500).json({
-            message: error.message,
-            sqlMessage: error.sqlMessage
-        });
+        return res.status(500).json({ message: "Error procesando el abono" });
+    } finally {
+        conn.release();
     }
 }
 
+/**
+ * deleteDeposit — ATOMIC soft-delete + recalculation (audit fixes H2, 6.1, 1.9).
+ *
+ * Locks the deposit + order rows, soft-deletes the target deposit, then
+ * recalculates every remaining active deposit's cumulative totals with a
+ * single batched UPDATE ... CASE (replacing the previous per-row N+1 loop).
+ * `paid` is recomputed from the new running total instead of being forced to
+ * 0 unconditionally, and `paidAt` is cleared only on an actual 1 -> 0 flip.
+ */
 export const deleteDeposit = async (req, res) => {
     const depositId = req.params.id;
+    const conn = await pool.getConnection();
 
     try {
-        // Step 1: Get deposit details before deletion
-        const [depositResult] = await pool.query(
-            "SELECT * FROM deposits WHERE depositId = ? AND isDeleted = 0",
+        await conn.beginTransaction();
+
+        const [depositRows] = await conn.query(
+            "SELECT * FROM deposits WHERE depositId = ? AND isDeleted = 0 FOR UPDATE",
             [depositId]
         );
-
-        if (depositResult.length === 0) {
+        if (depositRows.length === 0) {
+            await conn.rollback();
             return res.status(404).json({ message: "Depósito no encontrado o ya eliminado" });
         }
+        const targetDeposit = depositRows[0];
 
-        const deposit = depositResult[0];
-
-        // Step 2: Check if order is paid - prevent deletion
-        const [orderResult] = await pool.query(
-            "SELECT paid, items FROM orders WHERE id = ?",
-            [deposit.orderId]
+        const [orderRows] = await conn.query(
+            "SELECT id, paid, items FROM orders WHERE id = ? FOR UPDATE",
+            [targetDeposit.orderId]
         );
+        if (orderRows.length === 0) {
+            await conn.rollback();
+            return res.status(404).json({ message: "Orden asociada no encontrada" });
+        }
+        const order = orderRows[0];
 
-        if (orderResult[0].paid === 1) {
+        if (order.paid === 1) {
+            await conn.rollback();
             return res.status(400).json({
                 message: "No se puede eliminar un depósito de una orden que ya está pagada completamente"
             });
         }
 
-        // Step 3: Get order total to calculate debt
-        const orderItems = JSON.parse(orderResult[0].items || '[]');
-        const orderTotal = orderItems.reduce((total, item) => total + (item.unitValue * item.quantity), 0);
+        const orderTotal = computeOrderTotal(order.items);
 
-        // Step 4: Soft delete the deposit
-        // IMPORTANT: Store deletedAt in Colombia time (UTC - 5 hours)
-        await pool.query(
+        // Soft-delete the target deposit. deletedAt is COLOMBIA time (stored via DATE_SUB).
+        await conn.query(
             "UPDATE deposits SET isDeleted = 1, deletedAt = DATE_SUB(NOW(), INTERVAL 5 HOUR) WHERE depositId = ?",
             [depositId]
         );
 
-        // Step 5: Get all active deposits ordered by creation date
-        const [allDeposits] = await pool.query(
+        // Recompute cumulative values for all remaining active deposits, chronologically.
+        const [activeDeposits] = await conn.query(
             "SELECT depositId, depositValue FROM deposits WHERE orderId = ? AND isDeleted = 0 ORDER BY depositCreatedAt ASC",
-            [deposit.orderId]
+            [targetDeposit.orderId]
         );
 
-        // Step 6: Recalculate cumulative values for all active deposits
-        // depositValue contains the individual payment amount
-        // newDeposit should contain the cumulative total
         let runningTotal = 0;
-        for (const dep of allDeposits) {
-            const previousTotal = runningTotal;
-            const individualAmount = dep.depositValue; // Individual payment for this deposit
-            runningTotal += individualAmount;
-            const newDebt = orderTotal - runningTotal;
-
-            await pool.query(
-                "UPDATE deposits SET lastDeposit = ?, newDeposit = ?, dueOnDeposit = ? WHERE depositId = ?",
-                [previousTotal, runningTotal, newDebt, dep.depositId]
+        if (activeDeposits.length > 0) {
+            const lastParams = [];
+            const newParams = [];
+            const dueParams = [];
+            const ids = [];
+            for (const dep of activeDeposits) {
+                const previous = runningTotal;
+                const individual = Number(dep.depositValue) || 0;
+                runningTotal += individual;
+                const newDebt = orderTotal - runningTotal;
+                lastParams.push(dep.depositId, previous);
+                newParams.push(dep.depositId, runningTotal);
+                dueParams.push(dep.depositId, newDebt);
+                ids.push(dep.depositId);
+            }
+            const placeholders = activeDeposits.map(() => "WHEN ? THEN ?").join(" ");
+            await conn.query(
+                `UPDATE deposits SET
+                    lastDeposit  = CASE depositId ${placeholders} END,
+                    newDeposit   = CASE depositId ${placeholders} END,
+                    dueOnDeposit = CASE depositId ${placeholders} END
+                 WHERE depositId IN (${ids.map(() => "?").join(",")})`,
+                [...lastParams, ...newParams, ...dueParams, ...ids]
             );
         }
 
-        // Step 9: Update order deposit total and paid status
-        await pool.query(
-            "UPDATE orders SET deposit = ?, paid = 0 WHERE id = ?",
-            [runningTotal, deposit.orderId]
-        );
+        // paid is recomputed from the new running total (not unconditionally forced to 0);
+        // paidAt is cleared only on an actual 1 -> 0 transition.
+        const stillFullyPaid = orderTotal > 0 && runningTotal >= orderTotal;
+        if (stillFullyPaid) {
+            await conn.query(
+                "UPDATE orders SET deposit = ? WHERE id = ?",
+                [runningTotal, targetDeposit.orderId]
+            );
+        } else {
+            await conn.query(
+                "UPDATE orders SET deposit = ?, paid = 0, paidAt = NULL WHERE id = ?",
+                [runningTotal, targetDeposit.orderId]
+            );
+        }
+
+        await conn.commit();
 
         res.json({
             message: "Depósito eliminado correctamente",
-            newOrderTotal: runningTotal
+            newOrderTotal: runningTotal,
+            paid: stillFullyPaid ? 1 : 0
         });
     } catch (error) {
+        await conn.rollback();
+        console.error(`[${new Date().toISOString()}] deleteDeposit - ERROR:`, error);
         sendErrorEmail(req, error, 'deleteDeposit');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: "Error eliminando el depósito" });
+    } finally {
+        conn.release();
     }
 };

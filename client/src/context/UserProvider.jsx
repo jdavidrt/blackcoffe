@@ -20,8 +20,8 @@ export const UserContextProvider = ({ children }) => {
   const autenticateUser = async (userName, pass) => {
     try {
       const response = await autenticateUserRequest(userName, pass);
-      return response.data;
       setUser(response.data);
+      return response.data;
     } catch (error) {
       console.error(error);
     }

@@ -7,7 +7,7 @@ export const getProducts = async (req, res) => {
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getProducts');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo los productos' });
     }
 }
 
@@ -23,7 +23,7 @@ export const getProduct = async (req, res) => {
         res.json(result[0]);
     } catch (error) {
         sendErrorEmail(req, error, 'getProduct');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo el producto' });
     }
 }
 
@@ -40,7 +40,7 @@ export const createProduct = async (req, res) => {
         })
     } catch (error) {
         sendErrorEmail(req, error, 'createProduct');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error creando el producto' });
     }
 }
 
@@ -53,7 +53,7 @@ export const updateProduct = async (req, res) => {
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'updateProduct');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error actualizando el producto' });
     }
 }
 
@@ -67,6 +67,6 @@ export const deleteProduct = async (req, res) => {
         return res.sendStatus(204);
     } catch (error) {
         sendErrorEmail(req, error, 'deleteProduct');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error eliminando el producto' });
     }
 };

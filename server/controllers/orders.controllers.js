@@ -1,13 +1,29 @@
 import pool from '../db.js'
 import { sendErrorEmail } from '../utils/emailNotifier.js'
+import { tzColombia } from '../utils/sqlFragments.js'
 
-const hasDuplicateItemIds = (itemsJson) => {
-    try {
-        const items = JSON.parse(itemsJson);
-        if (!Array.isArray(items)) return false;
-        const ids = items.map(i => i.id);
-        return ids.length !== new Set(ids).size;
-    } catch { return false; }
+/**
+ * Stack-merge two item lists by `id`: items with matching IDs have their
+ * `quantity` summed (first occurrence's other fields win). Replaces the old
+ * reject-the-whole-request-on-duplicate-id behavior (audit fix 1.5) — a
+ * same-second duplicate click should stack quantity, never a 400.
+ */
+const stackMergeItems = (existingItems, newItems) => {
+    const byId = new Map();
+    const order = [];
+    const push = (item) => {
+        if (!item || item.id == null) return;
+        const prev = byId.get(item.id);
+        if (prev) {
+            prev.quantity = (Number(prev.quantity) || 0) + (Number(item.quantity) || 0);
+        } else {
+            byId.set(item.id, { ...item });
+            order.push(item.id);
+        }
+    };
+    for (const it of existingItems) push(it);
+    for (const it of newItems) push(it);
+    return order.map(id => byId.get(id));
 };
 
 export const getOrders = async (req, res) => {
@@ -15,9 +31,8 @@ export const getOrders = async (req, res) => {
         const [result] = await pool.query(`
             SELECT
                 orders.id, orders.deposit,
-                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'),
                 orders.clientId, orders.paid, orders.collectedBy, orders.items,
-                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) AS createdAt,
+                DATE(${tzColombia('orders.createdAt')}) AS createdAt,
                 COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
                 COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
                 COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
@@ -29,7 +44,7 @@ export const getOrders = async (req, res) => {
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getOrders');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo las órdenes' });
     }
 }
 
@@ -39,12 +54,11 @@ export const getNotDeliveredOrders = async (req, res) => {
             SELECT
                 orders.id,
                 orders.deposit,
-                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
                 orders.clientId,
                 orders.paid,
                 orders.collectedBy,
                 orders.items,
-                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
+                DATE(${tzColombia('orders.createdAt')}) as createdAt,
                 COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
                 COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
                 COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
@@ -62,7 +76,7 @@ export const getNotDeliveredOrders = async (req, res) => {
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'getNotDeliveredOrders');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo las órdenes pendientes de entrega' });
     }
 }
 
@@ -72,12 +86,11 @@ export const getDeliveredOrders = async (req, res) => {
             SELECT
                 orders.id,
                 orders.deposit,
-                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
                 orders.clientId,
                 orders.paid,
                 orders.collectedBy,
                 orders.items,
-                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt,
+                DATE(${tzColombia('orders.createdAt')}) as createdAt,
                 COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
                 COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
                 COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
@@ -97,7 +110,7 @@ export const getDeliveredOrders = async (req, res) => {
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'getDeliveredOrders');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo las órdenes entregadas' });
     }
 }
 
@@ -151,7 +164,7 @@ export const getDepositedOrdersByDate = async (req, res) => {
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'getDepositedOrdersByDate');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo los cobros del día' });
     }
 }
 
@@ -160,9 +173,8 @@ export const getUnPaidOrders = async (req, res) => {
         const [result] = await pool.query(`
             SELECT
                 orders.id, orders.deposit,
-                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'),
                 orders.clientId, orders.paid, orders.collectedBy, orders.items,
-                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) AS createdAt,
+                DATE(${tzColombia('orders.createdAt')}) AS createdAt,
                 COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
                 COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
                 COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
@@ -174,7 +186,7 @@ export const getUnPaidOrders = async (req, res) => {
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getUnPaidOrders');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo las órdenes por ubicación' });
     }
 }
 
@@ -183,9 +195,8 @@ export const getUnPaidOrdersbyClientId = async (req, res) => {
         const [result] = await pool.query(`
             SELECT
                 orders.id,
-                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00'),
                 orders.clientId, orders.paid, orders.collectedBy, orders.items,
-                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) AS createdAt,
+                DATE(${tzColombia('orders.createdAt')}) AS createdAt,
                 COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
                 COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
                 COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
@@ -197,7 +208,7 @@ export const getUnPaidOrdersbyClientId = async (req, res) => {
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getUnPaidOrdersbyClientId');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo las órdenes del cliente' });
     }
 }
 
@@ -220,7 +231,7 @@ export const getCollectedOrders = async (req, res) => {
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getCollectedOrders');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo las órdenes cobradas' });
     }
 }
 
@@ -248,33 +259,82 @@ export const getOrder = async (req, res) => {
         res.json(result[0]);
     } catch (error) {
         sendErrorEmail(req, error, 'getOrder');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo la orden' });
     }
 }
 
+/**
+ * createOrder — implements "one unpaid order per client" server-side (audit fix 1.3).
+ *
+ * Locks any existing active (unpaid, non-abandoned) order for this client
+ * with SELECT ... FOR UPDATE before deciding merge-vs-create, inside a
+ * transaction. This closes the two-tabs-both-create race: the frontend
+ * already avoids this in the common case by checking `unPaidOrder` before
+ * submitting, but two concurrent submissions can both see "no unpaid order"
+ * client-side — the server-side lock is what actually serializes them.
+ *
+ * Colliding item IDs are stack-merged (summed quantity) instead of rejecting
+ * the whole request (audit fix 1.5), both when deduping the incoming cart and
+ * when merging it into an existing order.
+ */
 export const createOrder = async (req, res) => {
+    const conn = await pool.getConnection();
     try {
+        await conn.beginTransaction();
+
         console.log(`[createOrder] Request body:`, req.body);
 
-        const { shopId, clientId, items } = req.body
-        if (hasDuplicateItemIds(items)) {
-            return res.status(400).json({ message: 'Error: items duplicados detectados. Operación cancelada.' });
-        }
-        const result = await pool.query("INSERT INTO orders(shopId, clientId, items) VALUES (?, ?, ?)", [
-            shopId,
-            clientId,
-            items]
+        const { shopId, clientId, items } = req.body;
+
+        const [existing] = await conn.query(
+            `SELECT id, items FROM orders
+             WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL)
+             FOR UPDATE`,
+            [clientId]
         );
-        console.log(`[createOrder] Create result:`, result);
-        res.json({
-            shopId,
-            clientId,
-            items,
-        })
+
+        let parsedNewItems;
+        try {
+            parsedNewItems = JSON.parse(items || '[]');
+            if (!Array.isArray(parsedNewItems)) parsedNewItems = [];
+        } catch {
+            await conn.rollback();
+            return res.status(400).json({ message: 'items debe ser un array JSON válido.' });
+        }
+        parsedNewItems = stackMergeItems([], parsedNewItems);
+
+        if (existing.length > 0) {
+            const target = existing[0];
+            let existingItems;
+            try {
+                existingItems = JSON.parse(target.items || '[]');
+                if (!Array.isArray(existingItems)) existingItems = [];
+            } catch { existingItems = []; }
+
+            const mergedJson = JSON.stringify(stackMergeItems(existingItems, parsedNewItems));
+            await conn.query("UPDATE orders SET items = ? WHERE id = ?", [mergedJson, target.id]);
+            await conn.commit();
+
+            console.log(`[createOrder] Merged into existing order ${target.id}`);
+            return res.json({ shopId, clientId, items: mergedJson, mergedInto: target.id });
+        }
+
+        const newItemsJson = JSON.stringify(parsedNewItems);
+        await conn.query(
+            "INSERT INTO orders(shopId, clientId, items) VALUES (?, ?, ?)",
+            [shopId, clientId, newItemsJson]
+        );
+        await conn.commit();
+
+        console.log(`[createOrder] New order created`);
+        res.json({ shopId, clientId, items: newItemsJson });
     } catch (error) {
+        await conn.rollback();
         console.error(`[createOrder] Error:`, error);
         sendErrorEmail(req, error, 'createOrder');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error creando la orden' });
+    } finally {
+        conn.release();
     }
 }
 
@@ -283,8 +343,18 @@ export const updateOrder = async (req, res) => {
         console.log(`[updateOrder] Request params:`, req.params);
         console.log(`[updateOrder] Request body:`, req.body);
 
-        if (req.body.items && hasDuplicateItemIds(req.body.items)) {
-            return res.status(400).json({ message: 'Error: items duplicados detectados. Operación cancelada.' });
+        // Audit fix 1.5: stack-merge (sum quantity) any colliding IDs in the
+        // incoming items array instead of rejecting the request. A no-op for
+        // an already-deduped array (e.g. delivery-checkbox toggles).
+        if (req.body.items) {
+            try {
+                const parsed = JSON.parse(req.body.items);
+                if (Array.isArray(parsed)) {
+                    req.body.items = JSON.stringify(stackMergeItems([], parsed));
+                }
+            } catch {
+                // leave as-is; the SQL/existing guards below will surface a malformed value
+            }
         }
 
         const [existing] = await pool.query('SELECT paid, clientId, items FROM orders WHERE id = ?', [req.params.id]);
@@ -358,7 +428,7 @@ export const updateOrder = async (req, res) => {
     } catch (error) {
         console.error(`[updateOrder] Error:`, error);
         sendErrorEmail(req, error, 'updateOrder');
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ message: 'Error actualizando la orden' });
     }
 }
 
@@ -368,12 +438,11 @@ export const getOrphanedOrders = async (req, res) => {
             SELECT
                 orders.id,
                 orders.deposit,
-                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
                 orders.clientId,
                 orders.paid,
                 orders.collectedBy,
                 orders.items,
-                DATE(CONVERT_TZ(orders.createdAt, '+00:00', '-05:00')) as createdAt
+                DATE(${tzColombia('orders.createdAt')}) as createdAt
             FROM
                 orders
             LEFT JOIN
@@ -386,7 +455,7 @@ export const getOrphanedOrders = async (req, res) => {
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'getOrphanedOrders');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo las órdenes sin cliente' });
     }
 }
 
@@ -410,7 +479,7 @@ export const deleteOrder = async (req, res) => {
         return res.sendStatus(204);
     } catch (error) {
         sendErrorEmail(req, error, 'deleteOrder');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error eliminando la orden' });
     }
 };
 
@@ -454,7 +523,7 @@ export const markOrderAsAbandoned = async (req, res) => {
     } catch (error) {
         console.error('Error marking order as abandoned:', error);
         sendErrorEmail(req, error, 'markOrderAsAbandoned');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error marcando la orden como abandonada' });
     }
 };
 
@@ -481,7 +550,7 @@ export const unmarkOrderAsAbandoned = async (req, res) => {
     } catch (error) {
         console.error('Error reactivating order:', error);
         sendErrorEmail(req, error, 'unmarkOrderAsAbandoned');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error reactivando la orden' });
     }
 };
 
@@ -507,6 +576,6 @@ export const getAbandonedOrders = async (req, res) => {
     } catch (error) {
         console.error('Error getting abandoned orders:', error);
         sendErrorEmail(req, error, 'getAbandonedOrders');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo las órdenes abandonadas' });
     }
 };

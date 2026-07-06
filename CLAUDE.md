@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚧 GUARDRAIL: `server/sigale/` is a foreign sub-server — DO NOT TOUCH
+
+**[server/sigale/](server/sigale/) is a separate project ("Sígale 2.0"), owned by a different app, that happens to be hosted inside this repo and deployed as part of this same Node process purely for hosting-cost reasons.** It is not BlackCoffe code. Treat it the same as a vendored dependency or a `node_modules` folder: read-only, never edited as part of BlackCoffe work.
+
+**Hard rules:**
+- **Never edit, refactor, "clean up", or fix bugs in any file under `server/sigale/`** — including its `controllers/`, `routes/`, `migrations/`, `jobs/`, `seed/`, `utils/`, `db.js`, `config.js`, `integration.js`, or `README.md` — unless the user explicitly says they are working on the Sígale project and names files inside that folder.
+- **Never modify `server/index.js`'s Sigale wiring** (`mountSigale`, `startSigale`, the sigale import, or the Sigale-related CORS origins/comments) except to fix a literal integration break the user asks about.
+- **Never point BlackCoffe code at the `sigale` database**, and never touch `server/sigale/db.js`'s `DB_NAME` guardrail (it hard-fails unless `SIGALE_DB_NAME`/`DB_NAME === 'sigale'` — that's intentional, not a bug).
+- **Never run `npm install`/add dependencies inside `server/sigale/`** as a side effect of a BlackCoffe task — it has its own `package.json`/`package-lock.json`, deliberately separate from the root one.
+- If a BlackCoffe task seems to require a change inside `server/sigale/` (e.g. a shared-server CORS or port conflict), **stop and ask the user** rather than editing it — Sígale has its own maintainers/plan (see its `README.md` and `docs/SIGALE_2.0_IMPLEMENTATION_PLAN.md`, which live outside BlackCoffe's scope).
+
+**What IS in scope:** everything else under `server/` (`config.js`, `db.js`, `index.js` outside the Sigale wiring noted above, `controllers/`, `routes/`, `migrations/`, `utils/`, `database/`), plus all of `client/`. When asked to work "on the server" or "on the backend" with no other qualifier, assume this means BlackCoffe's own code and explicitly exclude `server/sigale/`.
+
+**Why this split exists:** Sígale is a separate ticketing app that shares BlackCoffe's Express process/hosting to save infra cost. It mounts its own routes (all `/api/*`) via [server/sigale/integration.js](server/sigale/integration.js), keeps its own MySQL pool/database (`sigale`, never BlackCoffe's `defaultdb`), and ships its own migrations, package.json, and README. The two apps must stay fully decoupled at the code level even though they run in the same process.
+
 ## Development Commands
 
 ### Backend Development
@@ -58,6 +73,8 @@ cd client && npm run build
 ### Full-Stack Structure
 This is a monorepo with separate client (React) and server (Express) applications. The backend serves the built frontend from `client/dist` in production, and both run separately in development.
 
+**Co-hosted foreign sub-server**: [server/sigale/](server/sigale/) is a different app (a ticketing platform, "Sígale 2.0") sharing this Express process only for hosting economics. It has its own MySQL database (`sigale`), own `package.json`, own migrations, and is mounted read-only-to-us via [server/sigale/integration.js](server/sigale/integration.js). See the guardrail at the top of this file — do not edit anything under that folder as part of BlackCoffe work.
+
 ### Database Integration
 - **MySQL Database**: Hosted on DigitalOcean (credentials in `server/db.js`)
 - **Connection Pool**: Uses mysql2/promise with connection pooling
@@ -66,7 +83,7 @@ This is a monorepo with separate client (React) and server (Express) application
   - **MANUAL Timestamps** (`paidAt`, `deliveredAt`): Sent by frontend in Colombia time
   - **COLOMBIA Timestamps** (`abandonedAt`, `deletedAt`): Stored using `DATE_SUB(NOW(), INTERVAL 5 HOUR)`
   - **Date Filtering**: Always use `DATE(CONVERT_TZ(field, '+00:00', '-05:00'))` for correct timezone
-  - See [PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md#timezone-implementation) for complete implementation guide
+  - See [REFERENCE.md](docs/REFERENCE.md#timezone-implementation) for complete implementation guide
 - **Key Tables**: orders, clients, products, users, deposits
 - **Order States**: Orders track paid status, delivery status, and collection status
 
@@ -133,8 +150,8 @@ The BlackCoffe backend exposes 33 RESTful API endpoints organized by entity. All
 | GET | `/deposits` | Get all deposits with order information (JOIN with orders and clients) |
 | GET | `/deposits/:id` | Get all deposits for specific order ID (includes deleted deposits with `isDeleted` status) |
 | GET | `/depositsByDate/:date` | Get all deposits made on specific date (Colombia timezone) |
-| POST | `/deposits` | Create new deposit record (requires `orderId`, `clientId`, `depositValue`, `lastDeposit`, `newDeposit`, `dueOnDeposit`, `paymentMethod`) |
-| DELETE | `/deposits/:id` | Soft delete deposit (sets `isDeleted = 1`, `deletedAt`, `deletedBy`, triggers automatic recalculation of subsequent deposits) |
+| POST | `/deposits` | **Atomic** (2026-07-06): create a deposit AND update the parent order in one transaction. Requires only `orderId`, `depositValue`, `paymentMethod`, `collectedBy` — the server computes `lastDeposit`/`newDeposit`/`dueOnDeposit`/`paid`/`paidAt` itself from the locked order row (previously required the client to compute and send all of those). See item 8 in "Completed Improvements" |
+| DELETE | `/deposits/:id` | **Atomic** (2026-07-06): soft-deletes and recalculates all remaining active deposits' cumulative totals in a single batched query (previously an N+1 loop). Recomputes `paid` from the new running total and clears `paidAt` on an actual 1→0 transition, rather than forcing `paid = 0` unconditionally |
 
 #### Users Endpoints (1 endpoint)
 **Base Route**: `/users` | **Controller**: `users.controllers.js` | **Route File**: `users.routes.js`
@@ -481,8 +498,8 @@ if (values.deposit >= calculateTotal()) {
 - Confirm button disabled when deposit amount = 0
 - Overpayment prevention: validation rejects amounts exceeding remaining balance
 
-#### 7. Known Bug: collectedBy Field
-`collectedBy` is currently set to `order.mall` (e.g., "Unilago") in `CollectOrderForm.jsx:299,311` instead of the actual username who collected the payment. This should be fixed to capture `localStorage.getItem('user')`.
+#### 7. collectedBy Field ✅ (Fixed 2026-07-06)
+`collectedBy` is now captured from `localStorage.getItem('user')` at the moment of payment (`CollectOrderForm.jsx`'s `handleConfirmPayment`), instead of `order.mall`. It's sent as part of the atomic deposit payload (see item 8 in "Completed Improvements") and stored on the order by the server inside the same transaction that records the deposit.
 
 #### 8. Client Protection + Snapshot on Payment ✅ (Implemented in commit 3f68348; edit-lock relaxed 2026-07-02)
 Two paired rules that keep historical orders readable even as the client master record changes. Orders always link to a client via the stable `clientId` FK (`orders.clientId → clients.id`) — never by matching name/premises/mall text — so editing a client's display fields never breaks that link, only *deleting* a client is destructive enough to warrant a hard block.
@@ -557,11 +574,11 @@ The payment system is built around two main tables:
 - `getDeposits()`: Retrieves all deposits with order information (includes isDeleted status)
 - `getDepositsByOrder(orderId)`: Gets all deposits for a specific order (includes isDeleted status)
 - `getDepositsByDate(date)`: Retrieves deposits made on a specific date (includes isDeleted status)
-- `createDeposit(depositData)`: Creates a new deposit record
-- `deleteDeposit(depositId)`: ✅ **WORKING** - Soft deletes a deposit with automatic recalculation of all subsequent deposits
+- `createDeposit(depositData)`: ✅ **ATOMIC** (2026-07-06) — takes only `{orderId, depositValue, paymentMethod, collectedBy}`; locks the order row (`SELECT ... FOR UPDATE`) and inserts the deposit + updates the order's `deposit`/`paid`/`paidAt`/`collectedBy` (and client snapshot, if newly fully paid) in one transaction. The server computes `lastDeposit`/`newDeposit`/`dueOnDeposit`/`paid` itself — the client no longer sends them. Rejects non-positive amounts, overpayment, and deposits on already-paid orders
+- `deleteDeposit(depositId)`: ✅ **ATOMIC** (2026-07-06) — soft-deletes and recalculates all remaining active deposits' cumulative totals with a single batched `UPDATE ... CASE depositId WHEN ... END` (previously an N+1 loop). Recomputes `paid` from the new running total instead of forcing it to 0, and clears `paidAt` only on an actual 1→0 transition
 
 **Frontend Context** (`client/src/context/DepositsProvider.jsx`):
-- `createDeposit(deposits)`: Creates new deposit via API
+- `createDeposit(deposits)`: Creates new deposit via API — contract-agnostic wrapper; as of 2026-07-06 the object it forwards is `{orderId, depositValue, paymentMethod, collectedBy}` (built in `CollectOrderForm.jsx`'s `handleConfirmPayment`)
 - `getDepositsByOrderId(id)`: Fetches deposits for an order
 - `getDepositsByDate(date)`: Retrieves daily deposits
 - `loadDeposits()`: Loads all deposits into state
@@ -571,34 +588,30 @@ The payment system is built around two main tables:
 
 **Step 1: Partial Payment (Deposit)**
 1. Navigate to `/cobrarOrden/:id` to access payment form
-2. System loads order details via `getOrder(id)` in `CollectOrderForm.jsx:210`
-3. System loads existing deposits via `getDepositsByOrderId(id)` in `CollectOrderForm.jsx:211`
-4. User enters deposit amount in the payment form
-5. System calculates payment details:
+2. System loads order details via `getOrder(id)` and existing deposits via `getDepositsByOrderId(id)` in `CollectOrderForm.jsx`'s `loadOrder()`
+3. User enters deposit amount in the payment form
+4. System calculates payment details client-side, for display only:
    - `calculateTotal()`: Calculates order total from items
    - `currentDebt = calculateTotal() - order.deposit`: Remaining balance
    - `newDebt = currentDebt - depositAmount`: Balance after payment
-6. Payment confirmation modal displays payment breakdown
-7. On confirmation, system creates deposit record:
+5. Payment confirmation modal displays payment breakdown
+6. On confirmation, `handleConfirmPayment()` sends a single atomic request (✅ 2026-07-06, replaces the old two-call `createDeposit` + `updateOrder` flow):
    ```javascript
-   const newDeposit = {
+   const depositPayload = {
      orderId: params.id,
-     clientId: order.clientId,
+     depositValue: individualDepositAmount, // the amount the user entered
      paymentMethod: platformPayment ? "Plataforma" : "Efectivo",
-     depositValue: order.deposit + deposit, // Total after payment
-     lastDeposit: order.deposit, // Previous total
-     newDeposit: deposit // This payment amount
-   }
+     collectedBy: localStorage.getItem('user') || 'Unknown',
+   };
+   await createDeposit(depositPayload); // server computes + persists everything else in one transaction
    ```
-8. System updates order deposit total via `updateOrder()` in `CollectOrderForm.jsx:171`
-9. If total deposits >= order total, order.paid is set to 1
+7. The server (not the client) computes `lastDeposit`/`newDeposit`/`dueOnDeposit` from the order's current deposit total, and sets `paid = 1` (+ `paidAt`, + client snapshot) if the new cumulative total covers the order
 
 **Step 2: Full Payment**
-1. When `depositedTotal` flag is true, system processes full payment
-2. Calculates remaining balance: `remainingAmount = calculateTotal() - order.deposit`
-3. Creates deposit for exact remaining amount
-4. Sets `order.paid = 1` and `order.paidAt = currentDate`
-5. Order moves to "fully paid" status
+1. User enters the full remaining amount in the same deposit field (there's no separate "Cobrar Total" button — see Rule #6 above)
+2. The atomic `createDeposit` request (same as Step 1) is sent with that amount
+3. Server computes that `newDeposit >= orderTotal`, sets `order.paid = 1` and `order.paidAt` to the current Colombia date, in the same transaction as the deposit insert
+4. Order moves to "fully paid" status
 
 **Step 3: Payment Tracking and History**
 - `/abonos/` route displays payment history via `DepositsPage.jsx`
@@ -608,17 +621,17 @@ The payment system is built around two main tables:
 #### Key Payment Functions by File
 
 **CollectOrderForm.jsx**:
-- `handleConfirmPayment()`: Processes payment confirmation (lines 150-196)
+- `handleConfirmPayment()`: Builds the atomic deposit payload (`{orderId, depositValue, paymentMethod, collectedBy}`) and calls `createDeposit()` once — no longer a separate `updateOrder()` call (✅ 2026-07-06)
 - `calculateTotal()`: Computes order total from items
-- `loadOrder()`: Initializes order and deposit data (lines 207-249)
+- `loadOrder()`: Initializes order and deposit data
 
 **DepositsProvider.jsx**:
-- `createDeposit()`: API wrapper for creating deposits (lines 28-34)
-- `getDepositsByOrderId()`: Fetches order-specific deposits (lines 36-43)
+- `createDeposit()`: API wrapper for creating deposits — contract-agnostic, forwards whatever object it's given
+- `getDepositsByOrderId()`: Fetches order-specific deposits
 
 **deposits.controllers.js**:
-- `createDeposit()`: Backend deposit creation (lines 27-34)
-- `getDepositsByOrder()`: Retrieves deposits with order JOIN (lines 7-18)
+- `createDeposit()`: ✅ Atomic (2026-07-06) — transaction with `SELECT ... FOR UPDATE`; server computes and persists deposit + order update together
+- `getDepositsByOrder()`: Retrieves deposits with order JOIN
 
 #### Payment Method Support
 The system supports multiple payment methods:
@@ -667,34 +680,24 @@ The system supports multiple payment methods:
      - Amount to pay: `calculateTotal() - order.deposit`
    - Shows payment method selection (Efectivo/Plataforma)
 
-6. **Payment Processing** (`handleConfirmPayment()` in `CollectOrderForm.jsx:150-196`):
+6. **Payment Processing** (`handleConfirmPayment()` in `CollectOrderForm.jsx`, ✅ atomic rewrite 2026-07-06):
    ```javascript
-   // Calculate final deposit amount
-   if (depositedTotal) {
-     values.deposit = order.deposit + deposit // Full remaining amount
-   }
-
-   // Mark as fully paid
-   if (values.deposit >= calculateTotal()) {
-     values.paid = 1;
-     values.paidAt = fechaActual;
-   }
+   const individualDepositAmount = depositedTotal ? deposit : parseFloat(pendingFormData.deposit);
+   const depositPayload = {
+     orderId: params.id,
+     depositValue: individualDepositAmount, // the full remaining amount, in this scenario
+     paymentMethod: platformPayment ? "Plataforma" : "Efectivo",
+     collectedBy: localStorage.getItem('user') || 'Unknown',
+   };
+   await createDeposit(depositPayload);
+   // paid/paidAt are no longer computed client-side — the server decides based on
+   // its own view of the order total and current cumulative deposit
    ```
 
-7. **Database Updates**
-   - Creates deposit record via `createDeposit(newDeposit)` in `CollectOrderForm.jsx:170`
-   - Updates order via `updateOrder(params.id, values)` in `CollectOrderForm.jsx:171`
-   - Deposit record includes:
-     ```javascript
-     const newDeposit = {
-       orderId: params.id,
-       clientId: order.clientId,
-       paymentMethod: platformPayment ? "Plataforma" : "Efectivo",
-       depositValue: calculateTotal(), // Final total
-       lastDeposit: order.deposit, // Previous amount
-       newDeposit: remainingAmount // This payment
-     }
-     ```
+7. **Database Updates** (single transaction, server-side — `server/controllers/deposits.controllers.js`'s `createDeposit`)
+   - Locks the order row (`SELECT ... FOR UPDATE`)
+   - Computes `orderTotal` from the order's current `items`, `lastDeposit` from its current `deposit` column, `newDeposit = lastDeposit + depositValue`, `dueOnDeposit = orderTotal - newDeposit`
+   - Inserts the deposit row, then updates the order (`deposit`, `paid`, `paidAt` if newly fully paid, `paymentMethod`, `collectedBy`, and client snapshot fields if newly fully paid) — all in the same transaction, so a failure partway through rolls back cleanly instead of leaving a deposit row with a stale order total
 
 8. **Order Status Update**
    - Order `paid` field set to `1`
@@ -721,18 +724,7 @@ The system supports multiple payment methods:
    - System validates amount doesn't exceed remaining balance
    - `depositedTotal` flag remains `false`
 
-3. **Payment Calculation** (`CollectOrderForm.jsx:152-154`):
-   ```javascript
-   // For partial payments
-   values.deposit = values.deposit + order.deposit
-
-   // Check if this payment completes the order
-   if (values.deposit >= calculateTotal()) {
-     values.paid = 1; // Mark as fully paid
-   } else {
-     values.paid = 0; // Remains partially paid
-   }
-   ```
+3. **Payment Submission** — same atomic `createDeposit(depositPayload)` call as the full-payment flow (see above); the server itself decides whether this payment completes the order (`newDeposit >= orderTotal`) rather than the client computing `values.paid` beforehand
 
 4. **Deposit Record Creation**
    - Creates partial payment record in deposits table
@@ -762,6 +754,8 @@ The system supports multiple payment methods:
 - Real-time status updates based on payment completion
 
 #### Practical Usage Examples
+
+> **Note (2026-07-06):** the examples below show the resulting `deposits`/`orders` rows, which are still accurate. The *mechanism* changed — the server now computes `lastDeposit`/`newDeposit`/`dueOnDeposit`/`paid` itself inside `createDeposit`'s transaction, rather than the frontend computing them and making two separate `createDeposit` + `updateOrder` calls. See "Core Payment Functions" above.
 
 **Example 1: Processing a $50,000 COP Order with Partial Payments**
 
@@ -882,36 +876,43 @@ Accessing `/cobrosHoy/` on date 2024-01-15 shows:
 **Example 4: Error Handling and Validation**
 
 **Invalid Payment Scenarios**:
-1. **Overpayment Prevention**:
+1. **Overpayment Prevention** — enforced server-side (✅ 2026-07-06), not just client-side validation:
    ```javascript
-   // In CollectOrderForm.jsx payment validation
-   const remainingBalance = calculateTotal() - order.deposit;
-   if (enteredAmount > remainingBalance) {
-     // System prevents overpayment
-     alert("Amount exceeds remaining balance");
+   // deposits.controllers.js createDeposit, inside the transaction
+   if (newCumulative > orderTotal) {
+     await conn.rollback();
+     return res.status(400).json({ message: `El abono excede el saldo pendiente ($${orderTotal - lastDeposit}).` });
    }
    ```
 
-2. **Database Transaction Safety**:
+2. **Database Transaction Safety** — atomic, with sanitized errors (✅ 2026-07-06):
    ```javascript
-   // deposits.controllers.js:27-34 with error handling
+   // deposits.controllers.js createDeposit — SELECT ... FOR UPDATE + transaction
+   const conn = await pool.getConnection();
    try {
-     const result = await pool.query("INSERT INTO deposits SET ?", req.body);
-     res.json(result);
+     await conn.beginTransaction();
+     // ... lock order row, compute totals, insert deposit, update order ...
+     await conn.commit();
    } catch (error) {
-     return res.status(500).json({ message: error.message });
+     await conn.rollback();
+     sendErrorEmail(req, error, 'createDeposit'); // full detail server-side/email only
+     return res.status(500).json({ message: "Error procesando el abono" }); // generic message to client
+   } finally {
+     conn.release();
    }
    ```
 
 3. **Network Error Recovery**:
    ```javascript
-   // DepositsProvider.jsx:28-34 with error handling
+   // DepositsProvider.jsx createDeposit — re-throws so the caller (CollectOrderForm.jsx) can
+   // show an alert and avoid reloading the page as if the payment had succeeded
    const createDeposit = async (deposits) => {
      try {
-       await createDepositRequest(deposits);
+       const response = await createDepositRequest(deposits);
+       return response.data;
      } catch (error) {
-       console.error(error);
-       // System maintains state consistency
+       console.error('[DepositsProvider] ERROR creating deposit:', error);
+       throw error;
      }
    };
    ```
@@ -1425,7 +1426,6 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 - Route configured with `<Navigate>` redirect in `App.jsx` (line 56)
 - Backend: `getDepositedOrdersByDate()` in `orders.controllers.js` (lines 65-105)
 - Frontend: Enhanced `DepositedOrdersPage.jsx` and `OrderCollectCard.jsx`
-- See [PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning and implementation details
 
 ---
 
@@ -1848,7 +1848,7 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 
 3. **Comprehensive Utility Functions** ✅ **COMPLETED**: Created 8 comprehensive utility files with 25+ functions. Updated 15+ high and medium impact components. Eliminated 50+ lines of duplicate code across order calculations, date formatting, mall styling, cart management, and API configuration.
 
-4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic. See [PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md#-4-page-merge-cobros-del-día--cuentas-al-día-completed) for complete planning details.
+4. **Page Merge: Cobros del Día + Cuentas al Día** ✅ **COMPLETED** (2025-10-05 - 3 hours): Merged "Cuentas al día" functionality into unified "Cobros del día" page. Enhanced UI with formatted totals by mall, grand total display, and PAGADO badge for fully paid orders. Backend query enhanced to include orders paid on selected date. Frontend updated to handle edge cases (orders paid without deposits). Implemented graceful route redirect from `/ordenesPagas` to `/cobrosHoy`. Archived original `CollectedOrdersPage.jsx` for reference. Files modified: 3 (DepositedOrdersPage.jsx, OrderCollectCard.jsx, CLAUDE.md). Backend already included necessary query logic.
 
 5. **Client Protection + Snapshot on Payment** ✅ **COMPLETED** (commit 3f68348; edit-lock relaxed 2026-07-02, see #7): Clients cannot be deleted while they have active (unpaid + non-abandoned) orders — `deleteClient` returns `400 { orderId }` when blocked, and `ClientCard` surfaces a `Modal.error` linking to the offending order. **Editing is no longer blocked** — see #7 below. When an order transitions to `paid = 1`, `clientNameSnapshot`/`clientPremisesSnapshot`/`clientMallSnapshot` are captured onto the order row. All order read queries use `COALESCE(snapshot, live)` so historical (paid) orders survive client edits/deletes. Pre-fix orders fall back to live data via COALESCE — no destructive backfill. See Rule #8 in "Core Business Rules" above.
 
@@ -1864,6 +1864,19 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 - ✅ Archive: CollectedOrdersPage.jsx already in `_archived` folder
 - ✅ Documentation: Updated CLAUDE.md with implementation details
 
+8. **Audit fixes batch: H1/H2, 6.1, 1.9, 1.3, 1.5, 1.7, 2.9, 1.8, 1.4** ✅ **COMPLETED** (2026-07-06): A batch of 9 findings from the unmerged `claude/friendly-burnell-b334da` audit branch (documented in [PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md)), re-derived by hand directly against current `main` rather than merged from the branch — the branch tip predates paid-order immutability, client/order snapshots, and the empty-items guard, so merging it as-is would have silently stripped those out.
+   - **H1/H2 (deposit atomicity)**: `createDeposit`/`deleteDeposit` (`server/controllers/deposits.controllers.js`) rewritten as full transactions with `SELECT ... FOR UPDATE` row locking. Server now computes `lastDeposit`/`newDeposit`/`dueOnDeposit`/`paid`/`paidAt` itself; adds an overpayment guard. **Contract change**: `POST /deposits` now takes `{orderId, depositValue, paymentMethod, collectedBy}` instead of a fully client-computed row — `CollectOrderForm.jsx`'s `handleConfirmPayment` was rewritten in the same pass to match (see Rule #7 and the "Deposits and Payment System" section above for full detail).
+   - **6.1**: `deleteDeposit`'s per-deposit recalculation loop collapsed into one batched `UPDATE ... CASE depositId WHEN ... END`.
+   - **1.9**: `deleteDeposit` recomputes `paid` from the new running total instead of forcing it to 0 unconditionally, and clears `paidAt` to `NULL` only on an actual 1→0 transition.
+   - **1.3**: `createOrder` (`server/controllers/orders.controllers.js`) now runs `SELECT ... FOR UPDATE` on the client's existing unpaid orders inside a transaction and merges server-side, closing the two-tabs-both-create race that the frontend's `unPaidOrder` check alone can't prevent.
+   - **1.5**: `hasDuplicateItemIds` (rejected the whole request with 400) replaced by `stackMergeItems()`, which sums `quantity` for colliding item IDs instead. Applied in `createOrder`'s merge path and (newly) in `updateOrder`'s items path.
+   - **1.7**: Removed dead/duplicate `CONVERT_TZ(orders.createdAt, ...)` columns from `orders.controllers.js` list queries (some were genuinely duplicate-aliased as `createdAt` twice in one query). Added a minimal `tzColombia()` helper in `server/utils/sqlFragments.js`. Alias names were deliberately left unchanged to avoid touching the 5 frontend files that read `order.createdAt`.
+   - **2.9**: Every catch block in `orders.controllers.js`/`clients.controllers.js`/`products.controllers.js`/`query.controllers.js` now returns a generic Spanish message instead of `error.message`/`error.sqlMessage`; the existing `sendErrorEmail(...)` call (already present in every catch) still captures full detail server-side. No new response-wrapper abstraction was added.
+   - **1.8**: `UserProvider.autenticateUser` now calls `setUser()` *before* its `return` (previously dead code — the context's `user` never populated on login); `LoginForm.jsx` calls `autenticateUser` once per submit instead of twice.
+   - **1.4**: See Rule #7 above.
+   - Files modified: 6 backend (`deposits.controllers.js`, `orders.controllers.js`, `clients.controllers.js`, `products.controllers.js`, `query.controllers.js`, new `server/utils/sqlFragments.js`), 3 frontend (`CollectOrderForm.jsx`, `UserProvider.jsx`, `LoginForm.jsx`). Verified live against the real DB with test client `1557` (see [REFERENCE.md](docs/REFERENCE.md#local-testing-against-the-real-db)) — order merge/stacking, atomic deposit math, full-payment snapshot capture, overpayment/already-paid guards, batched deposit-deletion recalculation, and confirmed a real MySQL error no longer leaks `sqlMessage` to the client.
+   - **Not adopted this pass**: 2.7 (input validation/column allowlisting — deferred, not requested) and 1.6 (checkbox write-serialization via a local `cart` ref — explicitly rejected, reintroduces the stale-cart-race shape `main` already eliminated). 2.6 (CORS includes localhost in prod) documented as intentionally preserved for local dev, not fixed. See [PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md) for full detail on all of the above.
+
 ### Priority Improvements Available for Implementation
 
 #### 1. Component Utility Functions 🟢 (MEDIUM PRIORITY - 2 hours)
@@ -1871,11 +1884,9 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 - **Implementation**: Create `client/src/utils/orderUtils.js` with functions like `calculateOrderTotal()`, `formatCurrency()`, `calculateBalance()`, `isOrderPaid()`
 - **Impact**: DRY principle compliance, maintainable code
 
-#### 2. Basic Error Handling in Controllers 🟢 (HIGH PRIORITY - 2 hours)
-- **Issue**: Only 1 try-catch block in entire backend
-- **Files**: All controller files in `server/controllers/`
-- **Implementation**: Create `server/utils/responseUtils.js` with `sendSuccess()` and `sendError()` functions, wrap all database operations in try-catch
-- **Impact**: Prevents server crashes, provides consistent error responses
+#### 2. Basic Error Handling in Controllers 🟡 (PARTIALLY DONE — see item 8 above, 2026-07-06)
+- **Original issue**: every controller catch block returned `error.message`/`error.sqlMessage` straight to the client, leaking SQL schema/state (this part is now fixed — see 2.9 in item 8 above). All controllers already wrap DB operations in try-catch and call `sendErrorEmail(...)` for server-side detail (predates this note being accurate).
+- **Still open**: no shared `sendSuccess()`/response-wrapper abstraction was introduced (kept deliberately minimal — see item 8's note on not adding a new abstraction); response shape is still inconsistent across endpoints (see item 3 below).
 
 #### 3. Standardize API Response Format 🟢 (MEDIUM PRIORITY - 3 hours)
 - **Issue**: Inconsistent API response formats across endpoints
@@ -1910,21 +1921,13 @@ All unsafe `JSON.parse(order.items)` calls have been successfully replaced with 
 - **Rollback plan**: Use `git checkout -- <file>` for immediate rollback if issues occur
 
 ### Higher Priority Items Requiring Environment Changes
-- **Database Credentials Security**: Hardcoded password in `server/db.js` (requires environment variables)
-- **Environment Configuration**: Hardcoded URLs in API files (requires Vite env vars)
-- **Authentication Security**: Plain text passwords in database (requires bcrypt + DB migration)
+See [PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md) Priority 2 (database credentials, environment URL config, and full authentication security — none of this has been implemented; it requires infrastructure/environment decisions, not just code changes). The unmerged `claude/friendly-burnell-b334da` branch that PENDING_IMPROVEMENTS.md tracks has had most of its non-auth findings re-implemented directly on `main` as of 2026-07-06 (see item 8 above) — Priority 2's auth/credentials findings are untouched by that pass and remain fully open.
 
 ## 📚 Additional Documentation
 
 ### Technical Documentation
-- **[PROJECT_IMPROVEMENTS.md](docs/PROJECT_IMPROVEMENTS.md)** - Comprehensive technical documentation consolidating all implementation guides
-  - **Deployment Guide**: Production deployment configuration, build process, and environment setup
-  - **Database Schema**: Full table definitions, relationships, and soft-delete/protection rules for clients, orders, and deposits
-  - **Timezone Implementation**: Complete timezone handling for Colombia (UTC-5) with database patterns and best practices
-  - **Completed Improvements**: Full documentation of implemented features including delete deposits, safe JSON parsing, utility functions, page merges, client/order protection rules, and the client edit unlock
-  - **Feature Implementation Guides**: Invoice payment enhancements, progressive product reveal, and UI improvements
-  - **Code Improvement Opportunities**: Security enhancements, error handling, performance optimizations
-  - **Implementation Guides**: Step-by-step instructions for all improvements with code examples
+- **[REFERENCE.md](docs/REFERENCE.md)** - Deployment Guide, Database Schema, Timezone Implementation, and Local Testing Against the Real DB (test client `1557`, why the full server can't boot locally without Sigale's own DB config)
+- **[PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md)** - Consolidated tracker for all known pending improvements and audit findings (data integrity, security, scalability, performance), including what's already coded on the unmerged `claude/friendly-burnell-b334da` branch
 
 ### Project Documentation
 - **[README.md](README.md)** - Project overview, setup instructions, and architecture

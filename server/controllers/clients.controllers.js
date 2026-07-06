@@ -7,7 +7,7 @@ export const getAllClients = async (req, res) => {
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getAllClients');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo los clientes' });
     }
 }
 
@@ -19,7 +19,7 @@ export const getClients = async (req, res) => {
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getClients');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo los clientes por ubicación' });
     }
 }
 
@@ -35,7 +35,7 @@ export const getClient = async (req, res) => {
         res.json(result[0]);
     } catch (error) {
         sendErrorEmail(req, error, 'getClient');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo el cliente' });
     }
 }
 
@@ -57,7 +57,7 @@ export const createClient = async (req, res) => {
         })
     } catch (error) {
         sendErrorEmail(req, error, 'createClient');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error creando el cliente' });
     }
 }
 
@@ -72,7 +72,7 @@ export const updateClient = async (req, res) => {
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'updateClient');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error actualizando el cliente' });
     }
 }
 
@@ -94,7 +94,7 @@ export const deleteClient = async (req, res) => {
         return res.sendStatus(204);
     } catch (error) {
         sendErrorEmail(req, error, 'deleteClient');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error eliminando el cliente' });
     }
 };
 
@@ -109,7 +109,7 @@ export const restoreClient = async (req, res) => {
         return res.sendStatus(204);
     } catch (error) {
         sendErrorEmail(req, error, 'restoreClient');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error restaurando el cliente' });
     }
 };
 
@@ -121,6 +121,6 @@ export const getDeletedClients = async (req, res) => {
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'getDeletedClients');
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: 'Error obteniendo los clientes eliminados' });
     }
 };

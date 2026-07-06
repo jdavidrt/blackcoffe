@@ -173,60 +173,29 @@ function CollectOrderForm() {
 
     if (!pendingFormData || !pendingActions) return;
 
-    const values = pendingFormData;
-    const actions = pendingActions;
-
-    // Original submission logic
-    values.shopId = 1;
-    values.clientId = client;
-    values.items = JSON.stringify(cart)
-
     // Calculate the individual deposit amount (not cumulative)
-    const individualDepositAmount = depositedTotal ? deposit : parseFloat(values.deposit);
+    const individualDepositAmount = depositedTotal ? deposit : parseFloat(pendingFormData.deposit);
 
-    // Calculate new cumulative total after this deposit
-    const newCumulativeTotal = order.deposit + individualDepositAmount;
-
-    var neewDeposit = {};
-    neewDeposit.orderId = params.id;
-    neewDeposit.clientId = order.clientId;
-    neewDeposit.paymentMethod = platformPayment ? 'Plataforma' : 'Efectivo';
-    neewDeposit.lastDeposit = order.deposit > 0 ? order.deposit : 0; // Previous cumulative total
-    neewDeposit.depositValue = individualDepositAmount; // Individual payment amount (what user entered)
-    neewDeposit.newDeposit = newCumulativeTotal; // New cumulative total after this deposit
-    neewDeposit.dueOnDeposit = calculateTotal() - newCumulativeTotal; // Remaining debt
-
-    // Update order deposit total
-    values.deposit = newCumulativeTotal;
-
-    if (values.deposit >= calculateTotal()) {
-      values.paid = 1;
-    } else {
-      values.paid = 0;
-    }
+    // Atomic endpoint: backend inserts the deposit AND updates the order (deposit
+    // total, paid, paidAt, collectedBy) in one transaction, computing lastDeposit/
+    // newDeposit/dueOnDeposit/paid itself from the locked order row. Frontend just
+    // states intent — no more separate createDeposit() + updateOrder() round trip.
+    const depositPayload = {
+      orderId: params.id,
+      depositValue: individualDepositAmount,
+      paymentMethod: platformPayment ? 'Plataforma' : 'Efectivo',
+      collectedBy: localStorage.getItem('user') || 'Unknown',
+    };
 
     if (params.id) {
-      // Only send valid orders table columns to avoid "Unknown column" SQL errors
-      // Only set paidAt when the order is actually fully paid
-      const orderUpdate = {
-        deposit: values.deposit,
-        paid: values.paid,
-        collectedBy: values.collectedBy,
-        paymentMethod: values.paymentMethod,
-        ...(values.paid === 1 && { paidAt: fechaActual }),
-      };
-
       try {
-        console.log('[CollectOrderForm] Creating deposit:', neewDeposit);
-        await createDeposit(neewDeposit);
-        console.log('[CollectOrderForm] Deposit created successfully');
-
-        console.log('[CollectOrderForm] Updating order:', orderUpdate);
-        await updateOrder(params.id, orderUpdate);
-        console.log('[CollectOrderForm] Order updated successfully');
+        console.log('[CollectOrderForm] Creating deposit (atomic):', depositPayload);
+        await createDeposit(depositPayload);
+        console.log('[CollectOrderForm] Deposit + order update committed atomically');
       } catch (error) {
         console.error('[CollectOrderForm] ERROR during payment processing:', error);
-        alert(`Error al procesar el pago: ${error.message || 'Error desconocido'}. Por favor, verifique si el pago fue registrado correctamente.`);
+        const serverMsg = error?.response?.data?.message;
+        alert(`Error al procesar el pago: ${serverMsg || error.message || 'Error desconocido'}. La operación fue revertida.`);
         setIsRegistering(false);
         setLoadingMessage("");
         return; // Don't reload if there was an error
@@ -297,7 +266,6 @@ function CollectOrderForm() {
               paid: order.paid,
               paidAt: order.paidAt ? formatDate(order.paidAt) : null,
               deposit: order.deposit,
-              collectedBy: order.mall
             });
           } else {
             setOrder({
@@ -309,7 +277,6 @@ function CollectOrderForm() {
               createdAt: extractDate(order.createdAt),
               paid: order.paid,
               deposit: order.deposit,
-              collectedBy: order.mall
             });
           }
         } catch (error) {
