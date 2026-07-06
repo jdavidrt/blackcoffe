@@ -24,6 +24,7 @@ import healthRoutes from './routes/health.routes.js';
 import eventsRoutes from './routes/events.routes.js';
 import purchasesRoutes from './routes/purchases.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import guestPassesRoutes from './routes/guestPasses.routes.js';
 import scanRoutes from './routes/scan.routes.js';
 
 const app = express();
@@ -52,6 +53,7 @@ app.use(healthRoutes);
 app.use(eventsRoutes);
 app.use(purchasesRoutes);
 app.use(adminRoutes);
+app.use(guestPassesRoutes);
 app.use(scanRoutes);
 
 // ── Global error middleware ── after all routes ─────────────────────────────────
