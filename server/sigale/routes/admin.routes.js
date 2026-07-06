@@ -3,8 +3,8 @@
  *   POST   /api/login                          public     — bcrypt check, rate-limited
  *   GET    /api/admin/purchases                organizer  — review table
  *   DELETE /api/admin/purchases                organizer  — hard-reset all confirmed purchases+tickets
- *   POST   /api/admin/purchases/:id/confirm    organizer  — reserved->sold, mint tickets
- *   POST   /api/admin/purchases/:id/reject     organizer  — free cupo
+ *   POST   /api/admin/purchases/:orderId/confirm organizer  — reserved->sold, seal every row of the order
+ *   POST   /api/admin/purchases/:orderId/reject  organizer  — free cupo
  *   POST   /api/admin/sales                    organizer  — walk-in
  * Every /api/admin/* call re-validates credentials via requireOrganizer.
  */
@@ -40,8 +40,8 @@ router.delete('/api/admin/purchases', requireOrganizer, deleteAllPurchases);
 router.get('/api/admin/tickets', requireOrganizer, getAdminTickets);
 router.patch('/api/admin/tickets/:id', requireOrganizer, updateAdminTicket);
 router.delete('/api/admin/tickets/:id', requireOrganizer, deleteAdminTicket);
-router.post('/api/admin/purchases/:id/confirm', requireOrganizer, confirmPurchase);
-router.post('/api/admin/purchases/:id/reject', requireOrganizer, rejectPurchase);
+router.post('/api/admin/purchases/:orderId/confirm', requireOrganizer, confirmPurchase);
+router.post('/api/admin/purchases/:orderId/reject', requireOrganizer, rejectPurchase);
 router.post('/api/admin/sales', requireOrganizer, createWalkInSale);
 
 export default router;
