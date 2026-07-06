@@ -230,13 +230,13 @@ export const createEvent = async (req, res) => {
  * PUT /api/events/:id  (organizer — requireOrganizer at the route)
  * Edits the event's fields and reconciles its stages in one transaction.
  *
- * Stage reconciliation (safe when purchases exist):
+ * Stage reconciliation (safe when tickets exist):
  *   - Submitted stage has an id that matches an existing stage → UPDATE in-place
  *     (soldQuantity / reservedQuantity / status are preserved).
  *   - Submitted stage has no id (or id not found) → INSERT new stage.
  *   - Existing stage not present in the submitted list:
- *       • No purchases reference it → DELETE.
- *       • Purchases exist → leave it (organizer must handle manually).
+ *       • No tickets reference it → DELETE.
+ *       • Tickets exist → leave it (organizer must handle manually).
  */
 export const updateEvent = async (req, res) => {
   const validationError = validateEventPayload(req.body);
@@ -296,11 +296,11 @@ export const updateEvent = async (req, res) => {
       );
     }
 
-    // Delete stages no longer in the form, only when no purchases reference them.
+    // Delete stages no longer in the form, only when no tickets reference them.
     for (const id of existingIdSet) {
       if (!submittedIdSet.has(id)) {
         const [[{ cnt }]] = await conn.query(
-          'SELECT COUNT(*) AS cnt FROM purchases WHERE stageId = ?',
+          'SELECT COUNT(*) AS cnt FROM tickets WHERE stageId = ?',
           [id],
         );
         if (Number(cnt) === 0) {

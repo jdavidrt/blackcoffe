@@ -14,7 +14,7 @@ import crypto from 'node:crypto';
 import pool from '../db.js';
 import { sendErrorEmail } from '../utils/emailNotifier.js';
 import { verifyOrganizer } from '../middleware/requireOrganizer.js';
-import { BOGOTA, UTC } from '../utils/time.js';
+import { BOGOTA, UTC, toSqlUtc } from '../utils/time.js';
 import { nextOrderId } from './purchases.controllers.js';
 
 /** 128-bit random entry secret -> 32 hex chars (CHAR(64) reserved). */
@@ -45,37 +45,63 @@ export const login = async (req, res) => {
 
 /**
  * GET /api/admin/purchases?status=&orderId=  (organizer)
- * Review table with optional status filter and orderId search.
+ * Review table with optional status filter and orderId search. Since an
+ * order is now N rows (one per seat) sharing one orderId, this is a
+ * GROUP BY aggregate: quantity = row count, totalAmount = SUM(unitPrice).
+ * The order-level columns (status/delivery/createdAt/stage) are invariant
+ * across every row of the order, so ANY_VALUE() is correct (not an
+ * arbitrary pick — there is only ever one distinct value per group).
  */
 export const getAdminPurchases = async (req, res) => {
   try {
     const { status, orderId } = req.query;
     const where = [];
     const params = [];
-    if (status) { where.push('p.status = ?'); params.push(status); }
-    if (orderId) { where.push('p.orderId = ?'); params.push(orderId); }
+    if (status) { where.push('t.status = ?'); params.push(status); }
+    if (orderId) { where.push('t.orderId = ?'); params.push(orderId); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const [rows] = await pool.query(
-      `SELECT p.id, p.orderId, p.quantity, p.totalAmount, p.status, p.deliveryMethod, p.deliveryContact,
-              p.holdersSnapshot,
-              CONVERT_TZ(p.createdAt, '${UTC}', '${BOGOTA}') AS createdAt,
-              s.name AS stageName
-       FROM purchases p
-       JOIN ticket_stages s ON s.id = p.stageId
+      `SELECT t.orderId,
+              COUNT(*) AS quantity,
+              SUM(t.unitPrice) AS totalAmount,
+              ANY_VALUE(t.status) AS status,
+              ANY_VALUE(t.deliveryMethod) AS deliveryMethod,
+              ANY_VALUE(t.deliveryContact) AS deliveryContact,
+              CONVERT_TZ(ANY_VALUE(t.createdAt), '${UTC}', '${BOGOTA}') AS createdAt,
+              ANY_VALUE(s.name) AS stageName
+       FROM tickets t
+       JOIN ticket_stages s ON s.id = t.stageId
        ${whereSql}
-       ORDER BY p.createdAt DESC LIMIT 500`,
+       GROUP BY t.orderId
+       ORDER BY MAX(t.createdAt) DESC LIMIT 500`,
       params,
     );
-    // Parse the JSON holders column once on the way out so the client gets
-    // a real array (mysql2 sometimes hands JSON columns back as strings).
-    const out = rows.map((r) => {
-      let holders = r.holdersSnapshot;
-      if (typeof holders === 'string') {
-        try { holders = JSON.parse(holders); } catch { holders = []; }
-      }
-      return { ...r, holders: Array.isArray(holders) ? holders : [] };
-    });
+
+    if (rows.length === 0) {
+      return res.json([]);
+    }
+
+    // Second pass: per-row holder data for the orders above, assembled into
+    // a `holders[]` array per order (ORDER BY id ASC = insertion order).
+    const orderIds = rows.map((r) => r.orderId);
+    const placeholders = orderIds.map(() => '?').join(',');
+    const [holderRows] = await pool.query(
+      `SELECT orderId, holderName, holderIdNumber, holderPhone
+       FROM tickets WHERE orderId IN (${placeholders}) ORDER BY id ASC`,
+      orderIds,
+    );
+    const holdersByOrder = {};
+    for (const h of holderRows) {
+      if (!holdersByOrder[h.orderId]) holdersByOrder[h.orderId] = [];
+      holdersByOrder[h.orderId].push({
+        name: h.holderName,
+        idNumber: h.holderIdNumber,
+        phone: h.holderPhone,
+      });
+    }
+
+    const out = rows.map((r) => ({ ...r, holders: holdersByOrder[r.orderId] || [] }));
     res.json(out);
   } catch (error) {
     sendErrorEmail(req, error, 'getAdminPurchases');
@@ -84,33 +110,50 @@ export const getAdminPurchases = async (req, res) => {
 };
 
 /**
- * GET /api/admin/tickets  (organizer)
- * Every minted ticket from a confirmed purchase, joined with its stage + the
- * order so the /tickets page can display, edit, and generate QRs without
- * having to chase the purchase row separately.
+ * GET /api/admin/tickets?status=  (organizer)
+ * Every ticket row, joined with its stage, so the /tickets page can
+ * display, edit, and generate QRs without a second fetch.
+ *
+ * `status` defaults to 'confirmed' when omitted — load-bearing: it's what
+ * keeps DashboardPage (which calls this with no params) from silently
+ * ingesting pending/rejected/expired rows into its stats. Pass a
+ * comma-separated list, or the literal 'all', to see a wider set (this is
+ * what closes the old "rejected/pending orders are invisible outside
+ * /admin" gap — TicketsPage's status filter uses this).
  *
  * NOTE: this is read-only and intentionally returns the validationHash —
  * the QR is generated client-side from it. Stays behind requireOrganizer
- * because the hash is the door-scan secret.
+ * because the hash is the door-scan secret. validationHash is NULL for
+ * every non-confirmed row (minted only at confirm), so no QR is possible
+ * for those anyway.
  */
 export const getAdminTickets = async (req, res) => {
   try {
+    const { status } = req.query;
+    let whereSql = '';
+    let params = [];
+    if (!status) {
+      whereSql = 'WHERE t.status = ?';
+      params = ['confirmed'];
+    } else if (status !== 'all') {
+      const statuses = String(status).split(',').map((s) => s.trim()).filter(Boolean);
+      whereSql = `WHERE t.status IN (${statuses.map(() => '?').join(',')})`;
+      params = statuses;
+    }
+
     const [rows] = await pool.query(
-      `SELECT t.id, t.purchaseId, t.holderName, t.holderIdNumber, t.holderPhone,
+      `SELECT t.id, t.orderId, t.holderName, t.holderIdNumber, t.holderPhone,
               t.validationHash, t.isUsed,
               CONVERT_TZ(t.usedAt, '${UTC}', '${BOGOTA}') AS usedAt,
-              p.orderId, p.deliveryMethod, p.deliveryContact, p.totalAmount,
-              p.quantity AS purchaseQuantity,
-              CONVERT_TZ(p.createdAt, '${UTC}', '${BOGOTA}') AS purchaseCreatedAt,
-              s.name AS stageName, s.price AS stagePrice,
-              e.id AS eventId, e.name AS eventName
+              t.status, t.deliveryMethod, t.deliveryContact, t.unitPrice,
+              CONVERT_TZ(t.createdAt, '${UTC}', '${BOGOTA}') AS createdAt,
+              s.name AS stageName
        FROM tickets t
-       JOIN purchases p ON p.id = t.purchaseId
-       JOIN ticket_stages s ON s.id = p.stageId
-       JOIN events e ON e.id = p.eventId
-       WHERE p.status = 'confirmed'
-       ORDER BY p.createdAt DESC, t.id ASC
+       JOIN ticket_stages s ON s.id = t.stageId
+       ${whereSql}
+       ORDER BY t.createdAt DESC, t.id ASC
        LIMIT 5000`,
+      params,
     );
     res.json(rows);
   } catch (error) {
@@ -160,65 +203,68 @@ export const updateAdminTicket = async (req, res) => {
 };
 
 /**
- * POST /api/admin/purchases/:id/confirm  (organizer)
- * reserved -> sold, seal confirmedAt/confirmedBy, mint N tickets with
- * random validationHash. Guards against an already rejected/expired row.
+ * POST /api/admin/purchases/:orderId/confirm  (organizer)
+ * reserved -> sold, seal confirmedAt/confirmedBy on every row of the order,
+ * mint a validationHash per row. Guards against an already rejected/expired
+ * order. This is the "order converts into a ticket" moment — rows already
+ * existed (created at reservation time); confirm transitions them in place
+ * rather than spawning new ones.
  */
 export const confirmPurchase = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    const [[purchase]] = await conn.query(
-      'SELECT id, stageId, quantity, status, holdersSnapshot FROM purchases WHERE id = ? FOR UPDATE',
-      [req.params.id],
+    const [rows] = await conn.query(
+      'SELECT id, stageId, status, holderName, holderIdNumber, holderPhone FROM tickets WHERE orderId = ? ORDER BY id ASC FOR UPDATE',
+      [req.params.orderId],
     );
-    if (!purchase) {
+    if (rows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ message: 'Orden no encontrada' });
     }
-    if (purchase.status === 'confirmed') {
+    const status = rows[0].status;
+    if (status === 'confirmed') {
       await conn.rollback();
       return res.status(409).json({ message: 'La orden ya está confirmada' });
     }
-    if (purchase.status === 'rejected' || purchase.status === 'expired') {
+    if (status === 'rejected' || status === 'expired') {
       await conn.rollback();
-      return res.status(409).json({ message: `No se puede confirmar una orden '${purchase.status}'` });
+      return res.status(409).json({ message: `No se puede confirmar una orden '${status}'` });
     }
+    const qty = rows.length;
+    const stageId = rows[0].stageId;
 
     // reserved -> sold on the stage.
     await conn.query(
       'UPDATE ticket_stages SET reservedQuantity = reservedQuantity - ?, soldQuantity = soldQuantity + ? WHERE id = ?',
-      [purchase.quantity, purchase.quantity, purchase.stageId],
+      [qty, qty, stageId],
     );
 
-    // Seal the purchase.
+    // Seal every row of the order in one shot.
     await conn.query(
-      "UPDATE purchases SET status = 'confirmed', confirmedAt = UTC_TIMESTAMP(), confirmedBy = ? WHERE id = ?",
-      [req.organizer?.username || 'organizer', purchase.id],
+      "UPDATE tickets SET status = 'confirmed', confirmedAt = UTC_TIMESTAMP(), confirmedBy = ? WHERE orderId = ?",
+      [req.organizer?.username || 'organizer', req.params.orderId],
     );
 
-    // Mint tickets (one per spot). Prefer holders sent in the request body
-    // (admin override), then fall back to the purchase-time snapshot.
-    let holders = Array.isArray(req.body?.holders) ? req.body.holders : null;
-    if (!holders || holders.length === 0) {
-      let snapshot = purchase.holdersSnapshot;
-      if (typeof snapshot === 'string') {
-        try { snapshot = JSON.parse(snapshot); } catch { snapshot = []; }
-      }
-      holders = Array.isArray(snapshot) ? snapshot : [];
-    }
-    for (let i = 0; i < purchase.quantity; i++) {
-      const h = holders[i] || {};
+    // Resolve holder data per row: prefer an admin override sent in the
+    // request body, else whatever submitPayment already persisted on the
+    // row itself, else a placeholder. Mint a fresh validationHash per row —
+    // this is the only place a hash is ever written (never before confirm).
+    const overrides = Array.isArray(req.body?.holders) ? req.body.holders : null;
+    for (let i = 0; i < rows.length; i++) {
+      const o = overrides?.[i];
+      const holderName = o?.name || rows[i].holderName || `Boleta ${i + 1}`;
+      const holderIdNumber = o?.idNumber || rows[i].holderIdNumber || null;
+      const holderPhone = o?.phone || rows[i].holderPhone || null;
       await conn.query(
-        `INSERT INTO tickets (purchaseId, holderName, holderIdNumber, holderPhone, validationHash, isUsed)
-         VALUES (?, ?, ?, ?, ?, 0)`,
-        [purchase.id, h.name || `Boleta ${i + 1}`, h.idNumber || null, h.phone || null, randomValidationHash()],
+        'UPDATE tickets SET holderName = ?, holderIdNumber = ?, holderPhone = ?, validationHash = ? WHERE id = ?',
+        [holderName, holderIdNumber, holderPhone, randomValidationHash(), rows[i].id],
       );
     }
 
     await conn.commit();
-    res.json({ id: purchase.id, status: 'confirmed', minted: purchase.quantity });
+    res.json({ orderId: Number(req.params.orderId), status: 'confirmed', minted: qty });
   } catch (error) {
     await conn.rollback();
     sendErrorEmail(req, error, 'confirmPurchase');
@@ -229,53 +275,56 @@ export const confirmPurchase = async (req, res) => {
 };
 
 /**
- * POST /api/admin/purchases/:id/reject  (organizer)
- * Frees the reserved cupo. Not destructive of any minted tickets (there are
- * none before confirm). Cannot reject an already confirmed purchase.
+ * POST /api/admin/purchases/:orderId/reject  (organizer)
+ * Frees the reserved cupo and flips every row of the order to 'rejected'.
+ * Cannot reject an already confirmed order.
  */
 export const rejectPurchase = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    const [[purchase]] = await conn.query(
-      'SELECT id, stageId, quantity, status FROM purchases WHERE id = ? FOR UPDATE',
-      [req.params.id],
+    const [rows] = await conn.query(
+      'SELECT id, stageId, status FROM tickets WHERE orderId = ? FOR UPDATE',
+      [req.params.orderId],
     );
-    if (!purchase) {
+    if (rows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ message: 'Orden no encontrada' });
     }
-    if (purchase.status === 'confirmed') {
+    const status = rows[0].status;
+    if (status === 'confirmed') {
       await conn.rollback();
       return res.status(409).json({ message: 'No se puede rechazar una orden confirmada' });
     }
-    if (purchase.status === 'rejected') {
+    if (status === 'rejected') {
       await conn.commit();
-      return res.json({ id: purchase.id, status: 'rejected' });
+      return res.json({ orderId: Number(req.params.orderId), status: 'rejected' });
     }
-    // 'expired' purchases had their reservedQuantity decremented by sweepExpiredHolds.
+    // 'expired' orders had their reservedQuantity decremented by sweepExpiredHolds.
     // Attempting the decrement again would cause GREATEST(0 - N, 0) unsigned underflow
     // → CHECK constraint violation. Treat as idempotent: nothing left to release.
-    if (purchase.status === 'expired') {
+    if (status === 'expired') {
       await conn.commit();
-      return res.json({ id: purchase.id, status: 'expired' });
+      return res.json({ orderId: Number(req.params.orderId), status: 'expired' });
     }
+    const qty = rows.length;
+    const stageId = rows[0].stageId;
 
     // Release the held cupo back to the stage.
     await conn.query(
       'UPDATE ticket_stages SET reservedQuantity = GREATEST(reservedQuantity - ?, 0) WHERE id = ?',
-      [purchase.quantity, purchase.stageId],
+      [qty, stageId],
     );
     // Restore to active if the released spot opens availability.
     await conn.query(
       'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
-      ['active', purchase.stageId, 'sold_out'],
+      ['active', stageId, 'sold_out'],
     );
-    await conn.query("UPDATE purchases SET status = 'rejected' WHERE id = ?", [purchase.id]);
+    await conn.query("UPDATE tickets SET status = 'rejected' WHERE orderId = ?", [req.params.orderId]);
 
     await conn.commit();
-    res.json({ id: purchase.id, status: 'rejected' });
+    res.json({ orderId: Number(req.params.orderId), status: 'rejected' });
   } catch (error) {
     await conn.rollback();
     sendErrorEmail(req, error, 'rejectPurchase');
@@ -334,21 +383,59 @@ export const createWalkInSale = async (req, res) => {
     }
 
     // Sequential orderId (shared sequence with public purchases), retry on collision.
-    const totalAmount = Number(stage.price) * qty;
+    // Walk-ins skip the reservation phase entirely: rows are inserted directly
+    // 'confirmed' with a validationHash already minted (all holder data is
+    // known upfront), unlike the public flow's pending_payment rows.
+    const list = Array.isArray(holders) ? holders : [];
+    const confirmedAt = toSqlUtc(new Date().toISOString());
+    const confirmedBy = req.organizer?.username || 'organizer';
     let orderId = null;
-    let purchaseId = null;
+    let mintedTickets = [];
     for (let i = 0; i < 25; i++) {
       const candidate = await nextOrderId(conn);
+      const rows = Array.from({ length: qty }, (_, j) => {
+        const h = list[j] || {};
+        return {
+          holderName: h.name || `Taquilla ${j + 1}`,
+          holderIdNumber: h.idNumber || null,
+          holderPhone: h.phone || null,
+          validationHash: randomValidationHash(),
+        };
+      });
+      const values = rows.map((r, j) => [
+        candidate,
+        j === 0 ? candidate : null, // orderAnchor
+        eventId,
+        stageId,
+        stage.price,
+        r.holderName,
+        r.holderIdNumber,
+        r.holderPhone,
+        'whatsapp',
+        'taquilla',
+        'confirmed',
+        r.validationHash,
+        confirmedAt,
+        confirmedBy,
+      ]);
       try {
-        const [r] = await conn.query(
-          `INSERT INTO purchases
-             (eventId, stageId, quantity, totalAmount, orderId, deliveryMethod, deliveryContact,
-              status, reservationExpiresAt, confirmedAt, confirmedBy)
-           VALUES (?, ?, ?, ?, ?, 'whatsapp', ?, 'confirmed', UTC_TIMESTAMP(), UTC_TIMESTAMP(), ?)`,
-          [eventId, stageId, qty, totalAmount, candidate, 'taquilla', req.organizer?.username || 'organizer'],
+        const [result] = await conn.query(
+          `INSERT INTO tickets
+             (orderId, orderAnchor, eventId, stageId, unitPrice, holderName, holderIdNumber, holderPhone,
+              deliveryMethod, deliveryContact, status, validationHash, confirmedAt, confirmedBy)
+           VALUES ?`,
+          [values],
         );
         orderId = candidate;
-        purchaseId = r.insertId;
+        // Simple multi-row inserts (row count known up front) get a
+        // contiguous auto_increment block, so row j's id is insertId + j.
+        mintedTickets = rows.map((r, j) => ({
+          id: result.insertId + j,
+          holderName: r.holderName,
+          holderIdNumber: r.holderIdNumber,
+          holderPhone: r.holderPhone,
+          validationHash: r.validationHash,
+        }));
         break;
       } catch (err) {
         if (err.code === 'ER_DUP_ENTRY') continue;
@@ -358,24 +445,6 @@ export const createWalkInSale = async (req, res) => {
     if (!orderId) {
       await conn.rollback();
       return res.status(500).json({ message: 'No se pudo asignar número de orden' });
-    }
-
-    const list = Array.isArray(holders) ? holders : [];
-    // Collect the minted rows (with their validationHash) so the seller's
-    // screen can render the QR immediately, without a follow-up fetch.
-    const mintedTickets = [];
-    for (let i = 0; i < qty; i++) {
-      const h = list[i] || {};
-      const holderName = h.name || `Taquilla ${i + 1}`;
-      const holderIdNumber = h.idNumber || null;
-      const holderPhone = h.phone || null;
-      const validationHash = randomValidationHash();
-      const [tr] = await conn.query(
-        `INSERT INTO tickets (purchaseId, holderName, holderIdNumber, holderPhone, validationHash, isUsed)
-         VALUES (?, ?, ?, ?, ?, 0)`,
-        [purchaseId, holderName, holderIdNumber, holderPhone, validationHash],
-      );
-      mintedTickets.push({ id: tr.insertId, holderName, holderIdNumber, holderPhone, validationHash });
     }
 
     await conn.commit();
@@ -396,43 +465,35 @@ export const createWalkInSale = async (req, res) => {
 
 /**
  * DELETE /api/admin/purchases  (organizer)
- * Hard-reset: delete ALL purchases + their tickets regardless of status,
- * and restore stage inventory (sold + reserved). Intended for dev resets
- * and post-event cleanup — not reversible. Stays behind requireOrganizer.
+ * Hard-reset: delete ALL orders regardless of status, and restore stage
+ * inventory (sold + reserved). Intended for dev resets and post-event
+ * cleanup — not reversible. Stays behind requireOrganizer.
  */
 export const deleteAllPurchases = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // All purchases — every status — with stageId + quantity to restore inventory.
-    const [purchases] = await conn.query(
-      'SELECT id, stageId, quantity, status FROM purchases',
-    );
+    // Every ticket row — every status — with stageId to restore inventory.
+    const [rows] = await conn.query('SELECT stageId, status FROM tickets');
 
-    if (purchases.length === 0) {
+    if (rows.length === 0) {
       await conn.commit();
       return res.json({ ok: true, deleted: 0 });
     }
 
-    const ids = purchases.map((p) => p.id);
-    const placeholders = ids.map(() => '?').join(',');
-
-    // Delete child tickets first (FK: tickets.purchaseId -> purchases.id).
-    await conn.query(`DELETE FROM tickets WHERE purchaseId IN (${placeholders})`, ids);
-
     // Restore soldQuantity (confirmed) and reservedQuantity (pending/submitted) per stage.
-    // IMPORTANT: 'rejected' and 'expired' purchases have already had their
+    // IMPORTANT: 'rejected' and 'expired' rows have already had their
     // reservedQuantity decremented (by rejectPurchase / sweepExpiredHolds).
     // Including them here would cause unsigned underflow on the INT UNSIGNED column
     // (GREATEST(0 - N, 0) wraps to ~4B), triggering the chkStageCapacity CHECK.
     const stageSold = {};
     const stageReserved = {};
-    for (const p of purchases) {
-      if (p.status === 'confirmed') {
-        stageSold[p.stageId] = (stageSold[p.stageId] || 0) + p.quantity;
-      } else if (p.status === 'pending_payment' || p.status === 'payment_submitted') {
-        stageReserved[p.stageId] = (stageReserved[p.stageId] || 0) + p.quantity;
+    for (const r of rows) {
+      if (r.status === 'confirmed') {
+        stageSold[r.stageId] = (stageSold[r.stageId] || 0) + 1;
+      } else if (r.status === 'pending_payment' || r.status === 'payment_submitted') {
+        stageReserved[r.stageId] = (stageReserved[r.stageId] || 0) + 1;
       }
       // 'rejected' and 'expired': inventory already released — nothing to restore.
     }
@@ -449,8 +510,8 @@ export const deleteAllPurchases = async (req, res) => {
       );
     }
 
-    // Delete all purchases.
-    await conn.query(`DELETE FROM purchases WHERE id IN (${placeholders})`, ids);
+    // Delete every row — this endpoint already means "delete everything".
+    await conn.query('DELETE FROM tickets');
 
     // Reopen any stage whose inventory was fully cleared by this reset.
     await conn.query(
@@ -459,7 +520,7 @@ export const deleteAllPurchases = async (req, res) => {
     );
 
     await conn.commit();
-    res.json({ ok: true, deleted: purchases.length });
+    res.json({ ok: true, deleted: rows.length });
   } catch (error) {
     await conn.rollback();
     sendErrorEmail(req, error, 'deleteAllPurchases');
@@ -471,8 +532,12 @@ export const deleteAllPurchases = async (req, res) => {
 
 /**
  * DELETE /api/admin/tickets/:id  (organizer)
- * Remove a single minted ticket and restore 1 unit of sold inventory on
+ * Remove a single confirmed ticket and restore 1 unit of sold inventory on
  * its stage. Used by the /tickets page trash button.
+ *
+ * Guard (new since the merge): rows can now exist pre-confirm too, but
+ * deleting one seat out of a still-open pending/submitted order has no
+ * designed inventory-adjustment path and no product need — reject with 409.
  */
 export const deleteAdminTicket = async (req, res) => {
   const conn = await pool.getConnection();
@@ -482,32 +547,30 @@ export const deleteAdminTicket = async (req, res) => {
     // FOR UPDATE locks the ticket row so concurrent deletes of the same ticket
     // cannot both decrement soldQuantity (double-decrement bug).
     const [[ticket]] = await conn.query(
-      `SELECT t.id, p.stageId, p.status
-       FROM tickets t
-       JOIN purchases p ON p.id = t.purchaseId
-       WHERE t.id = ?
-       FOR UPDATE`,
+      'SELECT id, stageId, status FROM tickets WHERE id = ? FOR UPDATE',
       [req.params.id],
     );
     if (!ticket) {
       await conn.rollback();
       return res.status(404).json({ message: 'Boleta no encontrada' });
     }
+    if (ticket.status !== 'confirmed') {
+      await conn.rollback();
+      return res.status(409).json({ message: `No se puede eliminar una boleta en estado '${ticket.status}'` });
+    }
 
     await conn.query('DELETE FROM tickets WHERE id = ?', [req.params.id]);
 
-    // Restore one sold unit (only confirmed purchases have sold inventory).
-    if (ticket.status === 'confirmed') {
-      await conn.query(
-        'UPDATE ticket_stages SET soldQuantity = GREATEST(soldQuantity - 1, 0) WHERE id = ?',
-        [ticket.stageId],
-      );
-      // Reopen the stage if this deletion freed the last needed spot.
-      await conn.query(
-        'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
-        ['active', ticket.stageId, 'sold_out'],
-      );
-    }
+    // Restore one sold unit.
+    await conn.query(
+      'UPDATE ticket_stages SET soldQuantity = GREATEST(soldQuantity - 1, 0) WHERE id = ?',
+      [ticket.stageId],
+    );
+    // Reopen the stage if this deletion freed the last needed spot.
+    await conn.query(
+      'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
+      ['active', ticket.stageId, 'sold_out'],
+    );
 
     await conn.commit();
     res.json({ ok: true });

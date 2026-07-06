@@ -8,35 +8,45 @@
  * serialize and exactly one wins the last spot (the other gets 409).
  * NEVER pool.query for these flows. conn.release() always in finally.
  *
+ * An order is one row per seat in `tickets`, all sharing one sequential
+ * `orderId` (starting at 100). Only the first-inserted row of an order
+ * carries `orderAnchor`/`idempotencyKey` (both UNIQUE) — that's what
+ * catches a concurrent duplicate order, since the value can't be repeated
+ * per-row without breaking the constraint.
+ *
  * Security (plan §6): explicit column lists on the public INSERT (no
  * `SET ?` mass-assignment — an attacker must not be able to force
- * status='confirmed'); parameterized everywhere; orderId is a
- * sequential INT starting at 100, globally unique across the table.
+ * status='confirmed'); parameterized everywhere, including the bulk
+ * multi-row VALUES ? insert (each row is an explicit array built by us,
+ * never req.body passed through directly).
  *
  * Hold semantics (decision #4): reservationExpiresAt = createdAt + 24h
  * (real hold). The 20-minute countdown is frontend copy only.
  *
- * QR rule: validationHash/tickets are returned ONLY when status =
- * 'confirmed'. The QR is generated client-side and never stored.
+ * QR rule: validationHash is minted ONLY at confirm — never before. This
+ * is the door-scan security invariant markUsed() (scan.controllers.js)
+ * relies on. The QR is generated client-side and never stored.
  * ============================================================
  */
 
 import pool from '../db.js';
 import { sendErrorEmail } from '../utils/emailNotifier.js';
+import { toSqlUtc } from '../utils/time.js';
 
 const MAX_TICKETS_PER_PURCHASE = 6;
 const ORDER_ID_RETRIES = 25;
 const ORDER_ID_START = 100; // first order in the system is #100
+const RESERVATION_HOLD_MS = 24 * 60 * 60 * 1000; // 24h hold (decision #4)
 
 /**
  * Compute the next sequential orderId inside an open transaction.
  * Locks the table for read so concurrent inserts queue and never
  * collide on the same orderId. Falls back gracefully to ORDER_ID_START
- * when no purchases exist yet.
+ * when no tickets exist yet.
  */
 async function nextOrderId(conn) {
   const [[row]] = await conn.query(
-    'SELECT MAX(orderId) AS maxId FROM purchases FOR UPDATE',
+    'SELECT MAX(orderId) AS maxId FROM tickets FOR UPDATE',
   );
   const next = (Number(row?.maxId) || (ORDER_ID_START - 1)) + 1;
   return next < ORDER_ID_START ? ORDER_ID_START : next;
@@ -70,10 +80,10 @@ export const createPurchase = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // Idempotency: if this key already produced a purchase, return it.
+    // Idempotency: if this key already produced an order, return it.
     if (idempotencyKey) {
       const [[existing]] = await conn.query(
-        'SELECT orderId FROM purchases WHERE idempotencyKey = ? LIMIT 1',
+        'SELECT orderId FROM tickets WHERE idempotencyKey = ? LIMIT 1',
         [idempotencyKey],
       );
       if (existing) {
@@ -124,35 +134,50 @@ export const createPurchase = async (req, res) => {
     }
 
     const totalAmount = Number(stage.price) * qty;
+    const reservationExpiresAt = toSqlUtc(new Date(Date.now() + RESERVATION_HOLD_MS).toISOString());
 
-    // 4. Insert the purchase with a sequential orderId. Retry once or twice
-    //    if a concurrent insert wins the same number (the UNIQUE index
-    //    catches it) — extremely rare given the FOR UPDATE lock.
+    // 4. Insert one row per seat with a sequential orderId shared by all of
+    //    them. Retry once or twice if a concurrent insert wins the same
+    //    number (the uqOrderAnchor/uqTicketIdem UNIQUE indexes catch it) —
+    //    extremely rare given the FOR UPDATE lock on the stage row.
     let orderId = null;
-    let purchaseId = null;
     let lastErr = null;
     for (let i = 0; i < ORDER_ID_RETRIES; i++) {
       const candidate = await nextOrderId(conn);
+      // Holder names/ids/phones are usually unknown at this point (the buyer
+      // fills them in later via submitPayment); leave NULL when absent.
+      const rows = Array.from({ length: qty }, (_, j) => {
+        const h = Array.isArray(holders) ? holders[j] : null;
+        return [
+          candidate,
+          j === 0 ? candidate : null, // orderAnchor — anchors the collision guard to row 0 only
+          stage.eventId,
+          stageId,
+          stage.price,
+          h?.name || null,
+          h?.idNumber || null,
+          h?.phone || null,
+          method,
+          contact,
+          'pending_payment',
+          j === 0 ? (idempotencyKey || null) : null, // idempotencyKey — row 0 only
+          reservationExpiresAt,
+        ];
+      });
       try {
-        // holdersSnapshot is JSON NULL — feed mysql2 a stringified array (it
-        // auto-casts the bound string to JSON), or NULL when no holders.
-        const holdersJson = Array.isArray(holders) && holders.length
-          ? JSON.stringify(holders)
-          : null;
-        const [result] = await conn.query(
-          `INSERT INTO purchases
-             (eventId, stageId, quantity, totalAmount, orderId, deliveryMethod, deliveryContact,
-              holdersSnapshot, status, idempotencyKey, reservationExpiresAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 24 HOUR))`,
-          [eventId, stageId, qty, totalAmount, candidate, method, contact, holdersJson, idempotencyKey || null],
+        await conn.query(
+          `INSERT INTO tickets
+             (orderId, orderAnchor, eventId, stageId, unitPrice, holderName, holderIdNumber, holderPhone,
+              deliveryMethod, deliveryContact, status, idempotencyKey, reservationExpiresAt)
+           VALUES ?`,
+          [rows],
         );
         orderId = candidate;
-        purchaseId = result.insertId;
         break;
       } catch (err) {
-        if (err.code === 'ER_DUP_ENTRY' && /uqPurchaseIdem/.test(err.sqlMessage || '')) {
+        if (err.code === 'ER_DUP_ENTRY' && /uqTicketIdem/.test(err.sqlMessage || '')) {
           const [[existing]] = await conn.query(
-            'SELECT orderId FROM purchases WHERE idempotencyKey = ? LIMIT 1',
+            'SELECT orderId FROM tickets WHERE idempotencyKey = ? LIMIT 1',
             [idempotencyKey],
           );
           await conn.commit();
@@ -166,11 +191,6 @@ export const createPurchase = async (req, res) => {
       await conn.rollback();
       throw lastErr || new Error('No se pudo asignar un número de orden');
     }
-
-    // 5. Holders are stored in `purchases.holdersSnapshot` (migration 004)
-    //    above as JSON. At confirm-time the admin can override them; if not
-    //    overridden, confirmPurchase reads the snapshot and mints tickets
-    //    with those names/IDs/phones.
 
     await conn.commit();
     res.status(201).json({ orderId, totalAmount });
@@ -197,15 +217,31 @@ export const submitPayment = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    const [[purchase]] = await conn.query(
-      'SELECT id, status FROM purchases WHERE orderId = ? ORDER BY createdAt DESC LIMIT 1 FOR UPDATE',
+    // Lock every row of the order (one per seat) — not a single surrogate row.
+    const [rows] = await conn.query(
+      'SELECT id, status FROM tickets WHERE orderId = ? ORDER BY id ASC FOR UPDATE',
       [req.params.orderId],
     );
-    if (!purchase) {
+    if (rows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ message: 'Orden no encontrada' });
     }
-    if (purchase.status === 'payment_submitted') {
+    const status = rows[0].status;
+
+    // Applies holder names/ids/phones positionally: holders[i] -> the i-th
+    // row of this order (rows are already ORDER BY id ASC, i.e. insertion order).
+    const patchHolders = async () => {
+      if (!Array.isArray(holders) || holders.length === 0) return;
+      for (let i = 0; i < Math.min(holders.length, rows.length); i++) {
+        const h = holders[i] || {};
+        await conn.query(
+          'UPDATE tickets SET holderName = ?, holderIdNumber = ?, holderPhone = ? WHERE id = ?',
+          [h.name || null, h.idNumber || null, h.phone || null, rows[i].id],
+        );
+      }
+    };
+
+    if (status === 'payment_submitted') {
       // Allow the contact info to be patched even when already submitted, so
       // a retry from the client never loses the data the buyer just typed.
       const updates = [];
@@ -218,23 +254,23 @@ export const submitPayment = async (req, res) => {
         updates.push('deliveryContact = ?');
         params.push(String(deliveryContact).slice(0, 160));
       }
-      if (Array.isArray(holders) && holders.length) {
-        updates.push('holdersSnapshot = ?');
-        params.push(JSON.stringify(holders));
-      }
       if (updates.length) {
-        params.push(purchase.id);
-        await conn.query(`UPDATE purchases SET ${updates.join(', ')} WHERE id = ?`, params);
+        await conn.query(
+          `UPDATE tickets SET ${updates.join(', ')} WHERE orderId = ?`,
+          [...params, req.params.orderId],
+        );
       }
+      await patchHolders();
       await conn.commit();
       return res.json({ orderId: req.params.orderId, status: 'payment_submitted' });
     }
-    if (purchase.status !== 'pending_payment') {
+    if (status !== 'pending_payment') {
       await conn.rollback();
-      return res.status(409).json({ message: `La orden está en estado '${purchase.status}'` });
+      return res.status(409).json({ message: `La orden está en estado '${status}'` });
     }
 
-    // Patch the contact + holders alongside the status transition.
+    // Patch the contact + holders alongside the status transition, in one
+    // statement so every row of the order moves together.
     const updates = ["status = 'payment_submitted'"];
     const params = [];
     if (deliveryMethod && ['email', 'whatsapp'].includes(deliveryMethod)) {
@@ -245,12 +281,11 @@ export const submitPayment = async (req, res) => {
       updates.push('deliveryContact = ?');
       params.push(String(deliveryContact).slice(0, 160));
     }
-    if (Array.isArray(holders) && holders.length) {
-      updates.push('holdersSnapshot = ?');
-      params.push(JSON.stringify(holders));
-    }
-    params.push(purchase.id);
-    await conn.query(`UPDATE purchases SET ${updates.join(', ')} WHERE id = ?`, params);
+    await conn.query(
+      `UPDATE tickets SET ${updates.join(', ')} WHERE orderId = ?`,
+      [...params, req.params.orderId],
+    );
+    await patchHolders();
     await conn.commit();
     res.json({ orderId: req.params.orderId, status: 'payment_submitted' });
   } catch (error) {

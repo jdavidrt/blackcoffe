@@ -85,8 +85,13 @@ async function markUsed(hash, clientUsedAt) {
   try {
     await conn.beginTransaction();
 
+    // validationHash is only ever populated at confirm time (NULL before —
+    // see purchases.controllers.js), so this AND is defense-in-depth, not
+    // the primary guard: it never changes behavior today, but makes the
+    // "only confirmed tickets scan" invariant explicit and testable rather
+    // than resting solely on the implicit absence of a hash.
     const [[ticket]] = await conn.query(
-      'SELECT id, holderName, isUsed, usedAt FROM tickets WHERE validationHash = ? FOR UPDATE',
+      "SELECT id, holderName, isUsed, usedAt FROM tickets WHERE validationHash = ? AND status = 'confirmed' FOR UPDATE",
       [hash],
     );
 
