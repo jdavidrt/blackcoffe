@@ -8,6 +8,11 @@ import * as mock from './backups.mock';
 // endpoints now exist, so this defaults to false (production behavior).
 const USE_MOCK = false;
 
+export const getBackupDatesRequest = async () =>
+  USE_MOCK
+    ? mock.getBackupDatesRequest()
+    : await axios.get(`${API_CONFIG.RENDER_SERVER}/backupDates`);
+
 export const getBackupsByDateRequest = async (date) =>
   USE_MOCK
     ? mock.getBackupsByDateRequest(date)

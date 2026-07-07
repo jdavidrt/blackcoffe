@@ -77,6 +77,13 @@ let restores = [
 ];
 let restoreSeq = 2;
 
+// GET /backupDates — distinct snapshotDate values that actually have data.
+export const getBackupDatesRequest = async () => {
+  await wait(100);
+  const dates = [...new Set(snapshots.map((s) => s.snapshotDate))].sort();
+  return { data: dates };
+};
+
 // GET /backupsByDate/:date — latest snapshot per order with snapshotDate <= date.
 export const getBackupsByDateRequest = async (date) => {
   await wait();

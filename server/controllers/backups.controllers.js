@@ -7,6 +7,24 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const normPaidAt = (v) => (v ? String(v).slice(0, 10) : null);
 
 /**
+ * GET /backupDates — distinct snapshotDate values that actually have data,
+ * so the frontend calendar can only allow selecting days with real copies
+ * instead of the whole retention window (snapshots only exist from the day
+ * the nightly job first ran onward — pruning already keeps this list bounded).
+ */
+export const getBackupDates = async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT DISTINCT snapshotDate FROM order_snapshots ORDER BY snapshotDate ASC`
+        );
+        res.json(rows.map((r) => normPaidAt(r.snapshotDate)));
+    } catch (error) {
+        sendErrorEmail(req, error, 'getBackupDates');
+        return res.status(500).json({ message: "Error obteniendo las fechas de copias de seguridad" });
+    }
+};
+
+/**
  * GET /backupsByDate/:date — the reconstructed state of every order as of :date.
  *
  * Returns the latest snapshot per order with snapshotDate <= :date (a "restore

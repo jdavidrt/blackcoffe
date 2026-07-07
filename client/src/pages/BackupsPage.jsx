@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import dayjs from "dayjs";
-import { Calendar, Modal, message, Tag, Drawer } from "antd";
+import { Calendar, Modal, message, Tag, Drawer, Spin } from "antd";
 import { saveAs } from "file-saver";
 import {
+  getBackupDatesRequest,
   getBackupsByDateRequest,
   restoreOrderFromSnapshotRequest,
 } from "../api/backups.api";
@@ -11,7 +12,6 @@ import { calculateOrderTotal } from "../utils/orderUtils";
 import { formatCurrency } from "../utils/currencyUtils";
 
 const backendFormat = "YYYY-MM-DD";
-const RETENTION_DAYS = 21;
 
 function BackupsPage() {
   const [selectedDate, setSelectedDate] = useState(null); // dayjs
@@ -20,6 +20,8 @@ function BackupsPage() {
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [search, setSearch] = useState("");
+  const [availableDates, setAvailableDates] = useState(new Set());
+  const [datesLoading, setDatesLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(
     typeof window !== "undefined" ? window.innerWidth < 1024 : false
   );
@@ -30,11 +32,28 @@ function BackupsPage() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Calendar: no Sundays, no future, nothing older than the retention window.
-  const disabledDate = (d) =>
-    d.day() === 0 ||
-    d.isAfter(dayjs(), "day") ||
-    d.isBefore(dayjs().subtract(RETENTION_DAYS, "day"), "day");
+  // Snapshots only exist from the day the nightly job first ran onward, so the
+  // calendar can only allow selecting days that actually have a copy.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await getBackupDatesRequest();
+        setAvailableDates(new Set(res.data || []));
+      } catch (err) {
+        Modal.error({
+          title: "Error",
+          content:
+            err.response?.data?.message ||
+            "No se pudieron cargar las fechas con copias de seguridad.",
+        });
+      } finally {
+        setDatesLoading(false);
+      }
+    })();
+  }, []);
+
+  // Calendar: only days that actually have at least one snapshot are selectable.
+  const disabledDate = (d) => !availableDates.has(d.format(backendFormat));
 
   const loadDay = async (dateStr) => {
     setLoading(true);
@@ -336,12 +355,14 @@ function BackupsPage() {
         {/* Calendar + day list */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-md shadow p-2 mb-4">
-            <Calendar
-              fullscreen={false}
-              disabledDate={disabledDate}
-              value={selectedDate || undefined}
-              onSelect={onSelect}
-            />
+            <Spin spinning={datesLoading}>
+              <Calendar
+                fullscreen={false}
+                disabledDate={disabledDate}
+                value={selectedDate || undefined}
+                onSelect={onSelect}
+              />
+            </Spin>
           </div>
           <div className="bg-white rounded-md shadow p-3">
             <h2 className="font-bold text-stone-700 mb-2">
