@@ -107,6 +107,9 @@ function Navbar() {
           <li className="mb-1 flex items-center">
             <Link onClick={toggleMenu} to="/clientes" className="text-white hover:text-black bg-sky-800 rounded px-3 py-2">Clientes</Link>
           </li>
+          <li className="mb-1 flex items-center">
+            <Link onClick={toggleMenu} to="/copiasSeguridad" className="text-white hover:text-black bg-indigo-800 rounded px-3 py-2">Copias</Link>
+          </li>
           <li className="mb-1 flex items-center" onClick={logOut}>
             <Link onClick={toggleMenu} to={window.location.pathname} className="text-white hover:text-black bg-red-900 rounded px-3 py-2">Salir</Link>
           </li>

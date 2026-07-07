@@ -167,6 +167,15 @@ The BlackCoffe backend exposes 33 RESTful API endpoints organized by entity. All
 |--------|----------|-------------|
 | GET | `/ping` | Health check endpoint (returns database connection test: `SELECT 1 + 1`) |
 
+#### Backups Endpoints (3 endpoints) 🆕 (2026-07-07)
+**Controller**: `backups.controllers.js` | **Route File**: `backups.routes.js` — see the "Order Backup / Restore System" section below for full detail.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/backupsByDate/:date` | Reconstructed state of every order as of `:date` — latest snapshot per order with `snapshotDate <= :date`. Validates `:date` (`YYYY-MM-DD`) → 400 `Fecha inválida`. `itemsGz` gunzipped server-side; `items` returned as a raw JSON string. |
+| PUT | `/order/:id/restore` | Restore an order to a snapshot (body `{ snapshotId, restoredBy }`). Atomic transaction; overwrites `items`/`paid`/`paidAt` (NEVER `deposit`), writes an `order_restores` audit row. NOT routed through `updateOrder` (its paid-immutability guard stays intact). |
+| GET | `/orderRestores/:orderId` | Restore audit trail for one order (`restoredAt` ASC). Feeds the "Historial de restauraciones" badge. |
+
 ---
 
 #### API Request/Response Patterns
@@ -1767,12 +1776,14 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 11. **Abandonadas** (Orange) - Abandoned orders `/ordenesAbandonadas`
 12. **Productos** (Sky blue) - Product catalog `/productos`
 13. **Clientes** (Sky blue) - Customer management `/clientes`
-14. **Salir** (Dark red) - Logout
+14. **Copias** (Indigo) - Order backups / restore `/copiasSeguridad` 🆕 (2026-07-07)
+15. **Salir** (Dark red) - Logout
 
 **Notes**:
 - ✅ "Cuentas al día" removed - functionality merged into "Cobros del día" (item #2) on 2025-10-05
 - "Cobros del día" now shows ALL payment activity for selected date (deposits + full payments)
 - "Abandonadas" added (2025-10-04) - Track and manage abandoned orders
+- "Copias" added (2026-07-07) - Browse/restore nightly order snapshots; **full (admin) menu only**, NOT the kiosk menu
 
 **Limited User Menu** ("Black coffe Unilago" - Lines 54-68 in Navbar.jsx):
 1. **Nueva Orden** (Green) - Create order `/nuevaOrden`
@@ -1877,6 +1888,8 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
    - Files modified: 6 backend (`deposits.controllers.js`, `orders.controllers.js`, `clients.controllers.js`, `products.controllers.js`, `query.controllers.js`, new `server/utils/sqlFragments.js`), 3 frontend (`CollectOrderForm.jsx`, `UserProvider.jsx`, `LoginForm.jsx`). Verified live against the real DB with test client `1557` (see [REFERENCE.md](docs/REFERENCE.md#local-testing-against-the-real-db)) — order merge/stacking, atomic deposit math, full-payment snapshot capture, overpayment/already-paid guards, batched deposit-deletion recalculation, and confirmed a real MySQL error no longer leaks `sqlMessage` to the client.
    - **Not adopted this pass**: 2.7 (input validation/column allowlisting — deferred, not requested) and 1.6 (checkbox write-serialization via a local `cart` ref — explicitly rejected, reintroduces the stale-cart-race shape `main` already eliminated). 2.6 (CORS includes localhost in prod) documented as intentionally preserved for local dev, not fixed. See [PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md) for full detail on all of the above.
 
+9. **Order Backup / Restore System ("Copias de seguridad")** ✅ **COMPLETED** (2026-07-07): Nightly snapshot + restore feature. New tables `order_snapshots` (21-day pruned) / `order_restores` (never pruned); idempotent migration chained after `runMigrations`; `node-cron` job at 23:00 Mon–Sat (America/Bogota, no boot catch-up) doing prune-first + delta-only gzip snapshots; three endpoints (`GET /backupsByDate/:date`, `PUT /order/:id/restore` — atomic, `deposit` never touched, NOT via `updateOrder`; `GET /orderRestores/:orderId`); new `/copiasSeguridad` admin-only page with calendar, search, mobile bottom-sheet detail, and client-side `.txt` export; restore badge on `Invoice.jsx`/`CollectOrderForm.jsx` only. Frontend built and validated against an in-browser mock first (`backups.mock.js`, `USE_MOCK` flag in `backups.api.js`, now `false`). **Nothing under `server/sigale/` touched** — job wired alongside the Sigale boot line. Files: 6 new (`migrations/create_backup_tables.js`, `jobs/orderBackup.job.js`, `controllers/backups.controllers.js`, `routes/backups.routes.js`, `client/src/api/backups.api.js`, `client/src/pages/BackupsPage.jsx`) + `backups.mock.js`; modified `server/index.js`, `server/database/db.sql`, `server/utils/emailNotifier.js` (ROUTE_PAGE_MAP), `client/src/App.jsx`, `Navbar.jsx`, `Invoice.jsx`, `CollectOrderForm.jsx`. See the dedicated "Order Backup / Restore System" section above. Backend syntax-checked (`node --check`) + client build passes; live-DB verification (test client 1557) pending owner's `.env.local`.
+
 ### Priority Improvements Available for Implementation
 
 #### 1. Component Utility Functions 🟢 (MEDIUM PRIORITY - 2 hours)
@@ -1922,6 +1935,44 @@ All unsafe `JSON.parse(order.items)` calls have been successfully replaced with 
 
 ### Higher Priority Items Requiring Environment Changes
 See [PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md) Priority 2 (database credentials, environment URL config, and full authentication security — none of this has been implemented; it requires infrastructure/environment decisions, not just code changes). The unmerged `claude/friendly-burnell-b334da` branch that PENDING_IMPROVEMENTS.md tracks has had most of its non-auth findings re-implemented directly on `main` as of 2026-07-06 (see item 8 above) — Priority 2's auth/credentials findings are untouched by that pass and remain fully open.
+
+## Order Backup / Restore System ("Copias de seguridad") 🆕 (2026-07-07)
+
+A nightly snapshot system so any in-scope order's historical state can be browsed and restored, with a downloadable `.txt` per day and a permanent restore audit on each order. **Guardrail-safe:** the job is wired *alongside* the Sigale mounting code in `server/index.js`, never inside it — nothing under `server/sigale/` is touched (its scheduler was a read-only pattern reference only).
+
+### Data model (2 new tables — `server/migrations/create_backup_tables.js`, idempotent)
+- **`order_snapshots`** `(id, orderId, snapshotDate DATE, itemsGz MEDIUMBLOB, deposit, paid, paidAt, createdAt)`. `itemsGz` = `gzip(orders.items)` via `node:zlib`. `deposit` is **informational only — never restored**. Unique key `(orderId, snapshotDate)` → one row per order per Colombia day. **Pruned** to a 21-day window.
+- **`order_restores`** `(id, orderId, snapshotId, restoredFromDate DATE, restoredBy, restoredAt, createdAt)`. **Never pruned.** `restoredFromDate` is denormalized so the badge survives snapshot pruning. Repo convention: **no FK constraints**, so a dangling `snapshotId` after pruning is fine.
+- DDL is also appended to `server/database/db.sql` (schema doc). Migration chained in `index.js`: `runMigrations().then(runBackupMigrations)`.
+
+### Nightly job (`server/jobs/orderBackup.job.js`)
+- **`runOrderBackup()`** — pure & directly testable. Returns `{ eligible, written, pruned }`. Steps:
+  1. **Prune FIRST**: `DELETE FROM order_snapshots WHERE snapshotDate < DATE_SUB(<colombiaToday>, INTERVAL 21 DAY)`. Prune-before-snapshot means an untouched unpaid order whose only snapshot ages out gets a fresh baseline the same run — never invisible for a day.
+  2. **Eligibility**: `paid = 0 OR (paid = 1 AND (DATE(paidAt) = <colombiaToday> OR EXISTS(snapshot for this order)))`. Pre-deploy paid orders (no snapshots + `paidAt` ≠ today) are **never eligible → no backfill**. Unpaid abandoned orders are included (they can be reactivated).
+  3. Load latest snapshot per order in one query (`MAX(snapshotDate)` self-join, served by the unique key) → `Map`.
+  4. **Delta-only writes**: gunzip the previous `itemsGz` and strict-compare (`===`) against current `orders.items` (stored verbatim → unchanged is byte-identical), plus `Number(deposit)`, `Number(paid)`, and `paidAt` normalized to first 10 chars. Skip if all equal; else `INSERT ... ON DUPLICATE KEY UPDATE` (safe same-day re-runs).
+- **`startOrderBackupJob()`** — `cron.schedule('0 23 * * 1-6', run, { timezone: 'America/Bogota' })` only. **No boot-time catch-up run** (user decision) — the eligibility clause is the sole mechanism that captures a paid order's final state if the server was down at 23:00. Guarded wrapper (in-flight skip, ISO log `[jobs] orderBackup: eligible=… written=… pruned=…`, catch → `console.error` + `sendErrorEmail({ method:'JOB', path:'/jobs/orderBackup' }, …)` + swallow) — pattern replicated from, never imported from, Sigale's scheduler. Called in `index.js` on its own line after `startSigale()`.
+- Uses `node-cron@4.5.0` (root `package.json`, previously unused by BlackCoffe) + `node:zlib` (core, no new dep).
+
+### Deploy / first-run behavior (operational)
+- **Deploying does NOT create a snapshot.** On boot the migration runs (creating the two tables), but the job only ever fires on its cron schedule — there is **no boot-time catch-up run** by design. So the first snapshot happens at the **next 23:00 Bogota, Mon–Sat** after deploy, not at deploy time.
+  - Deploy **before 23:00 Bogota on a Mon–Sat** → first snapshot lands that same night at 23:00.
+  - Deploy **after 23:00** (or on a Sunday) → first snapshot is the next Mon–Sat 23:00.
+- **If the server is down/restarting exactly at 23:00, that night is skipped entirely.** There is no missed-run replay: an *unpaid* order simply gets its first/next snapshot at the following successful 23:00; a *paid* order's final state is still recoverable later only via the eligibility clause (`EXISTS(snapshot)` / `paidAt = today`), which is why a paid order that already has ≥1 snapshot keeps getting re-evaluated until pruning drops it.
+- **Confirming a run:** check Render logs for the ISO-stamped line `[jobs] orderBackup: eligible=… written=… pruned=…`. On a first-ever run `pruned=0` and `written` = the count of eligible (unpaid + paid-today) orders; subsequent same-state runs show `written=0` (delta skip).
+
+### Endpoints (`server/controllers/backups.controllers.js` + `backups.routes.js`, mounted via `app.use(backupsRoutes)` before `mountSigale(app)`)
+- **`GET /backupsByDate/:date`** — latest snapshot per order with `snapshotDate <= :date` (a "restore to day X" = latest on/before X — the caption may predate the selected day; that IS the reconstructed state). `LEFT JOIN orders/clients`, display via `COALESCE(o.*Snapshot, c.*)`. Gunzips server-side; each row: `{ snapshotId, orderId, snapshotDate, items (JSON string), deposit, paid, paidAt, orderExists, currentPaid, isAbandoned, clientName, premises, mall }`.
+- **`PUT /order/:id/restore`** — body `{ snapshotId, restoredBy }`. Atomic transaction (skeleton copied from `createDeposit`): `SELECT … FOR UPDATE` the order → load snapshot (404/400 on missing/mismatch) → gunzip items **verbatim** → empty-items guard (mirrors `updateOrder`) → build update: `items`, `paid`, and `paidAt` (first 10 chars when paid, else NULL). **`deposit` is NEVER touched.** On a 0→1 transition captures the three client snapshot columns; on a 1→0 transition **NULLs** them (so live `COALESCE` fall-through resumes). Writes an `order_restores` row (`restoredAt = DATE_SUB(NOW(), INTERVAL 5 HOUR)`). Returns `{ message, orderId, restoredFromDate, paid }`.
+- **`GET /orderRestores/:orderId`** — restore audit trail, `restoredAt` ASC (already Colombia time — no `CONVERT_TZ`).
+
+### Frontend
+- **`client/src/pages/BackupsPage.jsx`** (route `/copiasSeguridad`, context-free — precedent `QueryPage.jsx`): antd `Calendar` (`fullscreen={false}`) with `disabledDate` blocking Sundays, future days, and anything older than 21 days; a **search bar** filtering the day list by client/premises/mall; per-order cards (premises — client, mall, Abonado/Total, Pagada/Pendiente tag, "Copia del …"); a detail panel (items table, total, informational deposit note, paid→unpaid warning when `currentPaid !== paid`, restore disabled + "Orden eliminada" when `orderExists` is falsy); a **green** "Restaurar" `Modal.confirm` (mandatory `okButtonProps` style per the Ant-Modal rule) carrying the "abonos no se restauran" note; and a **"Descargar copia del día"** `.txt` built client-side with `file-saver`. **Mobile:** below `lg`, the detail opens in a bottom-sheet `Drawer` instead of stacking off-screen.
+- **`client/src/api/backups.api.js`** — the 3 request functions, gated by a `USE_MOCK` flag (default **false**). Set it `true` to run the whole page against **`client/src/api/backups.mock.js`** (in-browser fake data) for UI review without a backend.
+- **Restore badge** ("Historial de restauraciones") on **internal views only** — `Invoice.jsx` (`/pdfOrden/:id`) and `CollectOrderForm.jsx` (`/cobrarOrden/:id`), both fetching `getOrderRestoresRequest`. The public `/factura/:id` invoice is deliberately left clean.
+
+### Verifying (local, real DB — needs `.env.local` DB creds, per the owner's setup)
+The combined server can't boot locally (Sigale DB guardrail), so verify by importing `runOrderBackup` / `restoreOrderFromSnapshot` directly with test client **1557**: run the migration twice (idempotent), snapshot an unpaid order (`written ≥ 1`, gunzip round-trips exactly), re-run (delta skip), edit items + re-run (same-day overwrite), pay it + re-run (final paid state, then skipped), confirm a pre-deploy paid order is NOT eligible, and insert a −25-day fake snapshot to confirm pruning. Deploys (which run the migration on boot) are the owner's responsibility.
 
 ## 📚 Additional Documentation
 

@@ -13,6 +13,7 @@ import dayjs from "dayjs"; import {
 import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc } from '../utils/orderUtils';
 import { formatDate } from '../utils/dateUtils';
+import { getOrderRestoresRequest } from '../api/backups.api';
 
 const styles = StyleSheet.create({
     page: {
@@ -55,6 +56,7 @@ function Invoice() {
     const { getDepositsByOrderId } = useDeposits();
     const [cart, setCart] = useState([]);
     const [deposits, setDeposits] = useState([]);
+    const [restores, setRestores] = useState([]);
     const [order, setOrder] = useState({
     });
 
@@ -78,6 +80,13 @@ function Invoice() {
             if (params.id) {
                 const order = await getOrder(params.id);
                 const depositsData = await getDepositsByOrderId(params.id);
+
+                try {
+                    const restoresData = await getOrderRestoresRequest(params.id);
+                    setRestores(restoresData.data || []);
+                } catch (e) {
+                    setRestores([]);
+                }
 
                 setDeposits(depositsData || []);
                 setCart(safeJSONParse(order.items, []))
@@ -220,6 +229,17 @@ function Invoice() {
                         </div>
                     </>
                 ))}
+                {restores.length > 0 && (
+                    <>
+                        <br />
+                        <div className="font-bold">HISTORIAL DE RESTAURACIONES:</div>
+                        {restores.map((r) => (
+                            <div key={r.id} className="text-sm">
+                                Restaurado desde copia del {r.restoredFromDate ? r.restoredFromDate.slice(0, 10) : ''} el {r.restoredAt} por {r.restoredBy}
+                            </div>
+                        ))}
+                    </>
+                )}
                 <br />
                 CODIGO CIIU: 5613 / 4711
             </div>

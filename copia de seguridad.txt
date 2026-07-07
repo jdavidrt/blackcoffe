@@ -6,4 +6,110 @@ Copia de seguridad:
 - Que reestablezca a el día seleccionado
 Debe haber una tabla para referenciar los cambios hechos con copias de seguridad ejemplo
 "El día X se reestableció la cuenta X con el backup del día X"
+C:\Users\jdk_l\.claude\plans\help-me-create-a-shiny-pizza.md
+You will help me do a BackupUtility for this project
+The user wants to be able to go to a certain day and restore X order to its state on that day
+This also can be used as a history for orders
+The backup should be done 3 weeks to the past, just monday to saturday
+Also the backup should not be done on paid orders, i mean, if a order gets paid on wednesday, the backup for that order should be only be available until that date, including that day when it was paid, but on thursday, the bakup should not be done since the order is already paid and no information will be writen on that one
+the backup should be processed by the server every day (except for sundays) at 11pm
+also there should be a backup story for orders, were user can see if the order was restored from a backup at some point
+Also the user should be able to download a .txt file with the backup of an specific day, with that the user can have a local backup too
+there should be a new page called "Copias de seguridad" where the entry point is a calendar to select to which days user want backup and then it should load all the orders backed up from that day, then the user will select an order, see its data an then it can click the option to restore the current order to that day bakup
+i want to also make this as lightwaight as possible for the db since a lot of products on json will be stored, if you see any possibility to compress the products info or so, please tell me
+also is important to mention that this only its neccesary for orders older than may 15 of 2026 , form orders older than that, we will do a database cleanup at some point
+any questions?
 
+
+help me create a plan to implement this:
+# Order Backup / Restore Utility for BlackCoffe
+
+## Goal
+Build a daily snapshot system for orders so that any order's historical state can be
+browsed and restored, and give users a dedicated "Copias de seguridad" page to do this
+through the UI, plus a way to download a given day's backup as a .txt file.
+
+## Scope
+- Eligibility is **not** based on `createdAt`. Starting the day this feature is
+  deployed (~2026-07-07), any order that is currently **open/unpaid** becomes
+  eligible for nightly snapshots from that point forward — including orders created
+  long before the deploy date, as long as they're still unpaid when the job first
+  runs. New orders are naturally eligible immediately (they start unpaid).
+- Orders that are **already paid before the deploy date** are excluded entirely —
+  there's no captured history to restore them to, so don't attempt any backfill.
+- Do not touch anything under `server/sigale/` (see CLAUDE.md guardrail).
+
+## Snapshot job (cron)
+- Use the existing `node-cron` dependency already in root `package.json` (currently
+  unused by BlackCoffe — only `server/sigale` has its own copy). Add a new job file,
+  e.g. `server/jobs/orderBackup.job.js`, wired up from `server/index.js` alongside
+  (not inside) the Sigale mounting code.
+- Schedule: every day except Sunday at 23:00 Colombia time — cron expression
+  `'0 23 * * 1-6'` with `{ timezone: 'America/Bogota' }`.
+- Eligibility per run: an order is snapshotted if `paid = 0`, OR `paid = 1` and it
+  became paid *today* (capture the final state once, then never snapshot it again —
+  paid orders are already immutable per existing Rule #9).
+- **Delta-only writes**: before inserting, compare the order's current
+  items/deposit/paid state to its most recent snapshot row. If nothing changed,
+  skip — don't write a duplicate row. This is the main lever for keeping the table
+  small, since most orders sit untouched for days at a time.
+- "Restore to day X" is defined as: reconstruct from the most recent snapshot with
+  `snapshotDate <= X` for that order (not a literal 1-row-per-day record).
+- **Retention/pruning**: as part of the same nightly run (or a second job right
+  after it), delete `order_snapshots` rows where `snapshotDate` is older than 3
+  weeks ago. This is a real rolling window, not just a UI limit — old rows are
+  actually removed from the DB to keep it lightweight. This also naturally caps how
+  far back the "Copias de seguridad" calendar can show data.
+
+## Data model (new tables — propose exact DDL, don't guess blindly at existing conventions)
+- `order_snapshots`: `id`, `orderId` (FK orders.id), `snapshotDate` (DATE, Colombia
+  calendar day), `itemsGz` (BLOB — gzip'd items JSON via Node's built-in `zlib`, no
+  new dependency), `deposit`, `paid`, `paidAt`, `createdAt`. Unique on
+  `(orderId, snapshotDate)`.
+- `order_restores`: `id`, `orderId`, `snapshotId` (FK), `restoredFromDate`,
+  `restoredBy` (string, same `localStorage.getItem('user')` pattern used for
+  `collectedBy` elsewhere), `restoredAt`. This is the "backup story" — surface it as
+  a small history list/badge on the order (e.g. on the invoice or order detail view):
+  "Restaurado desde copia del {date} el {restoredAt} por {restoredBy}".
+
+## Restore semantics
+- Restoring overwrites `items` (and the derived total), `paid`, and `paidAt` from
+  the snapshot. **`deposit` is never touched by a restore, in either direction.**
+- This means restoring can flip a currently-paid order back to unpaid (so its
+  deposits become editable again) — that's intentional and is the main reason
+  `deposit` is excluded from the overwrite: deposits keep their own independent
+  audit trail (Rule #8/#9) and must be corrected through the existing
+  delete-deposit / create-deposit flows, not silently rewritten by a restore.
+- When `paid` transitions 1→0 via restore, clear `paidAt` to `NULL`, matching the
+  existing convention used in `deleteDeposit`.
+- Because this bypasses the existing "paid orders are immutable" guard (Rule #9),
+  implement it as its own dedicated controller action/endpoint — do NOT route it
+  through the generic `updateOrder`, so the existing immutability check elsewhere
+  is untouched.
+- Every restore confirmation modal must show an **"Importante:"** note (Spanish, to
+  match the app's UI language), e.g.: *"Importante: esta restauración no modifica
+  los abonos (depósitos) de la orden. Si el nuevo estado requiere abonos
+  distintos, elimínelos y regístrelos nuevamente desde esta misma orden."* Follow
+  the mandatory "Styling inside Ant Design Modals" rule for the confirm button.
+- After restore, write a row to `order_restores`.
+
+## New frontend page: "Copias de seguridad"
+- Entry point: a calendar (Ant Design) where only Monday–Saturday dates within the
+  3-week retention window are selectable (Sundays disabled, since no job runs then;
+  dates older than 3 weeks disabled since the data no longer exists).
+- Selecting a day loads all in-scope orders' reconstructed state as of that day
+  (i.e., latest snapshot `<= selected day` per order).
+- Selecting an order from that list shows its snapshot detail (items, quantities,
+  total, paid status as of that day — deposit shown as informational only, not
+  restorable) and a "Restaurar a este estado" button (guarded by the confirmation
+  modal above, including the "Importante" note).
+- A "Descargar copia del día" button downloads a `.txt` file for the whole day: a
+  human-readable dump of every order backed up that day (client, items, totals,
+  payment status) so the user has an offline local copy.
+- Add this page to the nav menu, consistent with existing route/button conventions
+  in `Navbar.jsx`.
+
+## Non-goals
+- No changes to `server/sigale/*`.
+- No backfill of snapshots for orders already paid before deploy.
+- Restore never edits the `deposits` table or the order's `deposit` column.

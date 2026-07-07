@@ -11,6 +11,7 @@ import { Modal, message } from "antd";
 import { formatDate, extractDate, formatDepositDateTime } from '../utils/dateUtils';
 import ProgressiveProductList from '../components/ProgressiveProductList';
 import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
+import { getOrderRestoresRequest } from '../api/backups.api';
 
 function CollectOrderForm() {
 
@@ -25,6 +26,7 @@ function CollectOrderForm() {
     items: ""
   });
   const [deposits, setDeposits] = useState([]);
+  const [restores, setRestores] = useState([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingFormData, setPendingFormData] = useState(null);
   const [pendingActions, setPendingActions] = useState(null);
@@ -251,6 +253,12 @@ function CollectOrderForm() {
           }
 
           setDeposits(depositsRequest || []);
+          try {
+            const restoresData = await getOrderRestoresRequest(params.id);
+            setRestores(restoresData.data || []);
+          } catch (e) {
+            setRestores([]);
+          }
           setCart(safeJSONParse(order.items, []))
           if (order.paymentMethod == "Plataforma") {
             togglePlatform(true)
@@ -612,6 +620,18 @@ function CollectOrderForm() {
               )}
             </>
               : ''}
+
+            {/* Restore history */}
+            {restores.length > 0 && (
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded">
+                <div className="font-bold text-yellow-800 mb-1">HISTORIAL DE RESTAURACIONES</div>
+                {restores.map((r) => (
+                  <div key={r.id} className="text-sm text-yellow-800">
+                    Restaurado desde copia del {r.restoredFromDate ? r.restoredFromDate.slice(0, 10) : ''} el {r.restoredAt} por {r.restoredBy}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Mark as Abandoned Section */}
             {!order.paid && !order.isAbandoned && (

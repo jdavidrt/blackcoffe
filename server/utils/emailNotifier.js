@@ -56,6 +56,10 @@ const ROUTE_PAGE_MAP = [
     { method: 'GET',    pattern: /^\/abandonedOrders/,             page: 'Abandonadas  →  /ordenesAbandonadas' },
     { method: 'PUT',    pattern: /^\/order\/[^/]+\/abandon$/,      page: 'Abandonadas  →  /ordenesAbandonadas' },
     { method: 'PUT',    pattern: /^\/order\/[^/]+\/reactivate$/,   page: 'Abandonadas  →  /ordenesAbandonadas' },
+    { method: 'PUT',    pattern: /^\/order\/[^/]+\/restore$/,      page: 'Copias de Seguridad  →  /copiasSeguridad' },
+    // Backups
+    { method: 'GET',    pattern: /^\/backupsByDate\//,             page: 'Copias de Seguridad  →  /copiasSeguridad' },
+    { method: 'GET',    pattern: /^\/orderRestores\//,             page: 'Copias de Seguridad  →  /copiasSeguridad' },
     // Clients
     { method: 'POST',   pattern: /^\/client$/,                     page: 'Nuevo Cliente  →  /nuevoCliente' },
     { method: 'PUT',    pattern: /^\/client\/[^/]+$/,              page: 'Editar Cliente  →  /editarCliente/:id' },

@@ -6,6 +6,8 @@ import { PORT } from "./config.js";
 import { sendErrorEmail } from "./utils/emailNotifier.js";
 
 import { runMigrations } from "./migrations/add_client_snapshot.js";
+import { runBackupMigrations } from "./migrations/create_backup_tables.js";
+import { startOrderBackupJob } from "./jobs/orderBackup.job.js";
 import indexRoutes from "./routes/index.routes.js";
 import ordersRoutes from "./routes/orders.routes.js";
 import productRoutes from "./routes/products.routes.js";
@@ -13,6 +15,7 @@ import clientRoutes from "./routes/clients.routes.js";
 import userRoutes from "./routes/users.routes.js";
 import depositRoutes from "./routes/deposits.routes.js";
 import queryRoutes from "./routes/query.routes.js";
+import backupsRoutes from "./routes/backups.routes.js";
 
 // Sigale - embedded as a self-contained subtree (SIGALE_MERGE_INTO_SHARED_SERVER.md S4)
 import { mountSigale, startSigale } from "./sigale/integration.js";
@@ -42,6 +45,7 @@ app.use(depositRoutes)
 app.use(clientRoutes)
 app.use(userRoutes)
 app.use(queryRoutes)
+app.use(backupsRoutes)
 
 // -- Sigale routes (all /api/*) -------------------------------------------------
 // MUST mount before express.static(client/dist) + app.get('*'); otherwise the
@@ -67,11 +71,13 @@ app.get('*', (req, res) => {
   res.sendFile(join(__dirname, '../client/dist', 'index.html'));
 });
 
-runMigrations().then(() => {
+runMigrations().then(runBackupMigrations).then(() => {
   app.listen(PORT);
   console.log(`[${new Date().toISOString()}] BlackCoffe Server running on port ${PORT}`);
   // Sigale boot is fire-and-forget: it runs its own migrations + scheduler.
   // Wrapped in its own try/catch (integration.js) so a failure here can
   // never take BlackCoffe down -- plan S10 (rollback safety).
   startSigale();
+  // BlackCoffe's own nightly order-backup job (23:00 Mon–Sat, Bogota). Not Sigale.
+  startOrderBackupJob();
 });
