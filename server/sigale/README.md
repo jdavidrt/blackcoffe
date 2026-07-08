@@ -72,4 +72,8 @@ Verify wiring: `curl http://localhost:25060/api/health` → `{ "ok": true, ... }
   `bcrypt.compare` even for unknown usernames (constant-time — no enumeration).
 - `/api/login` and `/api/recover` are **rate-limited**; `helmet` is enabled;
   request bodies are capped at **64 kb** (`express.json({ limit })`).
-- `validationHash` is a **random** server secret minted at confirm (never derived).
+- `validationHash` is a **deterministic HMAC** minted at confirm —
+  `HMAC_SHA256(SCAN_HASH_SECRET, "${orderId}:${seatIndex}").slice(0,16)`. Unique
+  per seat and stable across holder edits, but unguessable without the secret.
+  **Set `SCAN_HASH_SECRET` in the deployed environment** — it falls back to an
+  insecure dev default otherwise, and rotating it invalidates every issued QR.

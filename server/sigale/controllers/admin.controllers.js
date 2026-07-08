@@ -3,8 +3,9 @@
  * SÍGALE — ADMIN CONTROLLER (organizer panel)
  * Login + the purchase-review loop. Inventory transitions use
  * getConnection() + FOR UPDATE (ADR §6). validationHash is a
- * server-generated RANDOM secret (decision #3), minted only at
- * confirm; the QR is built client-side and never stored.
+ * server-generated DETERMINISTIC HMAC over (orderId, seatIndex)
+ * keyed by SCAN_HASH_SECRET, minted only at confirm; the QR is
+ * built client-side from it and never stored.
  *
  * All handlers except `login` sit behind requireOrganizer.
  * ============================================================
@@ -17,8 +18,21 @@ import { verifyOrganizer } from '../middleware/requireOrganizer.js';
 import { BOGOTA, UTC, toSqlUtc } from '../utils/time.js';
 import { nextOrderId } from './purchases.controllers.js';
 
-/** 128-bit random entry secret -> 32 hex chars (CHAR(64) reserved). */
-const randomValidationHash = () => crypto.randomBytes(16).toString('hex');
+/**
+ * Deterministic entry secret for a ticket. Keyed by (orderId, seatIndex) so it
+ * is unique per seat (satisfies uqTicketHash) and stable across holder edits,
+ * yet unguessable without SCAN_HASH_SECRET — the door-scan security invariant
+ * (only confirmed tickets, whose hash nobody can forge, ever scan in). 16 hex
+ * chars keeps the QR small; column is CHAR(64) so it fits with room to spare.
+ */
+const HASH_SECRET =
+  process.env.SCAN_HASH_SECRET || 'sigale-dev-scan-secret-change-me';
+const validationHashFor = (orderId, seatIndex) =>
+  crypto
+    .createHmac('sha256', HASH_SECRET)
+    .update(`${orderId}:${seatIndex}`)
+    .digest('hex')
+    .slice(0, 16);
 
 /**
  * POST /api/login  (public, rate-limited at the route)
@@ -249,8 +263,9 @@ export const confirmPurchase = async (req, res) => {
 
     // Resolve holder data per row: prefer an admin override sent in the
     // request body, else whatever submitPayment already persisted on the
-    // row itself, else a placeholder. Mint a fresh validationHash per row —
-    // this is the only place a hash is ever written (never before confirm).
+    // row itself, else a placeholder. Mint the validationHash per row — this is
+    // the only place a hash is ever written (never before confirm). Keyed by
+    // (orderId, seatIndex) so it is deterministic and stable, not random.
     const overrides = Array.isArray(req.body?.holders) ? req.body.holders : null;
     for (let i = 0; i < rows.length; i++) {
       const o = overrides?.[i];
@@ -259,7 +274,7 @@ export const confirmPurchase = async (req, res) => {
       const holderPhone = o?.phone || rows[i].holderPhone || null;
       await conn.query(
         'UPDATE tickets SET holderName = ?, holderIdNumber = ?, holderPhone = ?, validationHash = ? WHERE id = ?',
-        [holderName, holderIdNumber, holderPhone, randomValidationHash(), rows[i].id],
+        [holderName, holderIdNumber, holderPhone, validationHashFor(req.params.orderId, i), rows[i].id],
       );
     }
 
@@ -399,7 +414,7 @@ export const createWalkInSale = async (req, res) => {
           holderName: h.name || `Taquilla ${j + 1}`,
           holderIdNumber: h.idNumber || null,
           holderPhone: h.phone || null,
-          validationHash: randomValidationHash(),
+          validationHash: validationHashFor(candidate, j),
         };
       });
       const values = rows.map((r, j) => [
