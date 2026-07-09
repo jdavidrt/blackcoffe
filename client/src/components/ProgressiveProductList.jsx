@@ -61,7 +61,7 @@ function ProgressiveProductList({
     <div className={containerClass}>
       {/* Product List */}
       <div>
-        {visibleProducts.map((product) => renderProduct(product))}
+        {visibleProducts.map((product, index) => renderProduct(product, index, visibleProducts))}
       </div>
 
       {/* "Mostrar más" Button */}

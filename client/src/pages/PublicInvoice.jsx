@@ -1,9 +1,9 @@
 import { useOrders } from "../context/OrderProvider";
 import { useDeposits } from "../context/DepositsProvider";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { safeJSONParse } from '../utils/jsonUtils';
-import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
+import { sortProductsByDateDesc, getItemDisplayTime, getItemDate } from '../utils/orderUtils';
 import { formatDate } from '../utils/dateUtils';
 
 function PublicInvoice() {
@@ -109,13 +109,28 @@ function PublicInvoice() {
                         </tr>
                     </thead>
                     <tbody>
-                        {sortProductsByDateDesc(cart).map((product) => (
-                            <tr key={product.id}>
-                                <td className="py-2 border border-black text-center">{product.productName} ({product.quantity})</td>
-                                <td className="py-2 border border-black text-center">${product.quantity * product.unitValue}</td>
-                                <td className="py-2 border border-black text-center">{getItemDisplayTime(product.id)}</td>
-                            </tr>
-                        ))}
+                        {(() => {
+                            const sorted = sortProductsByDateDesc(cart);
+                            return sorted.map((product, index) => {
+                                const showSep = index === 0 || getItemDate(sorted[index - 1].id) !== getItemDate(product.id);
+                                return (
+                                    <Fragment key={product.id}>
+                                        {showSep && (
+                                            <tr>
+                                                <td colSpan={3} className="bg-gray-200 text-center text-xs font-semibold text-gray-600 py-1 border border-black">
+                                                    {getItemDate(product.id)}
+                                                </td>
+                                            </tr>
+                                        )}
+                                        <tr>
+                                            <td className="py-2 border border-black text-center">{product.productName} ({product.quantity})</td>
+                                            <td className="py-2 border border-black text-center">${product.quantity * product.unitValue}</td>
+                                            <td className="py-2 border border-black text-center">{getItemDisplayTime(product.id)}</td>
+                                        </tr>
+                                    </Fragment>
+                                );
+                            });
+                        })()}
                     </tbody>
                 </table>
                 <div className="mt-8">

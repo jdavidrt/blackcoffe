@@ -1,6 +1,6 @@
 import { useOrders } from "../context/OrderProvider";
 import { useDeposits } from "../context/DepositsProvider";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import dayjs from "dayjs"; import {
     Document,
@@ -11,7 +11,7 @@ import dayjs from "dayjs"; import {
     View,
 } from "@react-pdf/renderer";
 import { safeJSONParse } from '../utils/jsonUtils';
-import { sortProductsByDateDesc } from '../utils/orderUtils';
+import { sortProductsByDateDesc, getItemDate } from '../utils/orderUtils';
 import { formatDate } from '../utils/dateUtils';
 import { getOrderRestoresRequest } from '../api/backups.api';
 
@@ -141,15 +141,28 @@ function Invoice() {
                 <td>CANTIDAD</td>
                 <td>VALUR UNI.</td>
                 <td>VALOR TOT.</td>
-                {sortProductsByDateDesc(cart).map((product) => (
-                    <tr key={product.id}>
-                        <td>{product.productName}</td>
-                        <td>{product.quantity}</td>
-                        <td>${product.unitValue}</td>
-                        <td>${product.quantity * product.unitValue}</td>
-                        <br />
-                    </tr>
-                ))}
+                {(() => {
+                    const sorted = sortProductsByDateDesc(cart);
+                    return sorted.map((product, index) => {
+                        const showSep = index === 0 || getItemDate(sorted[index - 1].id) !== getItemDate(product.id);
+                        return (
+                            <Fragment key={product.id}>
+                                {showSep && (
+                                    <tr>
+                                        <td colSpan={4} style={{ textAlign: 'center', fontWeight: 'bold' }}>{getItemDate(product.id)}</td>
+                                    </tr>
+                                )}
+                                <tr>
+                                    <td>{product.productName}</td>
+                                    <td>{product.quantity}</td>
+                                    <td>${product.unitValue}</td>
+                                    <td>${product.quantity * product.unitValue}</td>
+                                    <br />
+                                </tr>
+                            </Fragment>
+                        );
+                    });
+                })()}
                 <br />
                 <table>
                     <tbody className="w-full">

@@ -113,3 +113,169 @@ through the UI, plus a way to download a given day's backup as a .txt file.
 - No changes to `server/sigale/*`.
 - No backfill of snapshots for orders already paid before deploy.
 - Restore never edits the `deposits` table or the order's `deposit` column.
+
+Vamos a hacer unas mejoras a la nueva funcionalidad de copia de seguridad
+Vamos a cambiar la manera en que se ve la tabla de productos, no es necesario que tengamos una columna con la información de entregado
+En cambio, vamos a colocar en ese columna la hora y fecha de cuando se pidió ese producto ya que es fundamental poder visualizar esta información
+De la misma manera, en los archivos de texto descargables, vamos a cambiar el entregado por la hora y fecha de cuando se pidió
+También vamos a añadir un separador de días a ambas vistas de los productos, para que sea más fácil de lever
+Este separador está pensado para que sea solo de visualización, algo sencillo, como una sola fila con el día 
+Este separador también lo vamos a agregar a todas las vistas de productos en toda la página, menos en el formulario de nueva orden, porque no tendría mucho sentido, de resto si es necesario crear esta ayuda visual para poder seguirle la cuenta a las ordenes
+También vamos a mejorar la barra de búsqueda para que sea de búsqueda amplia, quiero decir, que si se busca "103 paisa" aparezca el resultado en vez de tener que buscar "103" o "paisa" por aparte, ya que el usuario suele buscar como la combinación sin ningun formato real, puede ser impredecible como tambien "paisa 103" o "103 pais" , esto hace que sea más sencillo buscar en la tabla de ordenes de cada día, puedes usar los campos de búsqueda de por ejemplo "cobrarOrdenes" para que veas como fuciona unabusqueda amplia en este proyecto
+También vamos a mejorar el modal y la presentación de la orden que se selecciona para ver su información en la copia
+Vamos a colocar el mall en la misma fila que el premises y name, pero en gris y entre paréntesis
+Además agregar al final en la parte del total cuanto se tiene registrado en abono en la copia, justo arriba del total, en esa misma jerarquía, para que sea sencilo visualiar cuanto se había abonado a la fecha
+también agregar deuda a la fecha computando en el frontend el total de la copia y el deposito de la copia, justo en este orde quedaría
+- total
+- total abonado en la copia
+- deuda al día {día de la copia}
+También vamos a convertir a la página de copias en una con clave igual, con la misma clave y todo que "Cuentas por cobrar"
+
+
+# ============================================================
+#  Ableton Live - Deep Cache & Residue Cleaner for Windows
+#  Clears: decoding cache, crash dumps, logs, Ableton temp files,
+#  installer leftovers, and (optionally) general Windows temp.
+#  It does NOT touch Preferences, Database, User Library or Projects.
+# ============================================================
+
+# --- Toggles (change before running) ------------------------
+$RemoveDownloadedInstallers = $true   # $true = delete Ableton installers in Downloads/Desktop
+$CleanWindowsTemp           = $true    # $true = sweep %TEMP% (files older than 1 day only)
+
+$ErrorActionPreference = "SilentlyContinue"
+
+# --- Elevation notice (recommended, not mandatory) ----------
+$isAdmin = ([Security.Principal.WindowsPrincipal] `
+    [Security.Principal.WindowsIdentity]::GetCurrent()
+).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Host "Note: not running as Administrator. Most files will still be removed," -ForegroundColor Yellow
+    Write-Host "but if some are locked, re-run this inside an elevated PowerShell." -ForegroundColor Yellow
+}
+
+# --- Helpers ------------------------------------------------
+function Clear-FolderContents {
+    # Deletes everything inside a folder but keeps the folder. Returns MB freed.
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return 0 }
+    $freed = (Get-ChildItem -Path $Path -Recurse -File -Force |
+              Measure-Object -Property Length -Sum).Sum
+    Get-ChildItem -Path $Path -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $freed) { return 0 }
+    return [math]::Round($freed / 1MB, 2)
+}
+
+function Remove-MatchingFiles {
+    # Removes files matching a filter under a root. Optional age filter. Returns MB freed.
+    param([string]$Root, [string]$Filter = "*", [int]$OlderThanDays = 0)
+    if (-not (Test-Path $Root)) { return 0 }
+    $cutoff = (Get-Date).AddDays(-$OlderThanDays)
+    $items = Get-ChildItem -Path $Root -Filter $Filter -File -Recurse -Force -ErrorAction SilentlyContinue |
+             Where-Object { $OlderThanDays -eq 0 -or $_.LastWriteTime -lt $cutoff }
+    $freed = ($items | Measure-Object -Property Length -Sum).Sum
+    $items | Remove-Item -Force -ErrorAction SilentlyContinue
+    if (-not $freed) { return 0 }
+    return [math]::Round($freed / 1MB, 2)
+}
+
+function Remove-NamedItems {
+    # Removes files/folders whose NAME matches a pattern directly under a root. Returns MB freed.
+    param([string]$Root, [string]$Pattern)
+    if (-not (Test-Path $Root)) { return 0 }
+    $freed = 0
+    foreach ($it in (Get-ChildItem -Path $Root -Filter $Pattern -Force -ErrorAction SilentlyContinue)) {
+        $freed += (Get-ChildItem $it.FullName -Recurse -File -Force -ErrorAction SilentlyContinue |
+                   Measure-Object -Property Length -Sum).Sum
+        Remove-Item $it.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if (-not $freed) { return 0 }
+    return [math]::Round($freed / 1MB, 2)
+}
+
+function Show-Freed {
+    param([double]$Mb, [string]$What)
+    if ($Mb -gt 0) {
+        Write-Host ("Cleaned  {0,10:N2} MB  ->  {1}" -f $Mb, $What) -ForegroundColor Green
+    }
+}
+
+# --- 1. Close Ableton if it is running ----------------------
+$live = Get-Process -Name "Ableton Live*" -ErrorAction SilentlyContinue
+if ($live) {
+    Write-Host "Ableton Live is running. Closing it first..." -ForegroundColor Yellow
+    $live | Stop-Process -Force
+    Start-Sleep -Seconds 2
+}
+
+$totalFreed  = 0
+$abletonRoot = Join-Path $env:APPDATA "Ableton"
+Write-Host ""
+Write-Host "=== Ableton Live deep cleanup ===" -ForegroundColor Cyan
+
+# --- 2. Decoding cache --------------------------------------
+foreach ($p in @((Join-Path $env:APPDATA "Ableton\Cache"),
+                 (Join-Path $env:LOCALAPPDATA "Ableton\Cache"))) {
+    $mb = Clear-FolderContents $p
+    Show-Freed $mb $p
+    $totalFreed += $mb
+}
+
+# --- 3. Crash dumps (one folder per Live version) -----------
+Get-ChildItem $abletonRoot -Directory -Filter "Live *" -ErrorAction SilentlyContinue | ForEach-Object {
+    $mb = Clear-FolderContents (Join-Path $_.FullName "CrashDumps")
+    Show-Freed $mb (Join-Path $_.Name "CrashDumps")
+    $totalFreed += $mb
+}
+
+# --- 4. Log files (Log*.txt in each version folder) ---------
+$logMb = 0
+Get-ChildItem $abletonRoot -Directory -Filter "Live *" -ErrorAction SilentlyContinue | ForEach-Object {
+    $logMb += Remove-MatchingFiles -Root $_.FullName -Filter "Log*.txt"
+}
+Show-Freed $logMb "Ableton log files"
+$totalFreed += $logMb
+
+# --- 5. Ableton temp files (name starts with 'Ableton') -----
+$tempMb = 0
+foreach ($root in @($env:TEMP, (Join-Path $env:LOCALAPPDATA "Temp")) | Select-Object -Unique) {
+    $tempMb += Remove-NamedItems -Root $root -Pattern "Ableton*"
+}
+Show-Freed $tempMb "Ableton temporary files"
+$totalFreed += $tempMb
+
+# --- 6. Installer leftovers (Downloads + Desktop) -----------
+$installerPatterns = @("Ableton*Live*.exe", "Ableton*Live*.zip", "*Ableton*Suite*.exe", "*Ableton*Suite*.zip")
+$installLocations  = @((Join-Path $env:USERPROFILE "Downloads"),
+                       (Join-Path $env:USERPROFILE "Desktop"))
+$installMb = 0
+foreach ($loc in $installLocations) {
+    if (-not (Test-Path $loc)) { continue }
+    foreach ($pat in $installerPatterns) {
+        Get-ChildItem -Path $loc -Filter $pat -File -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            $sizeMb = [math]::Round($_.Length / 1MB, 2)
+            if ($RemoveDownloadedInstallers) {
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                $installMb += $sizeMb
+                Show-Freed $sizeMb $_.Name
+            } else {
+                Write-Host ("Installer found ({0,8:N2} MB) -> {1}" -f $sizeMb, $_.FullName) -ForegroundColor DarkYellow
+            }
+        }
+    }
+}
+if ($RemoveDownloadedInstallers) { $totalFreed += $installMb }
+else { Write-Host "(Set `$RemoveDownloadedInstallers = `$true to delete the installers listed above.)" -ForegroundColor DarkGray }
+
+# --- 7. Optional: general Windows temp (files > 1 day) ------
+if ($CleanWindowsTemp) {
+    $winTempMb = Remove-MatchingFiles -Root $env:TEMP -Filter "*" -OlderThanDays 1
+    Show-Freed $winTempMb "Windows %TEMP% (older than 1 day)"
+    $totalFreed += $winTempMb
+}
+
+# --- 8. Summary ---------------------------------------------
+Write-Host ""
+Write-Host ("Done. Approximately {0:N2} MB freed." -f $totalFreed) -ForegroundColor Cyan
+Write-Host ("Finished at {0}" -f (Get-Date -Format "hh:mm:ss tt")) -ForegroundColor DarkGray
+Write-Host "Live will rebuild the decoding cache automatically the next time you open a set." -ForegroundColor DarkGray

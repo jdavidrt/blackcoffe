@@ -57,6 +57,12 @@ export const getItemDisplayTime = (itemId) => {
 };
 
 /**
+ * Extract the date portion ("DD/MM/YY") from an item ID.
+ * Used to group items into day-separators. Returns '' for empty/invalid ids.
+ */
+export const getItemDate = (itemId) => getItemDisplayTime(itemId).slice(-8);
+
+/**
  * Extract full timestamp string from item ID for sorting.
  * Returns "HH:mm:ss DD/MM/YY" or "HH:mm DD/MM/YY" depending on format.
  */

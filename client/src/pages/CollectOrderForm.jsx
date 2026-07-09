@@ -2,10 +2,10 @@ import { Form, Formik } from "formik";
 import { useOrders } from "../context/OrderProvider";
 import { useDeposits } from "../context/DepositsProvider";
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
-import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
+import { sortProductsByDateDesc, getItemDisplayTime, getItemDate } from '../utils/orderUtils';
 import { DeleteOutlined } from "@ant-design/icons";
 import { Modal, message } from "antd";
 import { formatDate, extractDate, formatDepositDateTime } from '../utils/dateUtils';
@@ -523,22 +523,32 @@ function CollectOrderForm() {
             </div>
             <ProgressiveProductList
               products={sortProductsByDateDesc(cart)}
-              renderProduct={(item) => (
-                <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
-                  <input
-                    type="checkbox"
-                    className="ml-2"
-                    value={item.delivered}
-                    checked={item.delivered}
-                    onChange={() => handleCheckboxChange(item.id)}
-                  />
-                  <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
-                  <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                    {getItemDisplayTime(item.id)}
-                  </p>
-                  <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
-                </div>
-              )}
+              renderProduct={(item, index, arr) => {
+                const showSep = index === 0 || getItemDate(arr[index - 1].id) !== getItemDate(item.id);
+                return (
+                  <Fragment key={item.id}>
+                    {showSep && (
+                      <div className="text-center text-xs font-semibold text-gray-500 bg-gray-200 rounded-md mx-2 mt-2 py-1">
+                        {getItemDate(item.id)}
+                      </div>
+                    )}
+                    <div className="bg-stone-100 rounded-md m-2 flex font-bold">
+                      <input
+                        type="checkbox"
+                        className="ml-2"
+                        value={item.delivered}
+                        checked={item.delivered}
+                        onChange={() => handleCheckboxChange(item.id)}
+                      />
+                      <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                      <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
+                        {getItemDisplayTime(item.id)}
+                      </p>
+                      <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${item.quantity * item.unitValue}</p>
+                    </div>
+                  </Fragment>
+                );
+              }}
             />
             {deposits && deposits.length > 0 ? <>
               <div className="flex justify-center mt-2 mb-2">

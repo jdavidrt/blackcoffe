@@ -3,7 +3,7 @@ import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { DeleteOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
 import { Modal } from 'antd';
-import { calculateOrderTotal, getItemDisplayTime } from '../utils/orderUtils';
+import { calculateOrderTotal, getItemDisplayTime, getItemDate } from '../utils/orderUtils';
 import { safeJSONParse } from '../utils/jsonUtils';
 import SearchBar from "../components/SearchBar";
 import ProgressiveProductList from '../components/ProgressiveProductList';
@@ -127,15 +127,25 @@ function OrphanedOrdersPage() {
             <div className="px-2 pb-2">
               <ProgressiveProductList
                 products={[...items].reverse()}
-                renderProduct={(item) => (
-                  <div key={item.id} className="bg-stone-100 rounded-md m-2 flex font-bold">
-                    <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
-                    <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
-                      {getItemDisplayTime(item.id)}
-                    </p>
-                    <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${(item.quantity * item.unitValue)?.toLocaleString()}</p>
-                  </div>
-                )}
+                renderProduct={(item, index, arr) => {
+                  const showSep = index === 0 || getItemDate(arr[index - 1].id) !== getItemDate(item.id);
+                  return (
+                    <React.Fragment key={item.id}>
+                      {showSep && (
+                        <div className="text-center text-xs font-semibold text-gray-500 bg-gray-200 rounded-md mx-2 mt-2 py-1">
+                          {getItemDate(item.id)}
+                        </div>
+                      )}
+                      <div className="bg-stone-100 rounded-md m-2 flex font-bold">
+                        <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                        <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
+                          {getItemDisplayTime(item.id)}
+                        </p>
+                        <p className="sticky right-0 text-green-500 px-2 py-1 ml-auto">${(item.quantity * item.unitValue)?.toLocaleString()}</p>
+                      </div>
+                    </React.Fragment>
+                  );
+                }}
               />
             </div>
           )}

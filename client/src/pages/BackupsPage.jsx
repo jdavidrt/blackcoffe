@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import dayjs from "dayjs";
 import { Calendar, Modal, message, Tag, Drawer, Spin } from "antd";
 import { saveAs } from "file-saver";
@@ -8,12 +8,26 @@ import {
   restoreOrderFromSnapshotRequest,
 } from "../api/backups.api";
 import { safeJSONParse } from "../utils/jsonUtils";
-import { calculateOrderTotal } from "../utils/orderUtils";
+import {
+  calculateOrderTotal,
+  getItemDisplayTime,
+  getItemDate,
+  sortProductsByDateDesc,
+} from "../utils/orderUtils";
+import { matchesSearch } from "../utils/searchUtils";
 import { formatCurrency } from "../utils/currencyUtils";
 
 const backendFormat = "YYYY-MM-DD";
 
 function BackupsPage() {
+  // Same password gate mechanism as "Cuentas por cobrar" (OrdersPage): in-memory
+  // only, auto-unlocked on localhost, re-prompts on reload.
+  const isLocalDev =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+  const [clave, setClave] = useState("");
+  const [mostrarContenido, setMostrarContenido] = useState(isLocalDev);
+
   const [selectedDate, setSelectedDate] = useState(null); // dayjs
   const [dayList, setDayList] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -32,9 +46,20 @@ function BackupsPage() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  const handleSubmitClave = (event) => {
+    event.preventDefault();
+    if (clave === "031421") {
+      setMostrarContenido(true);
+    } else {
+      alert("Clave incorrecta. Por favor, inténtalo de nuevo.");
+      setClave("");
+    }
+  };
+
   // Snapshots only exist from the day the nightly job first ran onward, so the
   // calendar can only allow selecting days that actually have a copy.
   useEffect(() => {
+    if (!mostrarContenido) return;
     (async () => {
       try {
         const res = await getBackupDatesRequest();
@@ -50,7 +75,7 @@ function BackupsPage() {
         setDatesLoading(false);
       }
     })();
-  }, []);
+  }, [mostrarContenido]);
 
   // Calendar: only days that actually have at least one snapshot are selectable.
   const disabledDate = (d) => !availableDates.has(d.format(backendFormat));
@@ -152,18 +177,23 @@ function BackupsPage() {
     lines.push("");
 
     for (const o of dayList) {
-      const items = safeJSONParse(o.items, []);
+      const items = sortProductsByDateDesc(safeJSONParse(o.items, []));
       const total = calculateOrderTotal({ items: o.items });
       const abonado = Number(o.deposit) || 0;
       const saldo = Math.max(0, total - abonado);
       lines.push(`ORDEN #${o.orderId} — copia del ${o.snapshotDate}`);
       lines.push(`Cliente: ${o.clientName} | Local: ${o.premises} | Centro: ${o.mall}`);
       lines.push("-".repeat(48));
+      let lastDate = null;
       for (const it of items) {
+        const itDate = getItemDate(it.id);
+        if (itDate && itDate !== lastDate) {
+          lines.push(`  --- ${itDate} ---`);
+          lastDate = itDate;
+        }
         const sub = (it.unitValue || 0) * (it.quantity || 0);
-        const mark = it.delivered ? " [entregado]" : "";
         lines.push(
-          `  ${it.quantity} x ${it.productName} @ ${formatCurrency(it.unitValue)} = ${formatCurrency(sub)}${mark}`
+          `  ${it.quantity} x ${it.productName} @ ${formatCurrency(it.unitValue)} = ${formatCurrency(sub)} (${getItemDisplayTime(it.id)})`
         );
       }
       lines.push("-".repeat(48));
@@ -178,14 +208,9 @@ function BackupsPage() {
   };
 
   const filteredList = () => {
-    const q = search.trim().toLowerCase();
-    if (!q) return dayList;
-    return dayList.filter(
-      (o) =>
-        (o.clientName || "").toLowerCase().includes(q) ||
-        String(o.premises || "").toLowerCase().includes(q) ||
-        (o.mall || "").toLowerCase().includes(q) ||
-        String(o.orderId).includes(q)
+    if (!search.trim()) return dayList;
+    return dayList.filter((o) =>
+      matchesSearch(search, o.clientName, o.premises, o.mall, o.orderId)
     );
   };
 
@@ -261,19 +286,21 @@ function BackupsPage() {
       );
     }
     const o = selectedOrder;
-    const items = safeJSONParse(o.items, []);
+    const items = sortProductsByDateDesc(safeJSONParse(o.items, []));
     const total = calculateOrderTotal({ items: o.items });
+    const abonado = Number(o.deposit) || 0;
+    const deuda = Math.max(0, total - abonado);
     const willUnpay = o.currentPaid === 1 && o.paid === 0;
 
     return (
       <div>
         <div className="flex justify-between items-center mb-2">
           <h3 className="text-lg font-bold text-stone-800">
-            {o.premises} — {o.clientName}
+            {o.premises} — {o.clientName}{" "}
+            <span className="font-normal text-gray-400">({o.mall})</span>
           </h3>
           <Tag color={o.paid ? "green" : "gold"}>{o.paid ? "Pagada" : "Pendiente"}</Tag>
         </div>
-        <p className="text-sm text-gray-600 mb-1">{o.mall}</p>
         <p className="text-xs text-gray-400 mb-3">Copia del {o.snapshotDate}</p>
 
         <div className="overflow-x-auto rounded border border-gray-200">
@@ -284,21 +311,39 @@ function BackupsPage() {
                 <th className="px-2 py-1 text-right">Cant.</th>
                 <th className="px-2 py-1 text-right">V. Unit.</th>
                 <th className="px-2 py-1 text-right">Subtotal</th>
-                <th className="px-2 py-1 text-center">Entregado</th>
+                <th className="px-2 py-1 text-center">Pedido</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((it, i) => (
-                <tr key={it.id || i} className={i % 2 ? "bg-gray-50" : "bg-white"}>
-                  <td className="px-2 py-1">{it.productName}</td>
-                  <td className="px-2 py-1 text-right">{it.quantity}</td>
-                  <td className="px-2 py-1 text-right">{formatCurrency(it.unitValue)}</td>
-                  <td className="px-2 py-1 text-right">
-                    {formatCurrency((it.unitValue || 0) * (it.quantity || 0))}
-                  </td>
-                  <td className="px-2 py-1 text-center">{it.delivered ? "✓" : "—"}</td>
-                </tr>
-              ))}
+              {items.map((it, i) => {
+                const showSep =
+                  i === 0 || getItemDate(items[i - 1].id) !== getItemDate(it.id);
+                return (
+                  <Fragment key={it.id || i}>
+                    {showSep && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="bg-gray-200 text-center text-xs font-semibold text-gray-500 py-1"
+                        >
+                          {getItemDate(it.id)}
+                        </td>
+                      </tr>
+                    )}
+                    <tr className={i % 2 ? "bg-gray-50" : "bg-white"}>
+                      <td className="px-2 py-1">{it.productName}</td>
+                      <td className="px-2 py-1 text-right">{it.quantity}</td>
+                      <td className="px-2 py-1 text-right">{formatCurrency(it.unitValue)}</td>
+                      <td className="px-2 py-1 text-right">
+                        {formatCurrency((it.unitValue || 0) * (it.quantity || 0))}
+                      </td>
+                      <td className="px-2 py-1 text-center whitespace-nowrap">
+                        {getItemDisplayTime(it.id)}
+                      </td>
+                    </tr>
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -309,12 +354,15 @@ function BackupsPage() {
             <span className="font-bold text-emerald-700">{formatCurrency(total)}</span>
           </div>
           <div className="flex justify-between">
-            <span>Estado de pago</span>
-            <span>{o.paid ? "Pagada" : "Pendiente"}</span>
+            <span className="font-semibold">Abonado en la copia</span>
+            <span className="font-bold text-stone-700">{formatCurrency(abonado)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-semibold">Deuda al {o.snapshotDate}</span>
+            <span className="font-bold text-red-600">{formatCurrency(deuda)}</span>
           </div>
           <div className="text-gray-500 text-xs">
-            Abono registrado en la copia: {formatCurrency(o.deposit)} (solo informativo — los
-            abonos no se restauran)
+            El abono es solo informativo — los abonos no se restauran.
           </div>
         </div>
 
@@ -336,6 +384,22 @@ function BackupsPage() {
       </div>
     );
   };
+
+  if (!mostrarContenido) {
+    return (
+      <form onSubmit={handleSubmitClave}>
+        <label>
+          Ingresa la clave:
+          <input
+            type="password"
+            value={clave}
+            onChange={(e) => setClave(e.target.value)}
+          />
+        </label>
+        <button type="submit">Enviar</button>
+      </form>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -375,7 +439,7 @@ function BackupsPage() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por cliente, local o centro..."
+                placeholder="Buscar (cliente, local, centro, #orden)…"
                 className="p-2 border rounded-md w-full mb-3"
               />
             )}

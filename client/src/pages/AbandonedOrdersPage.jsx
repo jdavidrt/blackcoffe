@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { getOrderItems } from "../utils/jsonUtils";
+import { sortProductsByDateDesc, getItemDate } from "../utils/orderUtils";
 import { Modal, message } from "antd";
 import { SearchOutlined, ReloadOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -137,11 +138,24 @@ function AbandonedOrdersPage() {
 
                 {/* Order Items */}
                 <div className="bg-gray-50 rounded-md p-2 mb-2">
-                  {items.map((item, index) => (
-                    <div key={index} className="text-sm text-gray-700">
-                      • {item.productName} ({item.quantity}) - ${(item.unitValue * item.quantity).toLocaleString()}
-                    </div>
-                  ))}
+                  {(() => {
+                    const sortedItems = sortProductsByDateDesc(items);
+                    return sortedItems.map((item, index) => {
+                      const showSep = index === 0 || getItemDate(sortedItems[index - 1].id) !== getItemDate(item.id);
+                      return (
+                        <Fragment key={item.id || index}>
+                          {showSep && (
+                            <div className="text-center text-xs font-semibold text-gray-500 bg-gray-200 rounded-md my-1 py-0.5">
+                              {getItemDate(item.id)}
+                            </div>
+                          )}
+                          <div className="text-sm text-gray-700">
+                            • {item.productName} ({item.quantity}) - ${(item.unitValue * item.quantity).toLocaleString()}
+                          </div>
+                        </Fragment>
+                      );
+                    });
+                  })()}
                 </div>
 
                 {/* Abandonment Info */}
