@@ -125,12 +125,23 @@ export const createPurchase = async (req, res) => {
     // same event has no activatesAt (i.e. it will never auto-activate via the
     // scheduler), promote it to active so buyers can continue purchasing.
     if (fillResult.affectedRows > 0) {
-      await conn.query(
+      const [promo] = await conn.query(
         `UPDATE ticket_stages SET status = 'active'
           WHERE eventId = ? AND status = 'upcoming' AND activatesAt IS NULL
           ORDER BY sortOrder ASC LIMIT 1`,
         [stage.eventId],
       );
+      // A successor took the active slot — the just-filled stage is now
+      // permanently superseded. Close it instead of leaving it 'sold_out', so
+      // no later reservation-release (reject/expire/delete) ever reopens it,
+      // which would collide with the new active stage under
+      // uqOneActiveStagePerEvent. See "sold_out vs closed" in CLAUDE.md.
+      if (promo.affectedRows > 0) {
+        await conn.query(
+          "UPDATE ticket_stages SET status = 'closed' WHERE id = ? AND status = 'sold_out'",
+          [stageId],
+        );
+      }
     }
 
     const totalAmount = Number(stage.price) * qty;

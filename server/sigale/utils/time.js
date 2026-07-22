@@ -35,16 +35,6 @@ export function fromUtc(expr, alias) {
 }
 
 /**
- * SQL fragment: convert a Bogotá wall-clock bound parameter to UTC for storage.
- *   `... VALUES (..., ${toUtcParam()}, ...)` with a '?' placeholder.
- *
- * @param {string} [placeholder] defaults to '?'
- */
-export function toUtcParam(placeholder = '?') {
-  return `CONVERT_TZ(${placeholder}, '${BOGOTA}', '${UTC}')`;
-}
-
-/**
  * ISO-8601 -> 'YYYY-MM-DD HH:mm:ss' in UTC. For binding a JS Date/ISO string
  * into a dateStrings pool, which stores the literal wall-clock we give it.
  * Used by the scan reconciliation (offline timestamps) — kept here so the

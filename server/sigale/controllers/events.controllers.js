@@ -305,8 +305,18 @@ export const updateEvent = async (req, res) => {
         );
         if (Number(cnt) === 0) {
           await conn.query('DELETE FROM ticket_stages WHERE id = ?', [id]);
+        } else {
+          // Tickets exist — can't delete, but it must never stay sellable: a
+          // stage left 'active' after being dropped from the form silently
+          // forks inventory from any same-named replacement inserted below
+          // (this is how a duplicate "active" stage reached production).
+          // 'closed' (not 'sold_out') — this stage is permanently retired,
+          // and 'sold_out' auto-reopens elsewhere once inventory frees up.
+          await conn.query(
+            "UPDATE ticket_stages SET status = 'closed' WHERE id = ? AND status != 'closed'",
+            [id],
+          );
         }
-        // If purchases exist, leave the orphaned stage in place.
       }
     }
 
@@ -346,13 +356,32 @@ export const updateEvent = async (req, res) => {
           ],
         );
         // If the organizer raised totalQuantity above the sold+reserved floor,
-        // reopen a sold_out stage so buyers can reserve the new spots.
-        await conn.query(
-          'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
-          ['active', stageId, 'sold_out'],
+        // reopen a sold_out stage so buyers can reserve the new spots — but only
+        // when no OTHER stage of this event is currently active. Promoting this
+        // one while another is active would create a second active stage and
+        // violate uqOneActiveStagePerEvent (ER_DUP_ENTRY). The count runs inside
+        // this transaction, so it reflects demotions from earlier iterations.
+        // See migration 007.
+        const [[{ activeCount }]] = await conn.query(
+          "SELECT COUNT(*) AS activeCount FROM ticket_stages WHERE eventId = ? AND status = 'active' AND id <> ?",
+          [eventId, stageId],
         );
+        if (Number(activeCount) === 0) {
+          await conn.query(
+            "UPDATE ticket_stages SET status = 'active' WHERE id = ? AND status = 'sold_out' AND soldQuantity + reservedQuantity < totalQuantity",
+            [stageId],
+          );
+        }
       } else {
-        // INSERT — brand new stage, starts with zero sold/reserved.
+        // INSERT — brand new stage, starts with zero sold/reserved. Only one
+        // stage per event may be 'active'; demote any other before this one
+        // claims the slot. 'closed', not 'sold_out' — see migration 007.
+        if (i === 0) {
+          await conn.query(
+            "UPDATE ticket_stages SET status = 'closed' WHERE eventId = ? AND status = 'active'",
+            [eventId],
+          );
+        }
         await conn.query(
           `INSERT INTO ticket_stages
              (eventId, name, price, totalQuantity, soldQuantity, reservedQuantity, sortOrder, activatesAt, status)

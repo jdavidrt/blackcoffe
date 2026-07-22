@@ -365,13 +365,18 @@ export const createWalkInSale = async (req, res) => {
   try {
     await conn.beginTransaction();
 
+    // Only an `active` stage may be sold from — mirrors the public
+    // createPurchase guard. A closed/sold_out/upcoming stage (e.g. a
+    // superseded earlier etapa) must never take a walk-in sale, or the door
+    // could keep selling a stage the sale has already moved past.
     const [[stage]] = await conn.query(
-      'SELECT id, price, totalQuantity, soldQuantity, reservedQuantity FROM ticket_stages WHERE id = ? FOR UPDATE',
+      "SELECT id, eventId, price, totalQuantity, soldQuantity, reservedQuantity " +
+        "FROM ticket_stages WHERE id = ? AND status = 'active' FOR UPDATE",
       [stageId],
     );
     if (!stage) {
       await conn.rollback();
-      return res.status(404).json({ message: 'Etapa no encontrada' });
+      return res.status(409).json({ message: 'La etapa seleccionada no está disponible para venta' });
     }
     const available = stage.totalQuantity - stage.soldQuantity - stage.reservedQuantity;
     if (available < qty) {
@@ -389,12 +394,23 @@ export const createWalkInSale = async (req, res) => {
     // Cascade: if this stage just sold out, activate the next upcoming stage
     // that has no activatesAt (scheduler-exempt stages need explicit promotion).
     if (fillResult.affectedRows > 0) {
-      await conn.query(
+      const [promo] = await conn.query(
         `UPDATE ticket_stages SET status = 'active'
           WHERE eventId = ? AND status = 'upcoming' AND activatesAt IS NULL
           ORDER BY sortOrder ASC LIMIT 1`,
         [eventId],
       );
+      // A successor took the active slot — the just-filled stage is now
+      // permanently superseded. Close it instead of leaving it 'sold_out',
+      // so no later reservation-release ever reopens it (that would collide
+      // with the new active stage under uqOneActiveStagePerEvent). See the
+      // "sold_out vs closed" invariant in CLAUDE.md.
+      if (promo.affectedRows > 0) {
+        await conn.query(
+          "UPDATE ticket_stages SET status = 'closed' WHERE id = ? AND status = 'sold_out'",
+          [stageId],
+        );
+      }
     }
 
     // Sequential orderId (shared sequence with public purchases), retry on collision.

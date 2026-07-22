@@ -7,8 +7,13 @@
  * schema stores (ADR-0001 §8):
  *
  *   1. activateDueStages — flip `upcoming` stages to `active` once
- *      their scheduled `activatesAt` has arrived. A stage with no
- *      `activatesAt` is left alone (it is activated explicitly at
+ *      their scheduled `activatesAt` has arrived, demoting whichever stage
+ *      of the same event it supersedes to `closed` first (only one stage
+ *      per event may be `active` — enforced at the DB level by migration
+ *      007's unique index; `closed` rather than `sold_out` because several
+ *      handlers auto-reopen a `sold_out` stage once its held inventory
+ *      frees up, which must never happen to a superseded stage). A stage
+ *      with no `activatesAt` is left alone (it is activated explicitly at
  *      creation, never on a timer).
  *
  *   2. sweepExpiredHolds — recycle abandoned reservations. Every
@@ -39,21 +44,44 @@ import { sendErrorEmail } from '../utils/emailNotifier.js';
 const EVERY_MINUTE = '* * * * *';
 
 /**
- * Activate every `upcoming` stage whose scheduled time has arrived.
- * Pure UPDATE (no row-by-row work needed); the WHERE guards against
- * touching stages without a schedule or already past `upcoming`.
+ * Activate every `upcoming` stage whose scheduled time has arrived. Locks
+ * the due stages, then per event: demote whatever is currently `active`
+ * to `closed` before promoting the due stage — never both `active` at once.
  *
  * @returns {Promise<number>} stages activated
  */
 export async function activateDueStages() {
-  const [result] = await pool.query(
-    `UPDATE ticket_stages
-        SET status = 'active'
-      WHERE status = 'upcoming'
-        AND activatesAt IS NOT NULL
-        AND activatesAt <= UTC_TIMESTAMP()`,
-  );
-  return result.affectedRows;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [due] = await conn.query(
+      `SELECT id, eventId FROM ticket_stages
+        WHERE status = 'upcoming'
+          AND activatesAt IS NOT NULL
+          AND activatesAt <= UTC_TIMESTAMP()
+        FOR UPDATE`,
+    );
+
+    for (const stage of due) {
+      await conn.query(
+        "UPDATE ticket_stages SET status = 'closed' WHERE eventId = ? AND status = 'active'",
+        [stage.eventId],
+      );
+      await conn.query(
+        "UPDATE ticket_stages SET status = 'active' WHERE id = ?",
+        [stage.id],
+      );
+    }
+
+    await conn.commit();
+    return due.length;
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 /**
