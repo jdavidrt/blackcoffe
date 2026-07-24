@@ -161,7 +161,7 @@ export const getAdminTickets = async (req, res) => {
               CONVERT_TZ(t.usedAt, '${UTC}', '${BOGOTA}') AS usedAt,
               t.status, t.deliveryMethod, t.deliveryContact, t.unitPrice,
               CONVERT_TZ(t.createdAt, '${UTC}', '${BOGOTA}') AS createdAt,
-              s.name AS stageName
+              t.stageId, s.name AS stageName
        FROM tickets t
        JOIN ticket_stages s ON s.id = t.stageId
        ${whereSql}
@@ -609,6 +609,152 @@ export const deleteAdminTicket = async (req, res) => {
     await conn.rollback();
     sendErrorEmail(req, error, 'deleteAdminTicket');
     return res.status(500).json({ message: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
+/**
+ * PATCH /api/admin/tickets/:id/stage  (organizer)
+ * Move ONE confirmed ticket to a different stage of the SAME event, adopting
+ * that stage's current price. This is an inventory-moving edit, so it runs
+ * under a transaction with FOR UPDATE locks on the ticket and both stages,
+ * rebalancing soldQuantity (source −1, target +1) and keeping every stage-status
+ * invariant intact:
+ *
+ *   - Target fill check (only meaningful when the target is 'active'): if the
+ *     +1 fills it, flip active→sold_out and run the same sold-out cascade as a
+ *     sale — promote the next scheduler-exempt 'upcoming' stage and 'close' the
+ *     just-filled one (never leave it 'sold_out' beside a fresh active stage;
+ *     the 2026-07-21 Etapa 1 invariant). A non-active target (closed/upcoming)
+ *     keeps its status — we deliberately do NOT reopen a 'closed' stage.
+ *   - Source restore check: if the freed seat reopens a 'sold_out' source,
+ *     restore it to 'active' — but ONLY when the event has no other active
+ *     stage, so this can never trip uqOneActiveStagePerEvent even against a
+ *     drifted production row.
+ *
+ * Only 'confirmed' tickets can move (they're the ones holding soldQuantity);
+ * anything else is 409, mirroring deleteAdminTicket. validationHash is keyed by
+ * (orderId, seatIndex), not the stage, so the QR stays valid and untouched.
+ */
+export const moveAdminTicketStage = async (req, res) => {
+  const targetStageId = Number(req.body?.stageId);
+  if (!Number.isInteger(targetStageId) || targetStageId < 1) {
+    return res.status(400).json({ message: 'Etapa destino inválida' });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[ticket]] = await conn.query(
+      'SELECT id, eventId, stageId, status FROM tickets WHERE id = ? FOR UPDATE',
+      [req.params.id],
+    );
+    if (!ticket) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Boleta no encontrada' });
+    }
+    if (ticket.status !== 'confirmed') {
+      await conn.rollback();
+      return res.status(409).json({ message: `No se puede cambiar la etapa de una boleta en estado '${ticket.status}'` });
+    }
+    if (Number(ticket.stageId) === targetStageId) {
+      await conn.rollback();
+      return res.status(400).json({ message: 'La boleta ya está en esa etapa' });
+    }
+
+    // Lock both stages in a stable order (by id) so a concurrent sale/rejection
+    // touching the same pair can't deadlock against us.
+    const [stageRows] = await conn.query(
+      `SELECT id, eventId, name, price, totalQuantity, soldQuantity, reservedQuantity, status
+         FROM ticket_stages WHERE id IN (?, ?) ORDER BY id FOR UPDATE`,
+      [ticket.stageId, targetStageId],
+    );
+    const source = stageRows.find((s) => Number(s.id) === Number(ticket.stageId));
+    const target = stageRows.find((s) => Number(s.id) === targetStageId);
+    if (!target) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Etapa destino no encontrada' });
+    }
+    if (Number(target.eventId) !== Number(ticket.eventId)) {
+      await conn.rollback();
+      return res.status(400).json({ message: 'La etapa destino pertenece a otro evento' });
+    }
+    // Room for one more on the target (respects chkStageCapacity). A 'sold_out'
+    // target is full by definition, so this naturally blocks moving into one.
+    const targetAvailable = target.totalQuantity - target.soldQuantity - target.reservedQuantity;
+    if (targetAvailable < 1) {
+      await conn.rollback();
+      return res.status(409).json({ message: 'No hay cupos en la etapa destino' });
+    }
+
+    // Rebalance sold inventory. GREATEST guards the source against an
+    // underflow-to-~4B on the INT UNSIGNED column (chkStageCapacity backstop).
+    await conn.query(
+      'UPDATE ticket_stages SET soldQuantity = GREATEST(soldQuantity - 1, 0) WHERE id = ?',
+      [source.id],
+    );
+    await conn.query(
+      'UPDATE ticket_stages SET soldQuantity = soldQuantity + 1 WHERE id = ?',
+      [target.id],
+    );
+
+    // Move the ticket and adopt the target stage's current price.
+    await conn.query(
+      'UPDATE tickets SET stageId = ?, unitPrice = ? WHERE id = ?',
+      [target.id, target.price, ticket.id],
+    );
+
+    // Target fill check (scoped to 'active', so a closed/upcoming target is left
+    // as-is — we never reopen a deliberately-retired stage).
+    const [fillResult] = await conn.query(
+      `UPDATE ticket_stages SET status = 'sold_out'
+         WHERE id = ? AND status = 'active' AND soldQuantity + reservedQuantity >= totalQuantity`,
+      [target.id],
+    );
+    if (fillResult.affectedRows > 0) {
+      const [promo] = await conn.query(
+        `UPDATE ticket_stages SET status = 'active'
+           WHERE eventId = ? AND status = 'upcoming' AND activatesAt IS NULL
+           ORDER BY sortOrder ASC LIMIT 1`,
+        [ticket.eventId],
+      );
+      if (promo.affectedRows > 0) {
+        await conn.query(
+          "UPDATE ticket_stages SET status = 'closed' WHERE id = ? AND status = 'sold_out'",
+          [target.id],
+        );
+      }
+    }
+
+    // Source restore check — only when the event has no other active stage, so
+    // we can never collide with uqOneActiveStagePerEvent.
+    if (source.status === 'sold_out') {
+      const [[{ activeCount }]] = await conn.query(
+        "SELECT COUNT(*) AS activeCount FROM ticket_stages WHERE eventId = ? AND status = 'active'",
+        [ticket.eventId],
+      );
+      if (activeCount === 0) {
+        await conn.query(
+          `UPDATE ticket_stages SET status = 'active'
+             WHERE id = ? AND status = 'sold_out' AND soldQuantity + reservedQuantity < totalQuantity`,
+          [source.id],
+        );
+      }
+    }
+
+    await conn.commit();
+    res.json({
+      ok: true,
+      stageId: target.id,
+      stageName: target.name,
+      unitPrice: Number(target.price),
+    });
+  } catch (error) {
+    await conn.rollback();
+    sendErrorEmail(req, error, 'moveAdminTicketStage');
+    return res.status(500).json({ message: error.message, sqlMessage: error.sqlMessage });
   } finally {
     conn.release();
   }

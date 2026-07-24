@@ -19,6 +19,7 @@ import {
   rejectPurchase,
   createWalkInSale,
   updateAdminTicket,
+  moveAdminTicketStage,
   deleteAllPurchases,
   deleteAdminTicket,
 } from '../controllers/admin.controllers.js';
@@ -39,6 +40,7 @@ router.get('/api/admin/purchases', requireOrganizer, getAdminPurchases);
 router.delete('/api/admin/purchases', requireOrganizer, deleteAllPurchases);
 router.get('/api/admin/tickets', requireOrganizer, getAdminTickets);
 router.patch('/api/admin/tickets/:id', requireOrganizer, updateAdminTicket);
+router.patch('/api/admin/tickets/:id/stage', requireOrganizer, moveAdminTicketStage);
 router.delete('/api/admin/tickets/:id', requireOrganizer, deleteAdminTicket);
 router.post('/api/admin/purchases/:orderId/confirm', requireOrganizer, confirmPurchase);
 router.post('/api/admin/purchases/:orderId/reject', requireOrganizer, rejectPurchase);
