@@ -278,4 +278,4 @@ if ($CleanWindowsTemp) {
 Write-Host ""
 Write-Host ("Done. Approximately {0:N2} MB freed." -f $totalFreed) -ForegroundColor Cyan
 Write-Host ("Finished at {0}" -f (Get-Date -Format "hh:mm:ss tt")) -ForegroundColor DarkGray
-Write-Host "Live will rebuild the decoding cache automatically the next time you open a set." -ForegroundColor DarkGray
+Write-Host "Live wil l rebuild the decoding cache automatically the next time you open a set." -ForegroundColor DarkGray

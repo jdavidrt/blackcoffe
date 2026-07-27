@@ -620,7 +620,10 @@ export const deleteAdminTicket = async (req, res) => {
  * that stage's current price. This is an inventory-moving edit, so it runs
  * under a transaction with FOR UPDATE locks on the ticket and both stages,
  * rebalancing soldQuantity (source −1, target +1) and keeping every stage-status
- * invariant intact:
+ * invariant intact. If the target stage is full (a finished sold_out/closed
+ * etapa, or one at capacity), its aforo is expanded by exactly one so the ticket
+ * fits — the organizer is deliberately assigning a seat into it, not being
+ * blocked:
  *
  *   - Target fill check (only meaningful when the target is 'active'): if the
  *     +1 fills it, flip active→sold_out and run the same sold-out cascade as a
@@ -681,12 +684,22 @@ export const moveAdminTicketStage = async (req, res) => {
       await conn.rollback();
       return res.status(400).json({ message: 'La etapa destino pertenece a otro evento' });
     }
-    // Room for one more on the target (respects chkStageCapacity). A 'sold_out'
-    // target is full by definition, so this naturally blocks moving into one.
+    // Room for one more on the target. When the target is full — a finished
+    // 'sold_out'/'closed' etapa, or one already at capacity — the organizer is
+    // deliberately reassigning a ticket into it (e.g. a door sale for a stage
+    // that already sold out), so we EXPAND its aforo by exactly the shortfall
+    // instead of refusing. totalQuantity is raised to cover the incoming seat
+    // BEFORE the +1 below, so chkStageCapacity (sold + reserved <= total) holds
+    // at every step. The stage's status is left untouched: this assigns a seat,
+    // it does not reopen online sales on a retired stage.
     const targetAvailable = target.totalQuantity - target.soldQuantity - target.reservedQuantity;
     if (targetAvailable < 1) {
-      await conn.rollback();
-      return res.status(409).json({ message: 'No hay cupos en la etapa destino' });
+      const expandedTotal = target.soldQuantity + target.reservedQuantity + 1;
+      await conn.query(
+        'UPDATE ticket_stages SET totalQuantity = ? WHERE id = ?',
+        [expandedTotal, target.id],
+      );
+      target.totalQuantity = expandedTotal; // keep the FOR UPDATE copy in sync
     }
 
     // Rebalance sold inventory. GREATEST guards the source against an
