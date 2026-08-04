@@ -1784,12 +1784,33 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 - "Cobros del día" now shows ALL payment activity for selected date (deposits + full payments)
 - "Abandonadas" added (2025-10-04) - Track and manage abandoned orders
 - "Copias" added (2026-07-07) - Browse/restore nightly order snapshots; **full (admin) menu only**, NOT the kiosk menu
+- The four "Cobrar" links are per-user filtered via `canCollectMall()` (2026-08-04) - see "Per-User Privileges" below
 
 **Limited User Menu** ("Black coffe Unilago" - Lines 54-68 in Navbar.jsx):
 1. **Nueva Orden** (Green) - Create order `/nuevaOrden`
 2. **Recorrido** (Orange) - Delivery routes `/recorrido`
 3. **Cobrar Uni.** (Grey) - Collect Unilago only `/cobrarOrdenes/Unilago`
 4. **Salir** (Dark red) - Logout
+
+### Per-User Privileges 🆕 (2026-08-04)
+
+The `users` table has **no roles column** (`id, createdAt, userName, pass`), so all privilege checks key off the `userName` string that `LoginForm.jsx:22` writes to `localStorage`. **Every such check lives in [client/src/utils/permissions.js](client/src/utils/permissions.js)** — never compare userName string literals inline.
+
+| Helper | Meaning |
+|--------|---------|
+| `isKioskUser()` | `userName === 'Black coffe Unilago'` → reduced navbar (replaces the old inline comparison in `Navbar.jsx:54`) |
+| `getAllowedCollectMall()` | The single mall a user may collect from, or `null` when unrestricted |
+| `canCollectMall(mall)` | Whether the user may open `/cobrarOrdenes/:mall` |
+
+**Current restrictions** (`COLLECT_MALL_RESTRICTIONS` in `permissions.js`):
+- **`Unilago`** → `Otros` only. Keeps the full admin menu otherwise (Cuentas por cobrar, Cobros del día, Nueva Orden, Recorrido, Abonos, Sin Usuario, Abandonadas, Productos, Clientes, Copias); only the other three "Cobrar" links are hidden.
+- `AltaTec` and `Black coffe Unilago` are unrestricted by this map.
+
+Enforced in two places — add both when restricting a new user:
+1. **Navbar** — each of the four Cobrar `<li>`s is wrapped in `{canCollectMall(MALLS.X) && ...}`.
+2. **`CollectOrdersPage.jsx`** — the `useEffect` redirects to the allowed mall (`replace: true`) before loading, so a typed URL can't bypass the hidden link.
+
+⚠️ **Known gap** (unchanged by this feature): enforcement is client-side only, matching the app's existing model. No backend route checks the caller, and `/cobrarOrden/:id` (the single-order payment form) is not mall-guarded — a restricted user who knows an order ID can still open it directly. Closing that needs real server-side auth (see [PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md) Priority 2).
 
 ---
 

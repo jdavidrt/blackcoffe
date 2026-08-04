@@ -6,9 +6,11 @@ import { DatePicker } from "antd";
 import { useParams, useNavigate } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
 import CoffeePouringAnimation from "../components/CoffeePouringAnimation";
+import { canCollectMall, getAllowedCollectMall } from "../utils/permissions";
 function CollectOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const params = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const { orders, loadUnPaidOrders } = useOrders();
 
@@ -27,6 +29,11 @@ function CollectOrdersPage() {
   );
 
   useEffect(() => {
+    // Users restricted to a single mall can't reach another one by typing the URL
+    if (!canCollectMall(params.mall)) {
+      navigate(`/cobrarOrdenes/${getAllowedCollectMall()}`, { replace: true });
+      return;
+    }
     loadOrders(params.mall);
   }, [params.mall]);
 
