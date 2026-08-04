@@ -6,7 +6,7 @@ import { DatePicker } from "antd";
 import { useParams, useNavigate } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
 import CoffeePouringAnimation from "../components/CoffeePouringAnimation";
-import { canCollectMall, getAllowedCollectMall } from "../utils/permissions";
+import { canCollectMall, getDefaultCollectMall } from "../utils/permissions";
 function CollectOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const params = useParams();
@@ -29,9 +29,10 @@ function CollectOrdersPage() {
   );
 
   useEffect(() => {
-    // Users restricted to a single mall can't reach another one by typing the URL
+    // Restricted users can't reach a mall outside their allowlist by typing the URL
     if (!canCollectMall(params.mall)) {
-      navigate(`/cobrarOrdenes/${getAllowedCollectMall()}`, { replace: true });
+      const fallbackMall = getDefaultCollectMall();
+      navigate(fallbackMall ? `/cobrarOrdenes/${fallbackMall}` : "/", { replace: true });
       return;
     }
     loadOrders(params.mall);

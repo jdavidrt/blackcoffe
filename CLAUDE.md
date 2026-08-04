@@ -1799,11 +1799,24 @@ The `users` table has **no roles column** (`id, createdAt, userName, pass`), so 
 | Helper | Meaning |
 |--------|---------|
 | `isKioskUser()` | `userName === 'Black coffe Unilago'` → reduced navbar (replaces the old inline comparison in `Navbar.jsx:54`) |
-| `getAllowedCollectMall()` | The single mall a user may collect from, or `null` when unrestricted |
+| `getAllowedCollectMalls()` | Array of every mall a user may collect from, or `null` when unrestricted |
+| `getDefaultCollectMall()` | First allowed mall — the redirect target when a restricted user hits a forbidden one |
 | `canCollectMall(mall)` | Whether the user may open `/cobrarOrdenes/:mall` |
 
-**Current restrictions** (`COLLECT_MALL_RESTRICTIONS` in `permissions.js`):
-- **`Unilago`** → `Otros` only. Keeps the full admin menu otherwise (Cuentas por cobrar, Cobros del día, Nueva Orden, Recorrido, Abonos, Sin Usuario, Abandonadas, Productos, Clientes, Copias); only the other three "Cobrar" links are hidden.
+**`COLLECT_MALL_RESTRICTIONS` map** (in `permissions.js`) — each value is that user's complete allowlist, written as an **array** for multiple malls or a bare string for one (normalized to an array internally):
+
+```js
+const COLLECT_MALL_RESTRICTIONS = {
+  Unilago: [MALLS.OTROS, MALLS.UNILAGO],
+};
+```
+
+⚠️ Multiple malls MUST be one array — repeating the key (`{ Unilago: A, Unilago: B }`) is silently valid JS that keeps only the **last** value, so the first restriction vanishes without an error.
+
+Semantics: **no entry** = unrestricted (all four malls); **`[]`** = no "Cobrar" access at all (`CollectOrdersPage` then redirects to `/` instead of a mall).
+
+**Current restrictions**:
+- **`Unilago`** → `Otros` + `Unilago` (2026-08-04). Keeps the full admin menu otherwise (Cuentas por cobrar, Cobros del día, Nueva Orden, Recorrido, Abonos, Sin Usuario, Abandonadas, Productos, Clientes, Copias); only "Cobrar Alta T." and "Cobrar C. F." are hidden.
 - `AltaTec` and `Black coffe Unilago` are unrestricted by this map.
 
 Enforced in two places — add both when restricting a new user:
