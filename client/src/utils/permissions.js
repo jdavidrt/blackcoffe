@@ -16,7 +16,7 @@ export const KIOSK_USER = 'Black coffe Unilago';
  * Everything else about their privileges is unchanged.
  */
 const COLLECT_MALL_RESTRICTIONS = {
-  Unilago: MALLS.OTROS,
+  Unilago: MALLS.OTROS, Unilago: MALLS.UNILAGO,
 };
 
 export const getCurrentUser = () => localStorage.getItem('user') || '';
