@@ -1,4 +1,14 @@
 -- ============================================================
+-- RETIRED -- TARGETS A TABLE THAT NO LONGER EXISTS.
+-- Adds purchases.holdersSnapshot. Retired by 005: holder identity now lives directly on each `tickets` row from creation onward.
+-- Kept in place so the schema_migrations ledger stays coherent:
+-- runMigrations.js MARKS this file applied (it does not execute it)
+-- once it detects a cut-over database via `tickets_legacy_v1`.
+-- DO NOT delete, renumber, or "fix" this file.
+-- Current schema: docs/architecture/TICKETS_SCHEMA.md
+-- ============================================================
+
+-- ============================================================
 -- SÍGALE 2.0 - MIGRATION 004: purchases.holdersSnapshot
 -- Captures the holder names/IDs/phones the buyer enters during
 -- the public purchase flow, so they are persisted before the

@@ -25,11 +25,18 @@ import { BOGOTA, UTC } from '../utils/time.js';
 
 // Columns we expose to the public, with datetimes converted to Bogotá time.
 const EVENT_SELECT = `
-  SELECT id, name, description, artists, venue, address, venueCapacity,
+  SELECT id, slug, name, description, artists, venue, address, venueCapacity,
          flyerImageUrl, bankQrImageUrl, whatsappNumber, isActive,
+         isPublished, isDemo, salesOpen,
          CONVERT_TZ(eventDate,   '${UTC}', '${BOGOTA}') AS eventDate,
          CONVERT_TZ(openingTime, '${UTC}', '${BOGOTA}') AS openingTime,
          CONVERT_TZ(createdAt,   '${UTC}', '${BOGOTA}') AS createdAt
+  FROM events`;
+
+// Lightweight row shape for the root landing grid — no stages, no address.
+const EVENT_LIST_SELECT = `
+  SELECT id, slug, name, venue, flyerImageUrl, isDemo,
+         CONVERT_TZ(eventDate, '${UTC}', '${BOGOTA}') AS eventDate
   FROM events`;
 
 const STAGE_SELECT = `
@@ -110,9 +117,92 @@ export const getEventById = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/events  (public)
+ * Root landing grid: every published event, newest first. Lightweight rows
+ * (no stages/address) — the landing card only needs flyer/name/date/venue.
+ */
+export const listPublishedEvents = async (req, res) => {
+  try {
+    const [rows] = await pool.query(`${EVENT_LIST_SELECT} WHERE isPublished = 1 ORDER BY eventDate DESC`);
+    res.json(rows);
+  } catch (error) {
+    sendErrorEmail(req, error, 'listPublishedEvents');
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * GET /api/events/all  (organizer — requireOrganizer at the route)
+ * Every event regardless of isPublished, for the organizer's event selector.
+ */
+export const listAllEvents = async (req, res) => {
+  try {
+    const [rows] = await pool.query(`${EVENT_LIST_SELECT} ORDER BY eventDate DESC`);
+    res.json(rows);
+  } catch (error) {
+    sendErrorEmail(req, error, 'listAllEvents');
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * GET /api/events/by-slug/:slug  (public)
+ * Event + active stage + cupos restantes, resolved by URL slug. Deliberately
+ * does NOT filter isPublished — an organizer can share an unpublished event's
+ * link privately before flipping "visible en la página principal" (soft
+ * launch). isPublished only gates the root landing list above.
+ */
+export const getEventBySlug = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const [[event]] = await conn.query(`${EVENT_SELECT} WHERE slug = ? LIMIT 1`, [req.params.slug]);
+    if (!event) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+    res.json(await buildEventPayload(conn, event));
+  } catch (error) {
+    sendErrorEmail(req, error, 'getEventBySlug');
+    return res.status(500).json({ message: error.message });
+  } finally {
+    conn.release();
+  }
+};
+
 // ── Validation helpers ─────────────────────────────────────────────────────────
 
 const REQUIRED_EVENT_FIELDS = ['name', 'eventDate', 'openingTime', 'venue', 'venueCapacity'];
+
+// Words that would shadow a real static route or asset if used as an event
+// slug (every event lives at /:slug at the app root). Deliberately does NOT
+// include 'demo' — that slug is protected by the DB's uqEventSlug uniqueness
+// instead (it's ordinary event data, not a literal app route), so attempting
+// to claim it surfaces the ER_DUP_ENTRY 409 below, not this one.
+const RESERVED_SLUGS = new Set([
+  'admin', 'scan', 'compra', 'tickets', 'dashboard', 'evento', 'edit',
+  'edit-event', 'create-event', 'sell-tickets', 'guest-passes',
+  'lista-puerta', 'validate-qr', 'api', 'assets', 'sw.js', 'manifest.json',
+  'robots.txt', 'favicon.ico',
+]);
+const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * Validate a submitted slug. A missing/empty slug is valid (deploy-window
+ * compat — the old frontend doesn't send one; only the new create/edit form
+ * requires it client-side). Returns an error message string, or null.
+ */
+function validateSlug(slug) {
+  if (slug === undefined || slug === null || slug === '') {
+    return null;
+  }
+  if (typeof slug !== 'string' || slug.length > 80 || !SLUG_PATTERN.test(slug)) {
+    return 'La URL del evento solo puede tener letras minúsculas, números y guiones, sin espacios';
+  }
+  if (RESERVED_SLUGS.has(slug)) {
+    return 'Esa URL está reservada, elige otra';
+  }
+  return null;
+}
 
 /**
  * Validate the create/edit payload. Returns an error message string, or null.
@@ -178,24 +268,29 @@ export const createEvent = async (req, res) => {
   if (validationError) {
     return res.status(409).json({ message: validationError });
   }
+  const slugError = validateSlug(req.body.slug);
+  if (slugError) {
+    return res.status(409).json({ message: slugError });
+  }
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // Single active event: demote any current active event first.
-    await conn.query('UPDATE events SET isActive = 0 WHERE isActive = 1');
-
     const b = req.body;
+    // isActive is never written by this API anymore (multi-event: there is
+    // no more "the one active event" — see isPublished). isDemo is never
+    // settable via the public API either; only the one-off prod flip sets it.
     const [result] = await conn.query(
       `INSERT INTO events
-         (name, description, artists, eventDate, openingTime, venue, address, venueCapacity,
-          flyerImageUrl, bankQrImageUrl, whatsappNumber, isActive)
-       VALUES (?, ?, CAST(? AS JSON),
+         (slug, name, description, artists, eventDate, openingTime, venue, address, venueCapacity,
+          flyerImageUrl, bankQrImageUrl, whatsappNumber, isActive, isPublished, salesOpen)
+       VALUES (?, ?, ?, CAST(? AS JSON),
                CONVERT_TZ(?, '${BOGOTA}', '${UTC}'),
                CONVERT_TZ(?, '${BOGOTA}', '${UTC}'),
-               ?, ?, ?, ?, ?, ?, 1)`,
+               ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
       [
+        b.slug || null,
         b.name,
         b.description || null,
         JSON.stringify(b.artists || []),
@@ -207,6 +302,8 @@ export const createEvent = async (req, res) => {
         b.flyerImageUrl || null,
         b.bankQrImageUrl || null,
         b.whatsappNumber || null,
+        b.isPublished ? 1 : 0,
+        b.salesOpen ? 1 : 0,
       ],
     );
 
@@ -219,6 +316,9 @@ export const createEvent = async (req, res) => {
     res.status(201).json(await buildEventPayload(conn, event));
   } catch (error) {
     await conn.rollback();
+    if (error.code === 'ER_DUP_ENTRY' && /uqEventSlug/.test(error.sqlMessage || '')) {
+      return res.status(409).json({ message: 'Esa URL ya está en uso' });
+    }
     sendErrorEmail(req, error, 'createEvent');
     return res.status(500).json({ message: error.message, sqlMessage: error.sqlMessage });
   } finally {
@@ -251,27 +351,67 @@ export const updateEvent = async (req, res) => {
     const b = req.body;
     const eventId = req.params.id;
 
+    const [[current]] = await conn.query(
+      'SELECT isDemo, isPublished, salesOpen FROM events WHERE id = ? FOR UPDATE',
+      [eventId],
+    );
+    if (!current) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+    const isDemo = Number(current.isDemo) === 1;
+
+    // Demo row: slug/isDemo are permanently fixed — skip slug validation and
+    // never write either column, regardless of what the form submits. The
+    // edit form re-submits the unchanged slug 'demo' on every save; without
+    // this carve-out a routine copy/flyer fix on the demo would risk tripping
+    // slug validation for no reason. Every other field stays editable.
+    if (!isDemo) {
+      const slugError = validateSlug(b.slug);
+      if (slugError) {
+        await conn.rollback();
+        return res.status(409).json({ message: slugError });
+      }
+    }
+
+    // isPublished/salesOpen fall back to the current value when the body
+    // omits them (deploy-window compat: the old form doesn't send these
+    // fields, so an edit through it must not silently unpublish/close sales
+    // on an existing event).
+    const isPublished = b.isPublished !== undefined ? (b.isPublished ? 1 : 0) : Number(current.isPublished);
+    const salesOpen = b.salesOpen !== undefined ? (b.salesOpen ? 1 : 0) : Number(current.salesOpen);
+
+    const updates = [
+      'name = ?', 'description = ?', 'artists = CAST(? AS JSON)',
+      `eventDate = CONVERT_TZ(?, '${BOGOTA}', '${UTC}')`,
+      `openingTime = CONVERT_TZ(?, '${BOGOTA}', '${UTC}')`,
+      'venue = ?', 'address = ?', 'venueCapacity = ?', 'flyerImageUrl = ?', 'bankQrImageUrl = ?',
+      'whatsappNumber = ?', 'isPublished = ?', 'salesOpen = ?',
+    ];
+    const params = [
+      b.name,
+      b.description || null,
+      JSON.stringify(b.artists || []),
+      b.eventDate,
+      b.openingTime,
+      b.venue,
+      b.address || null,
+      b.venueCapacity,
+      b.flyerImageUrl || null,
+      b.bankQrImageUrl || null,
+      b.whatsappNumber || null,
+      isPublished,
+      salesOpen,
+    ];
+    if (!isDemo) {
+      updates.push('slug = ?');
+      params.push(b.slug || null);
+    }
+    params.push(eventId);
+
     const [result] = await conn.query(
-      `UPDATE events SET
-         name = ?, description = ?, artists = CAST(? AS JSON),
-         eventDate   = CONVERT_TZ(?, '${BOGOTA}', '${UTC}'),
-         openingTime = CONVERT_TZ(?, '${BOGOTA}', '${UTC}'),
-         venue = ?, address = ?, venueCapacity = ?, flyerImageUrl = ?, bankQrImageUrl = ?, whatsappNumber = ?
-       WHERE id = ?`,
-      [
-        b.name,
-        b.description || null,
-        JSON.stringify(b.artists || []),
-        b.eventDate,
-        b.openingTime,
-        b.venue,
-        b.address || null,
-        b.venueCapacity,
-        b.flyerImageUrl || null,
-        b.bankQrImageUrl || null,
-        b.whatsappNumber || null,
-        eventId,
-      ],
+      `UPDATE events SET ${updates.join(', ')} WHERE id = ?`,
+      params,
     );
 
     if (result.affectedRows === 0) {

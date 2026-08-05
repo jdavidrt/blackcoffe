@@ -1,10 +1,10 @@
 /*
  * ============================================================
  * SÍGALE — EXPRESS ENTRY POINT
- * Mirrors current-server/index.js (BlackCoffe) but is a fully
- * SEPARATE app: its own pool (db.js → DB_NAME=sigale), its own
- * migrations, its own routes. It must never import or run any
- * file under server/current-server/ (read-only BlackCoffe ref).
+ * Mirrors BlackCoffe's index.js but is a fully SEPARATE app: its
+ * own pool (db.js → DB_NAME=sigale), its own migrations, its own
+ * routes. It must never import or run any file under /reference/
+ * (the read-only BlackCoffe mirror).
  *
  * Boot order matches BlackCoffe: runMigrations() resolves before
  * app.listen() so the schema exists before the first request.

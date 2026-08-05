@@ -1,4 +1,14 @@
 -- ============================================================
+-- PRE-CUTOVER HISTORY.
+-- orderId CHAR(3) -> INT UNSIGNED. The uniqueness guarantee now lives on `orderAnchor`, since many rows share one orderId.
+-- Kept in place so the schema_migrations ledger stays coherent:
+-- runMigrations.js MARKS this file applied (it does not execute it)
+-- once it detects a cut-over database via `tickets_legacy_v1`.
+-- DO NOT delete, renumber, or "fix" this file.
+-- Current schema: docs/architecture/TICKETS_SCHEMA.md
+-- ============================================================
+
+-- ============================================================
 -- SÍGALE 2.0 - MIGRATION 003: sequential orderId starting at 100
 -- Converts purchases.orderId from CHAR(3) random folio to INT
 -- UNSIGNED sequential identifier. New orderIds are computed in

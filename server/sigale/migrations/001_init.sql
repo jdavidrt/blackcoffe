@@ -1,4 +1,14 @@
 -- ============================================================
+-- PRE-CUTOVER HISTORY -- NOT THE CURRENT SCHEMA.
+-- Creates the ORIGINAL two-table split (purchases + seat-level tickets). Both were merged into a single `tickets` table; `purchases` no longer exists.
+-- Kept in place so the schema_migrations ledger stays coherent:
+-- runMigrations.js MARKS this file applied (it does not execute it)
+-- once it detects a cut-over database via `tickets_legacy_v1`.
+-- DO NOT delete, renumber, or "fix" this file.
+-- Current schema: docs/architecture/TICKETS_SCHEMA.md
+-- ============================================================
+
+-- ============================================================
 -- SÍGALE 2.0 — INITIAL SCHEMA (migration 001)
 -- ADR-0001 §5 DDL, clean table names (no prefix), InnoDB + utf8mb4.
 -- Schema delta vs ADR: events.isActive resolves "the one active event".

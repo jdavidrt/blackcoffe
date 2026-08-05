@@ -35,6 +35,20 @@ const validationHashFor = (orderId, seatIndex) =>
     .slice(0, 16);
 
 /**
+ * Multi-event read-only-demo guard. Returns a Spanish 409 message when the
+ * given event is the permanent demo, else null — callers roll back and
+ * return it themselves, matching every other inline guard in this file.
+ * Must be called by EVERY mutating admin path that touches tickets/
+ * ticket_stages for a specific event; `markUsed` in scan.controllers.js is
+ * the one deliberate exception (scanning the seeded demo tickets is the
+ * point of the demo, and the write is reversible by the nightly rearm job).
+ */
+async function assertNotDemo(conn, eventId) {
+  const [[event]] = await conn.query('SELECT isDemo FROM events WHERE id = ?', [eventId]);
+  return event?.isDemo ? 'El evento de demostración es de solo lectura' : null;
+}
+
+/**
  * POST /api/login  (public, rate-limited at the route)
  * Validates username + bcrypt password via the shared verifyOrganizer
  * (constant-time against username enumeration, plan §6). Returns ok only
@@ -68,11 +82,12 @@ export const login = async (req, res) => {
  */
 export const getAdminPurchases = async (req, res) => {
   try {
-    const { status, orderId } = req.query;
+    const { status, orderId, eventId } = req.query;
     const where = [];
     const params = [];
     if (status) { where.push('t.status = ?'); params.push(status); }
     if (orderId) { where.push('t.orderId = ?'); params.push(orderId); }
+    if (eventId) { where.push('t.eventId = ?'); params.push(eventId); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const [rows] = await pool.query(
@@ -143,20 +158,25 @@ export const getAdminPurchases = async (req, res) => {
  */
 export const getAdminTickets = async (req, res) => {
   try {
-    const { status } = req.query;
-    let whereSql = '';
-    let params = [];
+    const { status, eventId } = req.query;
+    const conditions = [];
+    const params = [];
     if (!status) {
-      whereSql = 'WHERE t.status = ?';
-      params = ['confirmed'];
+      conditions.push('t.status = ?');
+      params.push('confirmed');
     } else if (status !== 'all') {
       const statuses = String(status).split(',').map((s) => s.trim()).filter(Boolean);
-      whereSql = `WHERE t.status IN (${statuses.map(() => '?').join(',')})`;
-      params = statuses;
+      conditions.push(`t.status IN (${statuses.map(() => '?').join(',')})`);
+      params.push(...statuses);
     }
+    if (eventId) {
+      conditions.push('t.eventId = ?');
+      params.push(eventId);
+    }
+    const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const [rows] = await pool.query(
-      `SELECT t.id, t.orderId, t.holderName, t.holderIdNumber, t.holderPhone,
+      `SELECT t.id, t.orderId, t.eventId, t.holderName, t.holderIdNumber, t.holderPhone,
               t.validationHash, t.isUsed,
               CONVERT_TZ(t.usedAt, '${UTC}', '${BOGOTA}') AS usedAt,
               t.status, t.deliveryMethod, t.deliveryContact, t.unitPrice,
@@ -183,6 +203,15 @@ export const getAdminTickets = async (req, res) => {
  */
 export const updateAdminTicket = async (req, res) => {
   try {
+    const [[ticket]] = await pool.query('SELECT eventId FROM tickets WHERE id = ?', [req.params.id]);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Boleta no encontrada' });
+    }
+    const demoError = await assertNotDemo(pool, ticket.eventId);
+    if (demoError) {
+      return res.status(409).json({ message: demoError });
+    }
+
     const { holderName, holderIdNumber, holderPhone } = req.body || {};
     const updates = [];
     const params = [];
@@ -230,12 +259,21 @@ export const confirmPurchase = async (req, res) => {
     await conn.beginTransaction();
 
     const [rows] = await conn.query(
-      'SELECT id, stageId, status, holderName, holderIdNumber, holderPhone FROM tickets WHERE orderId = ? ORDER BY id ASC FOR UPDATE',
+      'SELECT id, eventId, stageId, status, holderName, holderIdNumber, holderPhone FROM tickets WHERE orderId = ? ORDER BY id ASC FOR UPDATE',
       [req.params.orderId],
     );
     if (rows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ message: 'Orden no encontrada' });
+    }
+    // Belt-and-suspenders: no pending demo order should ever exist (the
+    // demo's only tickets are pre-confirmed walk-ins, and createPurchase
+    // already rejects reservations against a demo event), but a confirm
+    // must never be able to mint a hash on a demo row either way.
+    const demoError = await assertNotDemo(conn, rows[0].eventId);
+    if (demoError) {
+      await conn.rollback();
+      return res.status(409).json({ message: demoError });
     }
     const status = rows[0].status;
     if (status === 'confirmed') {
@@ -300,12 +338,18 @@ export const rejectPurchase = async (req, res) => {
     await conn.beginTransaction();
 
     const [rows] = await conn.query(
-      'SELECT id, stageId, status FROM tickets WHERE orderId = ? FOR UPDATE',
+      'SELECT id, eventId, stageId, status FROM tickets WHERE orderId = ? FOR UPDATE',
       [req.params.orderId],
     );
     if (rows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ message: 'Orden no encontrada' });
+    }
+    // Belt-and-suspenders: see the identical guard in confirmPurchase above.
+    const demoError = await assertNotDemo(conn, rows[0].eventId);
+    if (demoError) {
+      await conn.rollback();
+      return res.status(409).json({ message: demoError });
     }
     const status = rows[0].status;
     if (status === 'confirmed') {
@@ -378,6 +422,11 @@ export const createWalkInSale = async (req, res) => {
       await conn.rollback();
       return res.status(409).json({ message: 'La etapa seleccionada no está disponible para venta' });
     }
+    const demoError = await assertNotDemo(conn, stage.eventId);
+    if (demoError) {
+      await conn.rollback();
+      return res.status(409).json({ message: demoError });
+    }
     const available = stage.totalQuantity - stage.soldQuantity - stage.reservedQuantity;
     if (available < qty) {
       await conn.rollback();
@@ -398,7 +447,7 @@ export const createWalkInSale = async (req, res) => {
         `UPDATE ticket_stages SET status = 'active'
           WHERE eventId = ? AND status = 'upcoming' AND activatesAt IS NULL
           ORDER BY sortOrder ASC LIMIT 1`,
-        [eventId],
+        [stage.eventId],
       );
       // A successor took the active slot — the just-filled stage is now
       // permanently superseded. Close it instead of leaving it 'sold_out',
@@ -436,7 +485,7 @@ export const createWalkInSale = async (req, res) => {
       const values = rows.map((r, j) => [
         candidate,
         j === 0 ? candidate : null, // orderAnchor
-        eventId,
+        stage.eventId,
         stageId,
         stage.price,
         r.holderName,
@@ -495,23 +544,47 @@ export const createWalkInSale = async (req, res) => {
 };
 
 /**
- * DELETE /api/admin/purchases  (organizer)
- * Hard-reset: delete ALL orders regardless of status, and restore stage
- * inventory (sold + reserved). Intended for dev resets and post-event
- * cleanup — not reversible. Stays behind requireOrganizer.
+ * DELETE /api/admin/purchases?eventId=  (organizer)
+ * Hard-reset: delete ALL orders for ONE event regardless of status, and
+ * restore that event's stage inventory (sold + reserved). Intended for dev
+ * resets and post-event cleanup — not reversible. Stays behind
+ * requireOrganizer. Scoped by eventId now that several events can be
+ * selling at once — this must never touch another event's tickets.
  */
 export const deleteAllPurchases = async (req, res) => {
+  const { eventId } = req.query;
+  if (!eventId) {
+    return res.status(400).json({ message: 'eventId requerido' });
+  }
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // Every ticket row — every status — with stageId to restore inventory.
-    const [rows] = await conn.query('SELECT stageId, status FROM tickets');
+    const demoError = await assertNotDemo(conn, eventId);
+    if (demoError) {
+      await conn.rollback();
+      return res.status(409).json({ message: demoError });
+    }
+
+    // Every ticket row for this event — every status — with stageId to
+    // restore inventory, and orderId to advance the high-water mark below.
+    const [rows] = await conn.query('SELECT stageId, status, orderId FROM tickets WHERE eventId = ?', [eventId]);
 
     if (rows.length === 0) {
       await conn.commit();
       return res.json({ ok: true, deleted: 0 });
     }
+
+    // Persist the high-water mark BEFORE deleting so none of these orderIds
+    // can ever be reissued. validationHash = HMAC(orderId, seatIndex), so a
+    // reused orderId would make an already-delivered QR image scan in as a
+    // different, newer ticket — see nextOrderId in purchases.controllers.js.
+    const maxDeletedOrderId = rows.reduce((max, r) => Math.max(max, Number(r.orderId)), 0);
+    await conn.query(
+      'UPDATE order_counter SET highWaterMark = GREATEST(highWaterMark, ?) WHERE id = 1',
+      [maxDeletedOrderId],
+    );
 
     // Restore soldQuantity (confirmed) and reservedQuantity (pending/submitted) per stage.
     // IMPORTANT: 'rejected' and 'expired' rows have already had their
@@ -541,14 +614,29 @@ export const deleteAllPurchases = async (req, res) => {
       );
     }
 
-    // Delete every row — this endpoint already means "delete everything".
-    await conn.query('DELETE FROM tickets');
+    // Delete only this event's rows — this endpoint means "wipe this
+    // event's tickets", not every event's.
+    await conn.query('DELETE FROM tickets WHERE eventId = ?', [eventId]);
 
-    // Reopen any stage whose inventory was fully cleared by this reset.
-    await conn.query(
-      'UPDATE ticket_stages SET status = ? WHERE status = ? AND soldQuantity + reservedQuantity < totalQuantity',
-      ['active', 'sold_out'],
+    // Reopen AT MOST ONE sold_out stage for this event — the one with the
+    // lowest sortOrder among those that now have room — and only when the
+    // event has no other active stage. Both guards matter: without the
+    // active-count check this could resurrect a second 'active' stage
+    // (colliding with uqOneActiveStagePerEvent, migration 007); without the
+    // LIMIT 1 + ORDER BY it could reopen more than one superseded stage at
+    // once. 'closed' stages are never touched — that status is permanent.
+    const [[{ activeCount }]] = await conn.query(
+      "SELECT COUNT(*) AS activeCount FROM ticket_stages WHERE eventId = ? AND status = 'active'",
+      [eventId],
     );
+    if (Number(activeCount) === 0) {
+      await conn.query(
+        `UPDATE ticket_stages SET status = 'active'
+          WHERE eventId = ? AND status = 'sold_out' AND soldQuantity + reservedQuantity < totalQuantity
+          ORDER BY sortOrder ASC LIMIT 1`,
+        [eventId],
+      );
+    }
 
     await conn.commit();
     res.json({ ok: true, deleted: rows.length });
@@ -578,12 +666,17 @@ export const deleteAdminTicket = async (req, res) => {
     // FOR UPDATE locks the ticket row so concurrent deletes of the same ticket
     // cannot both decrement soldQuantity (double-decrement bug).
     const [[ticket]] = await conn.query(
-      'SELECT id, stageId, status FROM tickets WHERE id = ? FOR UPDATE',
+      'SELECT id, eventId, stageId, status FROM tickets WHERE id = ? FOR UPDATE',
       [req.params.id],
     );
     if (!ticket) {
       await conn.rollback();
       return res.status(404).json({ message: 'Boleta no encontrada' });
+    }
+    const demoError = await assertNotDemo(conn, ticket.eventId);
+    if (demoError) {
+      await conn.rollback();
+      return res.status(409).json({ message: demoError });
     }
     if (ticket.status !== 'confirmed') {
       await conn.rollback();
@@ -657,6 +750,11 @@ export const moveAdminTicketStage = async (req, res) => {
     if (!ticket) {
       await conn.rollback();
       return res.status(404).json({ message: 'Boleta no encontrada' });
+    }
+    const demoError = await assertNotDemo(conn, ticket.eventId);
+    if (demoError) {
+      await conn.rollback();
+      return res.status(409).json({ message: demoError });
     }
     if (ticket.status !== 'confirmed') {
       await conn.rollback();

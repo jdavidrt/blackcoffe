@@ -1,4 +1,14 @@
 -- ============================================================
+-- SUPERSEDED BY THE CUTOVER.
+-- Creates `tickets_v2`, which was RENAMED to `tickets` in production. Re-running this would recreate a spurious empty tickets_v2 and collide on FK constraint names (ER_FK_DUP_NAME 1826).
+-- Kept in place so the schema_migrations ledger stays coherent:
+-- runMigrations.js MARKS this file applied (it does not execute it)
+-- once it detects a cut-over database via `tickets_legacy_v1`.
+-- DO NOT delete, renumber, or "fix" this file.
+-- Current schema: docs/architecture/TICKETS_SCHEMA.md
+-- ============================================================
+
+-- ============================================================
 -- SÍGALE 2.0 — MIGRATION 005: tickets/purchases merge (schema only)
 -- Creates the new unified lifecycle table (`tickets_v2`) alongside the
 -- still-live `purchases`/`tickets` tables. Purely additive — never

@@ -42,6 +42,7 @@ import pool from '../db.js';
 import { sendErrorEmail } from '../utils/emailNotifier.js';
 
 const EVERY_MINUTE = '* * * * *';
+const NIGHTLY_AT_MIDNIGHT_BOGOTA = '0 5 * * *'; // 05:00 UTC = 00:00 America/Bogota (UTC-5)
 
 /**
  * Activate every `upcoming` stage whose scheduled time has arrived. Locks
@@ -100,7 +101,7 @@ export async function sweepExpiredHolds() {
 
     // Lock the candidates so a concurrent confirm/reject can't race us.
     const [expired] = await conn.query(
-      `SELECT id, orderId, stageId
+      `SELECT id, orderId, eventId, stageId
          FROM tickets
         WHERE status = 'pending_payment'
           AND reservationExpiresAt <= UTC_TIMESTAMP()
@@ -112,21 +113,34 @@ export async function sweepExpiredHolds() {
       return 0;
     }
 
-    // Group by stage to release the right count of reserved spots.
+    // Group by stage to release the right count of reserved spots; remember
+    // each stage's event so the restore check below can be scoped to it.
     const stageCounts = {};
+    const stageEvents = {};
     for (const t of expired) {
       stageCounts[t.stageId] = (stageCounts[t.stageId] || 0) + 1;
+      stageEvents[t.stageId] = t.eventId;
     }
     for (const [stageId, qty] of Object.entries(stageCounts)) {
       await conn.query(
         'UPDATE ticket_stages SET reservedQuantity = GREATEST(reservedQuantity - ?, 0) WHERE id = ?',
         [qty, stageId],
       );
-      // Reopen the stage if the released hold creates available spots.
-      await conn.query(
-        'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
-        ['active', stageId, 'sold_out'],
+      // Reopen the stage if the released hold creates available spots — but
+      // only when its event has no OTHER active stage, so a sweep can never
+      // resurrect a second 'active' stage for the same event (multi-event
+      // makes this likelier than in the single-event world that motivated
+      // migration 007's uqOneActiveStagePerEvent).
+      const [[{ activeCount }]] = await conn.query(
+        "SELECT COUNT(*) AS activeCount FROM ticket_stages WHERE eventId = ? AND status = 'active'",
+        [stageEvents[stageId]],
       );
+      if (Number(activeCount) === 0) {
+        await conn.query(
+          'UPDATE ticket_stages SET status = ? WHERE id = ? AND status = ? AND soldQuantity + reservedQuantity < totalQuantity',
+          ['active', stageId, 'sold_out'],
+        );
+      }
     }
 
     await conn.query(
@@ -142,6 +156,25 @@ export async function sweepExpiredHolds() {
   } finally {
     conn.release();
   }
+}
+
+/**
+ * Rearm the permanent demo event's seeded tickets every night so the demo
+ * stays scannable indefinitely. Visitors who scan a demo QR during the day
+ * legitimately see "already_used" (that's the point — the scan loop is part
+ * of the demo); this job resets isUsed so tomorrow's visitors see "ok"
+ * again. No FOR UPDATE / transaction needed: it only flips a used-flag on
+ * rows that hold no inventory counters.
+ *
+ * @returns {Promise<number>} tickets rearmed
+ */
+export async function rearmDemoTickets() {
+  const [result] = await pool.query(
+    `UPDATE tickets SET isUsed = 0, usedAt = NULL
+      WHERE isUsed = 1
+        AND eventId IN (SELECT id FROM events WHERE isDemo = 1)`,
+  );
+  return result.affectedRows;
 }
 
 /**
@@ -178,17 +211,22 @@ function guarded(name, fn) {
 export function startScheduler() {
   const activate = guarded('activateDueStages', activateDueStages);
   const sweep = guarded('sweepExpiredHolds', sweepExpiredHolds);
+  const rearmDemo = guarded('rearmDemoTickets', rearmDemoTickets);
 
-  // Catch up on anything missed while the server was down.
+  // Catch up on anything missed while the server was down. Deliberately
+  // NOT done for rearmDemo — unlike the other two (inventory-correctness
+  // jobs), an unplanned restart mid-day prematurely clearing "already_used"
+  // on demo tickets is a cosmetic-only downside not worth the catch-up.
   activate();
   sweep();
 
   const tasks = [
     cron.schedule(EVERY_MINUTE, activate),
     cron.schedule(EVERY_MINUTE, sweep),
+    cron.schedule(NIGHTLY_AT_MIDNIGHT_BOGOTA, rearmDemo),
   ];
 
-  console.log(`[${new Date().toISOString()}] [sigale/jobs] Scheduler started (activate + sweep, every minute)`);
+  console.log(`[${new Date().toISOString()}] [sigale/jobs] Scheduler started (activate + sweep every minute, demo rearm nightly)`);
   return tasks;
 }
 

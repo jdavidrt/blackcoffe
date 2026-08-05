@@ -40,15 +40,24 @@ const RESERVATION_HOLD_MS = 24 * 60 * 60 * 1000; // 24h hold (decision #4)
 
 /**
  * Compute the next sequential orderId inside an open transaction.
- * Locks the table for read so concurrent inserts queue and never
- * collide on the same orderId. Falls back gracefully to ORDER_ID_START
- * when no tickets exist yet.
+ * Locks the tickets table (for the live max) AND the order_counter row (for
+ * the persisted high-water mark) so concurrent inserts queue and never
+ * collide. The high-water mark matters once per-event "Delete All Tickets"
+ * exists (multi-event): deleting the rows holding today's MAX(orderId) must
+ * not make that orderId assignable again, since validationHash is derived
+ * from (orderId, seatIndex) — a reused orderId would make an already-issued
+ * QR scan in as a different, newer ticket. Falls back gracefully to
+ * ORDER_ID_START when neither source has a value yet.
  */
 async function nextOrderId(conn) {
   const [[row]] = await conn.query(
     'SELECT MAX(orderId) AS maxId FROM tickets FOR UPDATE',
   );
-  const next = (Number(row?.maxId) || (ORDER_ID_START - 1)) + 1;
+  const [[counter]] = await conn.query(
+    'SELECT highWaterMark FROM order_counter WHERE id = 1 FOR UPDATE',
+  );
+  const floor = Math.max(Number(row?.maxId) || 0, Number(counter?.highWaterMark) || 0);
+  const next = floor + 1;
   return next < ORDER_ID_START ? ORDER_ID_START : next;
 }
 
@@ -101,6 +110,20 @@ export const createPurchase = async (req, res) => {
     if (!stage) {
       await conn.rollback();
       return res.status(409).json({ message: 'La etapa no está disponible' });
+    }
+
+    // Multi-event gate: the demo event never sells for real — its wizard
+    // simulates the flow locally, but the backend must refuse regardless of
+    // what a client sends — and online sales are closed per-event via
+    // salesOpen (replaces the retired global ONLINE_SALES_OPEN flag).
+    const [[event]] = await conn.query('SELECT isDemo, salesOpen FROM events WHERE id = ?', [stage.eventId]);
+    if (event?.isDemo) {
+      await conn.rollback();
+      return res.status(409).json({ message: 'El evento de demostración es de solo lectura' });
+    }
+    if (!event?.salesOpen) {
+      await conn.rollback();
+      return res.status(409).json({ message: 'Las ventas en línea están cerradas para este evento' });
     }
 
     // 2. Availability check (in the app, under the lock).

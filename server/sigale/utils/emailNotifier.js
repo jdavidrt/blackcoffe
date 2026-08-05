@@ -1,7 +1,7 @@
 /*
  * ============================================================
  * SÍGALE — ERROR NOTIFIER (Resend)
- * Ported from current-server/utils/emailNotifier.js (BlackCoffe).
+ * Ported from BlackCoffe's utils/emailNotifier.js (see reference/).
  * Call inside any catch block and in the global error middleware:
  *
  *     sendErrorEmail(req, error, 'createPurchase');

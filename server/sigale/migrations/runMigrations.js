@@ -1,7 +1,7 @@
 /*
  * ============================================================
  * SIGALE - MIGRATION RUNNER
- * Same boot mechanic as BlackCoffe (current-server runs
+ * Same boot mechanic as BlackCoffe (its server runs
  * runMigrations() before app.listen), but Sigale's own:
  * it applies every *.sql file in this folder, in name order.
  *
