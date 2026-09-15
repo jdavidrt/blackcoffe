@@ -70,19 +70,26 @@ export const getScanManifest = async (req, res) => {
 };
 
 /**
- * Core mark-used routine, shared by the single and batch endpoints. Runs in
- * its own transaction with FOR UPDATE. Idempotent and conflict-safe:
+ * Core mark-used routine, shared by the organizer and public endpoints. Runs
+ * in its own transaction with FOR UPDATE. Idempotent and conflict-safe:
  *   - missing hash                          -> { result: 'invalid' }
+ *   - eventId given but doesn't match       -> { result: 'wrong_event' }
  *   - already used, incoming usedAt earlier -> rewind usedAt, { result: 'already_used' }
  *   - already used otherwise                -> no-op,         { result: 'already_used' }
  *   - fresh                                 -> stamp usedAt,  { result: 'ok' }
  *
  * @param {string} hash    16-hex validationHash from the QR.
- * @param {string} [clientUsedAt] ISO-8601 timestamp captured on the device
- *                         (when the scan happened offline). When absent the
- *                         server clock stamps the mark.
+ * @param {object} [opts]
+ * @param {string} [opts.clientUsedAt] ISO-8601 timestamp captured on the
+ *                 device (when the scan happened offline). When absent the
+ *                 server clock stamps the mark.
+ * @param {number|string} [opts.eventId] When given (the public scan flow,
+ *                 Phase 2), the ticket must belong to this event — a hash
+ *                 scanned under the wrong event's keyword must never mark
+ *                 entry. Omitted for the organizer-credentialed endpoints
+ *                 (hashes are globally unique, so those stay event-agnostic).
  */
-async function markUsed(hash, clientUsedAt) {
+async function markUsed(hash, { clientUsedAt, eventId } = {}) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -93,13 +100,17 @@ async function markUsed(hash, clientUsedAt) {
     // "only confirmed tickets scan" invariant explicit and testable rather
     // than resting solely on the implicit absence of a hash.
     const [[ticket]] = await conn.query(
-      "SELECT id, holderName, isUsed, usedAt FROM tickets WHERE validationHash = ? AND status = 'confirmed' FOR UPDATE",
+      "SELECT id, eventId, holderName, isUsed, usedAt FROM tickets WHERE validationHash = ? AND status = 'confirmed' FOR UPDATE",
       [hash],
     );
 
     if (!ticket) {
       await conn.rollback();
       return { hash, result: 'invalid' };
+    }
+    if (eventId != null && Number(ticket.eventId) !== Number(eventId)) {
+      await conn.rollback();
+      return { hash, result: 'wrong_event' };
     }
 
     // Resolve the timestamp to persist: a client-supplied (offline) time wins
@@ -152,7 +163,7 @@ export const scanTicket = async (req, res) => {
     if (!hash) {
       return res.status(400).json({ message: 'hash requerido' });
     }
-    const outcome = await markUsed(hash, usedAt);
+    const outcome = await markUsed(hash, { clientUsedAt: usedAt });
     // 'invalid' is a 404 so the client can branch; 'ok'/'already_used' are 200.
     if (outcome.result === 'invalid') {
       return res.status(404).json(outcome);
@@ -191,7 +202,7 @@ export const syncScans = async (req, res) => {
       // Process sequentially: each is a short, lock-scoped transaction and the
       // queue at one door is small. Keeps the earliest-usedAt rule deterministic.
       // eslint-disable-next-line no-await-in-loop
-      const outcome = await markUsed(scan.hash, scan.usedAt);
+      const outcome = await markUsed(scan.hash, { clientUsedAt: scan.usedAt });
       reconciliation.push(outcome);
       if (outcome.result === 'ok') admitted += 1;
       else if (outcome.result === 'already_used') duplicates += 1;
@@ -207,6 +218,72 @@ export const syncScans = async (req, res) => {
     });
   } catch (error) {
     sendErrorEmail(req, error, 'syncScans');
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * ── Public scanner (Phase 2, migration 013) ────────────────────────────────
+ * No organizer login: anyone opens /scan, picks an event, types its
+ * scanKeyword, and can then scan + mark-used FOR THAT EVENT ONLY. Rate-
+ * limited at the route (both endpoints) — a low-stakes shared door code is a
+ * brute-forceable secret if left unthrottled.
+ */
+
+/**
+ * GET /api/scan/events  (public, rate-limited)
+ * Every event that currently allows public scanning — has a keyword set and
+ * isn't archived. Deliberately leaks nothing else about the event (no
+ * scanKeyword itself, no venue/slug/stage data) — just enough to pick one.
+ */
+export const listPublicScanEvents = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, name, CONVERT_TZ(eventDate, '${UTC}', '${BOGOTA}') AS eventDate
+         FROM events
+        WHERE scanKeyword IS NOT NULL AND isArchived = 0
+        ORDER BY eventDate DESC`,
+    );
+    res.json(rows);
+  } catch (error) {
+    sendErrorEmail(req, error, 'listPublicScanEvents');
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * POST /api/scan  (public, rate-limited)
+ * body: { eventId, keyword, hash }. Validates the keyword for that event
+ * (trimmed, case-insensitive — never rely on DB collation for this compare),
+ * then marks the ticket used, scoped to that event: a correct keyword for
+ * event A can only ever admit event A's tickets.
+ */
+export const publicScanTicket = async (req, res) => {
+  try {
+    const { eventId, keyword, hash } = req.body || {};
+    if (!eventId || !keyword || !hash) {
+      return res.status(400).json({ message: 'eventId, keyword y hash son requeridos' });
+    }
+    const [[event]] = await pool.query(
+      'SELECT scanKeyword FROM events WHERE id = ? AND isArchived = 0',
+      [eventId],
+    );
+    const matches = event?.scanKeyword
+      && String(keyword).trim().toLowerCase() === String(event.scanKeyword).trim().toLowerCase();
+    if (!matches) {
+      return res.status(403).json({ message: 'Palabra clave incorrecta' });
+    }
+
+    const outcome = await markUsed(hash, { eventId });
+    if (outcome.result === 'invalid') {
+      return res.status(404).json(outcome);
+    }
+    if (outcome.result === 'wrong_event') {
+      return res.status(409).json({ ...outcome, message: 'Esta boleta es de otro evento' });
+    }
+    res.json(outcome);
+  } catch (error) {
+    sendErrorEmail(req, error, 'publicScanTicket');
     return res.status(500).json({ message: error.message });
   }
 };

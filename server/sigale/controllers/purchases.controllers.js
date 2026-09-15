@@ -62,13 +62,44 @@ async function nextOrderId(conn) {
 }
 
 /**
+ * Resolve + validate the buyer's preferred artist against the event's own
+ * line-up (Phase 2, migration 011). `eventArtists` is the raw `events.artists`
+ * JSON column value (may already be parsed, or still a string from mysql2).
+ * An event with no line-up needs no artist — the column stays NULL for it
+ * (legacy rows are NULL for the same reason: the feature didn't exist yet).
+ * Otherwise a non-empty, exact, in-line-up value is required — returns
+ * { value, error } so callers can 400 with a specific message.
+ */
+export function resolvePreferredArtist(eventArtists, submitted) {
+  let artists = eventArtists;
+  if (typeof artists === 'string') {
+    try {
+      artists = JSON.parse(artists);
+    } catch {
+      artists = [];
+    }
+  }
+  if (!Array.isArray(artists) || artists.length === 0) {
+    return { value: null, error: null };
+  }
+  const value = String(submitted || '').trim();
+  if (!value) {
+    return { value: null, error: 'Selecciona el artista que prefieres ver' };
+  }
+  if (!artists.includes(value)) {
+    return { value: null, error: 'El artista seleccionado no está en la alineación del evento' };
+  }
+  return { value, error: null };
+}
+
+/**
  * POST /api/purchases  (public)
  * Reserve `quantity` spots on a stage and open a pending_payment purchase.
  * Idempotent on idempotencyKey: a retry with the same key returns the
  * original purchase instead of double-reserving.
  */
 export const createPurchase = async (req, res) => {
-  const { eventId, stageId, quantity, deliveryMethod, deliveryContact, holders, idempotencyKey } = req.body;
+  const { eventId, stageId, quantity, deliveryMethod, deliveryContact, holders, idempotencyKey, preferredArtist } = req.body;
 
   // At reservation time the buyer has only chosen quantity + stage; the
   // delivery method/contact and holder names are collected later and filled
@@ -116,14 +147,26 @@ export const createPurchase = async (req, res) => {
     // simulates the flow locally, but the backend must refuse regardless of
     // what a client sends — and online sales are closed per-event via
     // salesOpen (replaces the retired global ONLINE_SALES_OPEN flag).
-    const [[event]] = await conn.query('SELECT isDemo, salesOpen FROM events WHERE id = ?', [stage.eventId]);
+    const [[event]] = await conn.query('SELECT isDemo, salesOpen, isArchived, artists FROM events WHERE id = ?', [stage.eventId]);
     if (event?.isDemo) {
       await conn.rollback();
       return res.status(409).json({ message: 'El evento de demostración es de solo lectura' });
     }
+    // Archived blocks NEW sales regardless of salesOpen (Phase 2) — an
+    // organizer finishing an archived event can still confirm/reject
+    // existing orders, but no new order may be opened against it.
+    if (event?.isArchived) {
+      await conn.rollback();
+      return res.status(409).json({ message: 'El evento está archivado' });
+    }
     if (!event?.salesOpen) {
       await conn.rollback();
       return res.status(409).json({ message: 'Las ventas en línea están cerradas para este evento' });
+    }
+    const { value: artistValue, error: artistError } = resolvePreferredArtist(event?.artists, preferredArtist);
+    if (artistError) {
+      await conn.rollback();
+      return res.status(400).json({ message: artistError });
     }
 
     // 2. Availability check (in the app, under the lock).
@@ -193,6 +236,7 @@ export const createPurchase = async (req, res) => {
           h?.phone || null,
           method,
           contact,
+          artistValue,
           'pending_payment',
           j === 0 ? (idempotencyKey || null) : null, // idempotencyKey — row 0 only
           reservationExpiresAt,
@@ -202,7 +246,7 @@ export const createPurchase = async (req, res) => {
         await conn.query(
           `INSERT INTO tickets
              (orderId, orderAnchor, eventId, stageId, unitPrice, holderName, holderIdNumber, holderPhone,
-              deliveryMethod, deliveryContact, status, idempotencyKey, reservationExpiresAt)
+              deliveryMethod, deliveryContact, preferredArtist, status, idempotencyKey, reservationExpiresAt)
            VALUES ?`,
           [rows],
         );

@@ -20,6 +20,7 @@ import purchasesRoutes from './routes/purchases.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import guestPassesRoutes from './routes/guestPasses.routes.js';
 import scanRoutes from './routes/scan.routes.js';
+import organizersRoutes from './routes/organizers.routes.js';
 
 import { runMigrations } from './migrations/runMigrations.js';
 import { startScheduler } from './jobs/scheduler.js';
@@ -37,6 +38,7 @@ export function mountSigale(app) {
   app.use(adminRoutes);
   app.use(guestPassesRoutes);
   app.use(scanRoutes);
+  app.use(organizersRoutes);
   console.log(`[${new Date().toISOString()}] [sigale] Routes mounted on shared app`);
 }
 

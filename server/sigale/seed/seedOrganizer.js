@@ -35,8 +35,11 @@ async function seed() {
 
   // Idempotent: insert once; on a repeat run the unique username
   // collides and we leave the existing row untouched.
+  // Phase 2 (roles): this script only ever bootstraps the FIRST account, so
+  // it is always a super_admin — every account created afterwards (via the
+  // organizers-admin API) defaults to event_admin instead.
   const [result] = await pool.query(
-    'INSERT INTO organizers (username, passwordHash) VALUES (?, ?) ' +
+    "INSERT INTO organizers (username, passwordHash, role, isActive) VALUES (?, ?, 'super_admin', 1) " +
       'ON DUPLICATE KEY UPDATE id = id',
     [username, passwordHash],
   );

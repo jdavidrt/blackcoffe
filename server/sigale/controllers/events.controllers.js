@@ -22,12 +22,18 @@
 import pool from '../db.js';
 import { sendErrorEmail } from '../utils/emailNotifier.js';
 import { BOGOTA, UTC } from '../utils/time.js';
+import { assertNotDemo, assertOwnsEvent } from '../utils/authz.js';
 
 // Columns we expose to the public, with datetimes converted to Bogotá time.
+// isArchived IS exposed here (unlike scanKeyword, which never appears in any
+// public payload): getEventById/getEventBySlug deliberately stay reachable
+// for an archived event ("still resolvable by direct slug", Phase 2 spec), so
+// LandingPage/PurchaseFlow need isArchived to gate the CTA and wizard
+// ((salesOpen && !isArchived) || isDemo).
 const EVENT_SELECT = `
   SELECT id, slug, name, description, artists, venue, address, venueCapacity,
          flyerImageUrl, bankQrImageUrl, whatsappNumber, isActive,
-         isPublished, isDemo, salesOpen,
+         isPublished, isDemo, salesOpen, isArchived,
          CONVERT_TZ(eventDate,   '${UTC}', '${BOGOTA}') AS eventDate,
          CONVERT_TZ(openingTime, '${UTC}', '${BOGOTA}') AS openingTime,
          CONVERT_TZ(createdAt,   '${UTC}', '${BOGOTA}') AS createdAt
@@ -124,7 +130,11 @@ export const getEventById = async (req, res) => {
  */
 export const listPublishedEvents = async (req, res) => {
   try {
-    const [rows] = await pool.query(`${EVENT_LIST_SELECT} WHERE isPublished = 1 ORDER BY eventDate DESC`);
+    // Archived events (Phase 2) are excluded regardless of isPublished — an
+    // archived event is "put away", not merely unlisted.
+    const [rows] = await pool.query(
+      `${EVENT_LIST_SELECT} WHERE isPublished = 1 AND isArchived = 0 ORDER BY eventDate DESC`,
+    );
     res.json(rows);
   } catch (error) {
     sendErrorEmail(req, error, 'listPublishedEvents');
@@ -133,12 +143,37 @@ export const listPublishedEvents = async (req, res) => {
 };
 
 /**
- * GET /api/events/all  (organizer — requireOrganizer at the route)
- * Every event regardless of isPublished, for the organizer's event selector.
+ * GET /api/events/all?includeArchived=1  (organizer — requireOrganizer at the route)
+ * Every event the caller can manage, for the organizer's event selector and
+ * the events-admin page.
+ *
+ * Phase 2 role scoping: a `super_admin` sees every event (archived excluded
+ * unless includeArchived=1, for the events-admin "show archived" toggle); an
+ * `event_admin` sees only events it is assigned to via `organizer_events`
+ * (archived always excluded — an event_admin has no archive UI). This is the
+ * ONLY response that carries `scanKeyword` — never the public list/by-slug/
+ * by-id payloads (migration 013's security invariant).
  */
 export const listAllEvents = async (req, res) => {
   try {
-    const [rows] = await pool.query(`${EVENT_LIST_SELECT} ORDER BY eventDate DESC`);
+    const includeArchived = req.query.includeArchived === '1' && req.organizer?.role === 'super_admin';
+    const cols = `e.id, e.slug, e.name, e.venue, e.flyerImageUrl, e.isDemo, e.isPublished, e.salesOpen,
+         e.isArchived, e.scanKeyword,
+         CONVERT_TZ(e.eventDate, '${UTC}', '${BOGOTA}') AS eventDate`;
+
+    let sql;
+    const params = [];
+    if (req.organizer?.role === 'super_admin') {
+      sql = `SELECT ${cols} FROM events e`;
+      if (!includeArchived) sql += ' WHERE e.isArchived = 0';
+    } else {
+      sql = `SELECT ${cols} FROM events e
+             JOIN organizer_events oe ON oe.eventId = e.id AND oe.organizerId = ?
+             WHERE e.isArchived = 0`;
+      params.push(req.organizer?.id);
+    }
+    sql += ' ORDER BY e.eventDate DESC';
+    const [rows] = await pool.query(sql, params);
     res.json(rows);
   } catch (error) {
     sendErrorEmail(req, error, 'listAllEvents');
@@ -182,7 +217,7 @@ const RESERVED_SLUGS = new Set([
   'admin', 'scan', 'compra', 'tickets', 'dashboard', 'evento', 'edit',
   'edit-event', 'create-event', 'sell-tickets', 'guest-passes',
   'lista-puerta', 'validate-qr', 'api', 'assets', 'sw.js', 'manifest.json',
-  'robots.txt', 'favicon.ico',
+  'robots.txt', 'favicon.ico', 'events-admin', 'organizers',
 ]);
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -202,6 +237,24 @@ function validateSlug(slug) {
     return 'Esa URL está reservada, elige otra';
   }
   return null;
+}
+
+/**
+ * Normalize a submitted `scanKeyword` (Phase 2, migration 013):
+ *   - undefined (field omitted)             -> { value: undefined } — "no change" sentinel
+ *   - null / '' (explicitly cleared)         -> { value: null }      — disables public scanning
+ *   - a string                               -> trimmed, 6–80 chars, else an error message
+ * Callers resolve the `undefined` case themselves (create: defaults to null;
+ * update: keeps the currently stored value) — see createEvent/updateEvent.
+ */
+function normalizeScanKeyword(raw) {
+  if (raw === undefined) return { value: undefined, error: null };
+  if (raw === null || raw === '') return { value: null, error: null };
+  const trimmed = String(raw).trim();
+  if (trimmed.length < 6 || trimmed.length > 80) {
+    return { value: null, error: 'La palabra clave de escaneo debe tener entre 6 y 80 caracteres' };
+  }
+  return { value: trimmed, error: null };
 }
 
 /**
@@ -272,6 +325,10 @@ export const createEvent = async (req, res) => {
   if (slugError) {
     return res.status(409).json({ message: slugError });
   }
+  const { value: scanKeyword, error: scanKeywordError } = normalizeScanKeyword(req.body.scanKeyword);
+  if (scanKeywordError) {
+    return res.status(409).json({ message: scanKeywordError });
+  }
 
   const conn = await pool.getConnection();
   try {
@@ -284,11 +341,11 @@ export const createEvent = async (req, res) => {
     const [result] = await conn.query(
       `INSERT INTO events
          (slug, name, description, artists, eventDate, openingTime, venue, address, venueCapacity,
-          flyerImageUrl, bankQrImageUrl, whatsappNumber, isActive, isPublished, salesOpen)
+          flyerImageUrl, bankQrImageUrl, whatsappNumber, isActive, isPublished, salesOpen, scanKeyword)
        VALUES (?, ?, ?, CAST(? AS JSON),
                CONVERT_TZ(?, '${BOGOTA}', '${UTC}'),
                CONVERT_TZ(?, '${BOGOTA}', '${UTC}'),
-               ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+               ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
       [
         b.slug || null,
         b.name,
@@ -304,11 +361,23 @@ export const createEvent = async (req, res) => {
         b.whatsappNumber || null,
         b.isPublished ? 1 : 0,
         b.salesOpen ? 1 : 0,
+        scanKeyword ?? null,
       ],
     );
 
     const eventId = result.insertId;
     await insertStages(conn, eventId, b.stages);
+
+    // Attribution (Phase 2, decision #2): the creating account is recorded
+    // as assigned to the event it just made, whether super_admin (a "my
+    // events" filter) or, in the future, any role that gains create rights.
+    // Idempotent no-op if the row somehow already exists.
+    if (req.organizer?.id) {
+      await conn.query(
+        'INSERT IGNORE INTO organizer_events (organizerId, eventId) VALUES (?, ?)',
+        [req.organizer.id, eventId],
+      );
+    }
 
     await conn.commit();
 
@@ -352,41 +421,62 @@ export const updateEvent = async (req, res) => {
     const eventId = req.params.id;
 
     const [[current]] = await conn.query(
-      'SELECT isDemo, isPublished, salesOpen FROM events WHERE id = ? FOR UPDATE',
+      'SELECT isDemo, isPublished, salesOpen, scanKeyword FROM events WHERE id = ? FOR UPDATE',
       [eventId],
     );
     if (!current) {
       await conn.rollback();
       return res.status(404).json({ message: 'Evento no encontrado' });
     }
+    const ownError = await assertOwnsEvent(conn, req.organizer, eventId);
+    if (ownError) {
+      await conn.rollback();
+      return res.status(403).json({ message: ownError });
+    }
     const isDemo = Number(current.isDemo) === 1;
+    // Phase 2: slug and isPublished are super_admin-only edits. An
+    // event_admin's request keeps whatever is already stored for both,
+    // exactly like the pre-existing demo carve-out below — same mechanism,
+    // two different reasons.
+    const isSuperAdmin = req.organizer?.role === 'super_admin';
 
-    // Demo row: slug/isDemo are permanently fixed — skip slug validation and
-    // never write either column, regardless of what the form submits. The
-    // edit form re-submits the unchanged slug 'demo' on every save; without
-    // this carve-out a routine copy/flyer fix on the demo would risk tripping
+    // Demo row (or a non-super_admin caller): slug is permanently fixed —
+    // skip slug validation and never write it, regardless of what the form
+    // submits. The edit form re-submits the unchanged slug on every save;
+    // without this carve-out a routine copy/flyer fix would risk tripping
     // slug validation for no reason. Every other field stays editable.
-    if (!isDemo) {
+    const slugLocked = isDemo || !isSuperAdmin;
+    if (!slugLocked) {
       const slugError = validateSlug(b.slug);
       if (slugError) {
         await conn.rollback();
         return res.status(409).json({ message: slugError });
       }
     }
+    const { value: scanKeywordSubmitted, error: scanKeywordError } = normalizeScanKeyword(b.scanKeyword);
+    if (scanKeywordError) {
+      await conn.rollback();
+      return res.status(409).json({ message: scanKeywordError });
+    }
 
     // isPublished/salesOpen fall back to the current value when the body
     // omits them (deploy-window compat: the old form doesn't send these
     // fields, so an edit through it must not silently unpublish/close sales
-    // on an existing event).
-    const isPublished = b.isPublished !== undefined ? (b.isPublished ? 1 : 0) : Number(current.isPublished);
+    // on an existing event). isPublished ALSO falls back for a non-super_admin
+    // caller even when submitted — toggling landing visibility is
+    // super_admin-only (Phase 2 decision #4).
+    const isPublished = (b.isPublished !== undefined && isSuperAdmin)
+      ? (b.isPublished ? 1 : 0)
+      : Number(current.isPublished);
     const salesOpen = b.salesOpen !== undefined ? (b.salesOpen ? 1 : 0) : Number(current.salesOpen);
+    const scanKeyword = scanKeywordSubmitted === undefined ? current.scanKeyword : scanKeywordSubmitted;
 
     const updates = [
       'name = ?', 'description = ?', 'artists = CAST(? AS JSON)',
       `eventDate = CONVERT_TZ(?, '${BOGOTA}', '${UTC}')`,
       `openingTime = CONVERT_TZ(?, '${BOGOTA}', '${UTC}')`,
       'venue = ?', 'address = ?', 'venueCapacity = ?', 'flyerImageUrl = ?', 'bankQrImageUrl = ?',
-      'whatsappNumber = ?', 'isPublished = ?', 'salesOpen = ?',
+      'whatsappNumber = ?', 'isPublished = ?', 'salesOpen = ?', 'scanKeyword = ?',
     ];
     const params = [
       b.name,
@@ -402,8 +492,9 @@ export const updateEvent = async (req, res) => {
       b.whatsappNumber || null,
       isPublished,
       salesOpen,
+      scanKeyword,
     ];
-    if (!isDemo) {
+    if (!slugLocked) {
       updates.push('slug = ?');
       params.push(b.slug || null);
     }
@@ -547,6 +638,41 @@ export const updateEvent = async (req, res) => {
     await conn.rollback();
     sendErrorEmail(req, error, 'updateEvent');
     return res.status(500).json({ message: error.message, sqlMessage: error.sqlMessage });
+  } finally {
+    conn.release();
+  }
+};
+
+/**
+ * PATCH /api/events/:id/archive  (super_admin — requireSuperAdmin at the route)
+ * body: { isArchived: 0 | 1 }. Reversible "put away" switch (Phase 2,
+ * migration 012) — the replacement for event deletion. Archiving only blocks
+ * NEW sales (enforced in purchases.controllers.js / admin.controllers.js);
+ * confirming pending orders, ticket edits, guest passes, and scanning all
+ * keep working, so an organizer can finish an archived event. The demo is
+ * never archivable.
+ */
+export const archiveEvent = async (req, res) => {
+  const isArchived = req.body?.isArchived ? 1 : 0;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const demoError = await assertNotDemo(conn, req.params.id);
+    if (demoError) {
+      await conn.rollback();
+      return res.status(409).json({ message: demoError });
+    }
+    const [result] = await conn.query('UPDATE events SET isArchived = ? WHERE id = ?', [isArchived, req.params.id]);
+    if (result.affectedRows === 0) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
+    await conn.commit();
+    res.json({ ok: true, isArchived: !!isArchived });
+  } catch (error) {
+    await conn.rollback();
+    sendErrorEmail(req, error, 'archiveEvent');
+    return res.status(500).json({ message: error.message });
   } finally {
     conn.release();
   }

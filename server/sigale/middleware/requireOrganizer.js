@@ -33,8 +33,18 @@ function parseBasic(header) {
 
 /**
  * Validate a username/password pair against the organizers table in
- * constant-ish time. Returns the organizer ({ id, username }) on success,
- * or null on any failure. Always performs exactly one bcrypt.compare.
+ * constant-ish time. Returns the organizer ({ id, username, role }) on
+ * success, or null on any failure (including a deactivated account).
+ * Always performs exactly one bcrypt.compare.
+ *
+ * Phase 2 (roles): selects `role` + `isActive` alongside the credentials.
+ * A row with `isActive = 0` fails the same as a wrong password — it must
+ * not leak "this account exists but is deactivated" through a different
+ * status code or message (same enumeration-safety reasoning as DUMMY_HASH).
+ * Pre-migration-010 rows have no `role`/`isActive` columns yet only during
+ * the deploy window before that migration runs; MySQL then simply omits
+ * them from the row and `organizer.role` is undefined — callers must treat
+ * that the same as `event_admin` (least privilege), never as super_admin.
  */
 export async function verifyOrganizer(username, password) {
   if (!username || !password) {
@@ -42,13 +52,18 @@ export async function verifyOrganizer(username, password) {
     return null;
   }
   const [[organizer]] = await pool.query(
-    'SELECT id, username, passwordHash FROM organizers WHERE username = ? LIMIT 1',
+    'SELECT id, username, passwordHash, role, isActive FROM organizers WHERE username = ? LIMIT 1',
     [username],
   );
   const hash = organizer ? organizer.passwordHash : DUMMY_HASH;
   const ok = await bcrypt.compare(password, hash);
   if (!organizer || !ok) return null;
-  return { id: organizer.id, username: organizer.username };
+  if (organizer.isActive === 0) return null; // deactivated — same outcome as wrong password
+  return {
+    id: organizer.id,
+    username: organizer.username,
+    role: organizer.role || 'event_admin',
+  };
 }
 
 export async function requireOrganizer(req, res, next) {
@@ -66,6 +81,18 @@ export async function requireOrganizer(req, res, next) {
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
+}
+
+/**
+ * Chain AFTER requireOrganizer. 403s any caller whose role isn't
+ * 'super_admin'. Used for account management, event creation, archiving,
+ * and the full-event "Delete All Tickets" wipe.
+ */
+export function requireSuperAdmin(req, res, next) {
+  if (req.organizer?.role !== 'super_admin') {
+    return res.status(403).json({ message: 'Acción reservada al administrador general' });
+  }
+  next();
 }
 
 export default requireOrganizer;

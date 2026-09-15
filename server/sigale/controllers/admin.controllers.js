@@ -16,7 +16,8 @@ import pool from '../db.js';
 import { sendErrorEmail } from '../utils/emailNotifier.js';
 import { verifyOrganizer } from '../middleware/requireOrganizer.js';
 import { BOGOTA, UTC, toSqlUtc } from '../utils/time.js';
-import { nextOrderId } from './purchases.controllers.js';
+import { nextOrderId, resolvePreferredArtist } from './purchases.controllers.js';
+import { assertNotDemo, assertOwnsEvent } from '../utils/authz.js';
 
 /**
  * Deterministic entry secret for a ticket. Keyed by (orderId, seatIndex) so it
@@ -35,24 +36,12 @@ const validationHashFor = (orderId, seatIndex) =>
     .slice(0, 16);
 
 /**
- * Multi-event read-only-demo guard. Returns a Spanish 409 message when the
- * given event is the permanent demo, else null — callers roll back and
- * return it themselves, matching every other inline guard in this file.
- * Must be called by EVERY mutating admin path that touches tickets/
- * ticket_stages for a specific event; `markUsed` in scan.controllers.js is
- * the one deliberate exception (scanning the seeded demo tickets is the
- * point of the demo, and the write is reversible by the nightly rearm job).
- */
-async function assertNotDemo(conn, eventId) {
-  const [[event]] = await conn.query('SELECT isDemo FROM events WHERE id = ?', [eventId]);
-  return event?.isDemo ? 'El evento de demostración es de solo lectura' : null;
-}
-
-/**
  * POST /api/login  (public, rate-limited at the route)
  * Validates username + bcrypt password via the shared verifyOrganizer
- * (constant-time against username enumeration, plan §6). Returns ok only
- * (no token): the client re-sends Basic creds on each /api/admin/* call.
+ * (constant-time against username enumeration, plan §6). Returns ok +
+ * username + role (no token): the client re-sends Basic creds on each
+ * /api/admin/* call. `role` is for UI gating only — the server is the
+ * actual gate on every write (requireSuperAdmin / assertOwnsEvent).
  */
 export const login = async (req, res) => {
   try {
@@ -64,7 +53,7 @@ export const login = async (req, res) => {
     if (!organizer) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
-    res.json({ ok: true, username: organizer.username });
+    res.json({ ok: true, username: organizer.username, role: organizer.role });
   } catch (error) {
     sendErrorEmail(req, error, 'login');
     return res.status(500).json({ message: error.message });
@@ -83,12 +72,21 @@ export const login = async (req, res) => {
 export const getAdminPurchases = async (req, res) => {
   try {
     const { status, orderId, eventId } = req.query;
-    const where = [];
-    const params = [];
+    // Phase 2: eventId is now required (every organizer read is scoped to
+    // one event) so an event_admin's access can be checked before any row
+    // is returned.
+    if (!eventId) {
+      return res.status(400).json({ message: 'eventId requerido' });
+    }
+    const ownError = await assertOwnsEvent(pool, req.organizer, eventId);
+    if (ownError) {
+      return res.status(403).json({ message: ownError });
+    }
+    const where = ['t.eventId = ?'];
+    const params = [eventId];
     if (status) { where.push('t.status = ?'); params.push(status); }
     if (orderId) { where.push('t.orderId = ?'); params.push(orderId); }
-    if (eventId) { where.push('t.eventId = ?'); params.push(eventId); }
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const whereSql = `WHERE ${where.join(' AND ')}`;
 
     const [rows] = await pool.query(
       `SELECT t.orderId,
@@ -97,6 +95,7 @@ export const getAdminPurchases = async (req, res) => {
               ANY_VALUE(t.status) AS status,
               ANY_VALUE(t.deliveryMethod) AS deliveryMethod,
               ANY_VALUE(t.deliveryContact) AS deliveryContact,
+              ANY_VALUE(t.preferredArtist) AS preferredArtist,
               CONVERT_TZ(ANY_VALUE(t.createdAt), '${UTC}', '${BOGOTA}') AS createdAt,
               ANY_VALUE(s.name) AS stageName
        FROM tickets t
@@ -159,8 +158,17 @@ export const getAdminPurchases = async (req, res) => {
 export const getAdminTickets = async (req, res) => {
   try {
     const { status, eventId } = req.query;
-    const conditions = [];
-    const params = [];
+    // Phase 2: eventId is now required, and access is checked before any
+    // row is returned (see the same guard on getAdminPurchases above).
+    if (!eventId) {
+      return res.status(400).json({ message: 'eventId requerido' });
+    }
+    const ownError = await assertOwnsEvent(pool, req.organizer, eventId);
+    if (ownError) {
+      return res.status(403).json({ message: ownError });
+    }
+    const conditions = ['t.eventId = ?'];
+    const params = [eventId];
     if (!status) {
       conditions.push('t.status = ?');
       params.push('confirmed');
@@ -169,17 +177,13 @@ export const getAdminTickets = async (req, res) => {
       conditions.push(`t.status IN (${statuses.map(() => '?').join(',')})`);
       params.push(...statuses);
     }
-    if (eventId) {
-      conditions.push('t.eventId = ?');
-      params.push(eventId);
-    }
-    const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereSql = `WHERE ${conditions.join(' AND ')}`;
 
     const [rows] = await pool.query(
       `SELECT t.id, t.orderId, t.eventId, t.holderName, t.holderIdNumber, t.holderPhone,
               t.validationHash, t.isUsed,
               CONVERT_TZ(t.usedAt, '${UTC}', '${BOGOTA}') AS usedAt,
-              t.status, t.deliveryMethod, t.deliveryContact, t.unitPrice,
+              t.status, t.deliveryMethod, t.deliveryContact, t.preferredArtist, t.unitPrice,
               CONVERT_TZ(t.createdAt, '${UTC}', '${BOGOTA}') AS createdAt,
               t.stageId, s.name AS stageName
        FROM tickets t
@@ -210,6 +214,10 @@ export const updateAdminTicket = async (req, res) => {
     const demoError = await assertNotDemo(pool, ticket.eventId);
     if (demoError) {
       return res.status(409).json({ message: demoError });
+    }
+    const ownError = await assertOwnsEvent(pool, req.organizer, ticket.eventId);
+    if (ownError) {
+      return res.status(403).json({ message: ownError });
     }
 
     const { holderName, holderIdNumber, holderPhone } = req.body || {};
@@ -274,6 +282,11 @@ export const confirmPurchase = async (req, res) => {
     if (demoError) {
       await conn.rollback();
       return res.status(409).json({ message: demoError });
+    }
+    const ownError = await assertOwnsEvent(conn, req.organizer, rows[0].eventId);
+    if (ownError) {
+      await conn.rollback();
+      return res.status(403).json({ message: ownError });
     }
     const status = rows[0].status;
     if (status === 'confirmed') {
@@ -351,6 +364,11 @@ export const rejectPurchase = async (req, res) => {
       await conn.rollback();
       return res.status(409).json({ message: demoError });
     }
+    const ownError = await assertOwnsEvent(conn, req.organizer, rows[0].eventId);
+    if (ownError) {
+      await conn.rollback();
+      return res.status(403).json({ message: ownError });
+    }
     const status = rows[0].status;
     if (status === 'confirmed') {
       await conn.rollback();
@@ -399,7 +417,7 @@ export const rejectPurchase = async (req, res) => {
  * step (reserved is skipped — soldQuantity += qty under the lock).
  */
 export const createWalkInSale = async (req, res) => {
-  const { eventId, stageId, quantity, holders } = req.body || {};
+  const { eventId, stageId, quantity, holders, preferredArtist } = req.body || {};
   const qty = Number(quantity);
   if (!eventId || !stageId || !Number.isInteger(qty) || qty < 1) {
     return res.status(400).json({ message: 'Datos de venta inválidos' });
@@ -426,6 +444,24 @@ export const createWalkInSale = async (req, res) => {
     if (demoError) {
       await conn.rollback();
       return res.status(409).json({ message: demoError });
+    }
+    const ownError = await assertOwnsEvent(conn, req.organizer, stage.eventId);
+    if (ownError) {
+      await conn.rollback();
+      return res.status(403).json({ message: ownError });
+    }
+    const [[eventRow]] = await conn.query(
+      'SELECT artists, isArchived FROM events WHERE id = ?',
+      [stage.eventId],
+    );
+    if (eventRow?.isArchived) {
+      await conn.rollback();
+      return res.status(409).json({ message: 'El evento está archivado' });
+    }
+    const { value: artistValue, error: artistError } = resolvePreferredArtist(eventRow?.artists, preferredArtist);
+    if (artistError) {
+      await conn.rollback();
+      return res.status(400).json({ message: artistError });
     }
     const available = stage.totalQuantity - stage.soldQuantity - stage.reservedQuantity;
     if (available < qty) {
@@ -493,6 +529,7 @@ export const createWalkInSale = async (req, res) => {
         r.holderPhone,
         'whatsapp',
         'taquilla',
+        artistValue,
         'confirmed',
         r.validationHash,
         confirmedAt,
@@ -502,7 +539,7 @@ export const createWalkInSale = async (req, res) => {
         const [result] = await conn.query(
           `INSERT INTO tickets
              (orderId, orderAnchor, eventId, stageId, unitPrice, holderName, holderIdNumber, holderPhone,
-              deliveryMethod, deliveryContact, status, validationHash, confirmedAt, confirmedBy)
+              deliveryMethod, deliveryContact, preferredArtist, status, validationHash, confirmedAt, confirmedBy)
            VALUES ?`,
           [values],
         );
@@ -678,6 +715,11 @@ export const deleteAdminTicket = async (req, res) => {
       await conn.rollback();
       return res.status(409).json({ message: demoError });
     }
+    const ownError = await assertOwnsEvent(conn, req.organizer, ticket.eventId);
+    if (ownError) {
+      await conn.rollback();
+      return res.status(403).json({ message: ownError });
+    }
     if (ticket.status !== 'confirmed') {
       await conn.rollback();
       return res.status(409).json({ message: `No se puede eliminar una boleta en estado '${ticket.status}'` });
@@ -755,6 +797,11 @@ export const moveAdminTicketStage = async (req, res) => {
     if (demoError) {
       await conn.rollback();
       return res.status(409).json({ message: demoError });
+    }
+    const ownError = await assertOwnsEvent(conn, req.organizer, ticket.eventId);
+    if (ownError) {
+      await conn.rollback();
+      return res.status(403).json({ message: ownError });
     }
     if (ticket.status !== 'confirmed') {
       await conn.rollback();

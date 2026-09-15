@@ -10,7 +10,7 @@
  */
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { requireOrganizer } from '../middleware/requireOrganizer.js';
+import { requireOrganizer, requireSuperAdmin } from '../middleware/requireOrganizer.js';
 import {
   login,
   getAdminPurchases,
@@ -37,7 +37,8 @@ const loginLimiter = rateLimit({
 router.post('/api/login', loginLimiter, login);
 
 router.get('/api/admin/purchases', requireOrganizer, getAdminPurchases);
-router.delete('/api/admin/purchases', requireOrganizer, deleteAllPurchases);
+// Phase 2: full event wipe is super_admin-only.
+router.delete('/api/admin/purchases', requireOrganizer, requireSuperAdmin, deleteAllPurchases);
 router.get('/api/admin/tickets', requireOrganizer, getAdminTickets);
 router.patch('/api/admin/tickets/:id', requireOrganizer, updateAdminTicket);
 router.patch('/api/admin/tickets/:id/stage', requireOrganizer, moveAdminTicketStage);

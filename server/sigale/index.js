@@ -26,6 +26,7 @@ import purchasesRoutes from './routes/purchases.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import guestPassesRoutes from './routes/guestPasses.routes.js';
 import scanRoutes from './routes/scan.routes.js';
+import organizersRoutes from './routes/organizers.routes.js';
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use(purchasesRoutes);
 app.use(adminRoutes);
 app.use(guestPassesRoutes);
 app.use(scanRoutes);
+app.use(organizersRoutes);
 
 // ── Global error middleware ── after all routes ─────────────────────────────────
 // eslint-disable-next-line no-unused-vars

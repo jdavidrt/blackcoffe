@@ -17,7 +17,7 @@
  * check used for /api/admin/*.
  */
 import { Router } from 'express';
-import { requireOrganizer } from '../middleware/requireOrganizer.js';
+import { requireOrganizer, requireSuperAdmin } from '../middleware/requireOrganizer.js';
 import {
   getActiveEvent,
   listAllEvents,
@@ -26,6 +26,7 @@ import {
   getEventById,
   createEvent,
   updateEvent,
+  archiveEvent,
 } from '../controllers/events.controllers.js';
 
 const router = Router();
@@ -36,7 +37,10 @@ router.get('/api/events/by-slug/:slug', getEventBySlug);
 router.get('/api/events', listPublishedEvents);
 router.get('/api/events/:id', getEventById);
 
-router.post('/api/events', requireOrganizer, createEvent);
+// Phase 2: creating an event is super_admin-only; editing is open to any
+// organizer who owns the event (assertOwnsEvent inside updateEvent).
+router.post('/api/events', requireOrganizer, requireSuperAdmin, createEvent);
 router.put('/api/events/:id', requireOrganizer, updateEvent);
+router.patch('/api/events/:id/archive', requireOrganizer, requireSuperAdmin, archiveEvent);
 
 export default router;

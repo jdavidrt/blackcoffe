@@ -14,6 +14,7 @@
 import pool from '../db.js';
 import { sendErrorEmail } from '../utils/emailNotifier.js';
 import { fromUtc } from '../utils/time.js';
+import { assertOwnsEvent } from '../utils/authz.js';
 
 const TYPES = ['artist', 'crew', 'courtesy'];
 const MAX_BULK_ENTRIES = 200;
@@ -28,6 +29,8 @@ export const listGuestPasses = async (req, res) => {
   try {
     const { eventId } = req.query;
     if (!eventId) return res.status(400).json({ message: 'eventId es requerido' });
+    const ownError = await assertOwnsEvent(pool, req.organizer, eventId);
+    if (ownError) return res.status(403).json({ message: ownError });
 
     const [rows] = await pool.query(
       `SELECT id, eventId, band, holderName, holderIdNumber, type, ${fromUtc('createdAt', 'createdAt')}
@@ -49,6 +52,8 @@ export const createGuestPass = async (req, res) => {
   try {
     const { eventId, band, holderName, holderIdNumber, type } = req.body || {};
     if (!eventId) return res.status(400).json({ message: 'eventId es requerido' });
+    const ownError = await assertOwnsEvent(pool, req.organizer, eventId);
+    if (ownError) return res.status(403).json({ message: ownError });
     if (!band || !String(band).trim()) return res.status(400).json({ message: 'Banda requerida' });
     if (!holderName || !String(holderName).trim()) return res.status(400).json({ message: 'Nombre requerido' });
     if (!holderIdNumber || !String(holderIdNumber).trim()) {
@@ -87,6 +92,8 @@ export const createGuestPassesBulk = async (req, res) => {
   try {
     const { eventId, band, type, entries } = req.body || {};
     if (!eventId) return res.status(400).json({ message: 'eventId es requerido' });
+    const ownError = await assertOwnsEvent(pool, req.organizer, eventId);
+    if (ownError) return res.status(403).json({ message: ownError });
     if (!band || !String(band).trim()) return res.status(400).json({ message: 'Banda requerida' });
     if (!TYPES.includes(type)) return res.status(400).json({ message: 'Tipo inválido' });
     if (!Array.isArray(entries) || entries.length === 0) {
@@ -138,6 +145,11 @@ export const createGuestPassesBulk = async (req, res) => {
 export const updateGuestPass = async (req, res) => {
   try {
     const { id } = req.params;
+    const [[existing]] = await pool.query('SELECT eventId FROM guest_passes WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ message: 'Registro no encontrado' });
+    const ownError = await assertOwnsEvent(pool, req.organizer, existing.eventId);
+    if (ownError) return res.status(403).json({ message: ownError });
+
     const { band, holderName, holderIdNumber, type } = req.body || {};
 
     const sets = [];
@@ -185,6 +197,11 @@ export const updateGuestPass = async (req, res) => {
  */
 export const deleteGuestPass = async (req, res) => {
   try {
+    const [[existing]] = await pool.query('SELECT eventId FROM guest_passes WHERE id = ?', [req.params.id]);
+    if (!existing) return res.status(404).json({ message: 'Registro no encontrado' });
+    const ownError = await assertOwnsEvent(pool, req.organizer, existing.eventId);
+    if (ownError) return res.status(403).json({ message: ownError });
+
     const [result] = await pool.query('DELETE FROM guest_passes WHERE id = ?', [req.params.id]);
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Registro no encontrado' });
     res.json({ ok: true });

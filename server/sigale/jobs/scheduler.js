@@ -56,12 +56,16 @@ export async function activateDueStages() {
   try {
     await conn.beginTransaction();
 
+    // Phase 2: an archived event's stages must never auto-activate — archiving
+    // means "no new sales," and a scheduled activation is exactly that.
     const [due] = await conn.query(
-      `SELECT id, eventId FROM ticket_stages
-        WHERE status = 'upcoming'
-          AND activatesAt IS NOT NULL
-          AND activatesAt <= UTC_TIMESTAMP()
-        FOR UPDATE`,
+      `SELECT ts.id, ts.eventId FROM ticket_stages ts
+        JOIN events e ON e.id = ts.eventId
+       WHERE ts.status = 'upcoming'
+         AND ts.activatesAt IS NOT NULL
+         AND ts.activatesAt <= UTC_TIMESTAMP()
+         AND e.isArchived = 0
+       FOR UPDATE`,
     );
 
     for (const stage of due) {
