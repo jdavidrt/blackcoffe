@@ -5,15 +5,15 @@
 -- runMigrations.js MARKS this file applied (it does not execute it)
 -- once it detects a cut-over database via `tickets_legacy_v1`.
 -- DO NOT delete, renumber, or "fix" this file.
--- Current schema: docs/architecture/TICKETS_SCHEMA.md
+-- Current schema: docs/architecture/DB_SCHEMA.md
 -- ============================================================
 
 -- ============================================================
--- SÍGALE 2.0 — INITIAL SCHEMA (migration 001)
--- ADR-0001 §5 DDL, clean table names (no prefix), InnoDB + utf8mb4.
--- Schema delta vs ADR: events.isActive resolves "the one active event".
+-- SÍGALE — INITIAL SCHEMA (migration 001)
+-- Original DDL, clean table names (no prefix), InnoDB + utf8mb4.
+-- events.isActive resolved "the one active event" (unused since 008).
 --
--- GUARDRAIL (SIGALE_2.0_IMPLEMENTATION_PLAN §3.1):
+-- GUARDRAIL (server/README.md):
 --   This migration touches ONLY Sígale's own tables
 --   (organizers, events, ticket_stages, purchases, tickets).
 --   It NEVER references BlackCoffe tables (orders, deposits,
@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS events (
   name            VARCHAR(160) NOT NULL,
   description     TEXT NULL,
   artists         JSON NOT NULL,                  -- array of strings
-  eventDate       DATETIME     NOT NULL,          -- stored UTC (ADR §8)
-  openingTime     DATETIME     NOT NULL,          -- stored UTC (ADR §8)
+  eventDate       DATETIME     NOT NULL,          -- stored UTC
+  openingTime     DATETIME     NOT NULL,          -- stored UTC
   venue           VARCHAR(200) NOT NULL,
   venueCapacity   INT UNSIGNED NOT NULL,          -- aforo: absolute ceiling
   flyerImageUrl   VARCHAR(500) NULL,
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   holderName      VARCHAR(160) NOT NULL,
   holderIdNumber  VARCHAR(40)  NULL,
   holderPhone     VARCHAR(20)  NULL,
-  validationHash  CHAR(64) NOT NULL,                -- random secret (ADR §9), minted at confirm
+  validationHash  CHAR(64) NOT NULL,                -- minted at confirm
   isUsed          TINYINT(1) NOT NULL DEFAULT 0,
   usedAt          DATETIME NULL,
   PRIMARY KEY (id),

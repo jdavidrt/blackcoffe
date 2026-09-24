@@ -1,16 +1,14 @@
 -- ============================================================
 -- SÍGALE — MIGRATION 013: events.scanKeyword (public door-scan access)
--- DRAFT — validated in docs/architecture/DB_SCHEMA.md 2026-09-15, NOT YET
--- applied anywhere (not local, not production). No backend code reads or
--- writes this column yet.
+-- Applied in production 2026-09-15.
 --
--- Enables a NEW public door-scan model (decision 2026-09-15): /scan stops
--- requiring organizer credentials. Any individual opens /scan, picks the
+-- Enables the public door-scan model: /scan needs no organizer
+-- credentials. Any individual opens /scan, picks the
 -- event they are working, and types that event's keyword; a correct keyword
 -- unlocks the scan + register (mark-used) flow FOR THAT EVENT ONLY. Multiple
 -- people can scan the same event at once (the check is per-request and
--- stateless — no shared session). This is the only scan UI — organizers use
--- it too; POST /api/admin/scan stays API-only for compatibility.
+-- stateless — no shared session). This is the only scan path — organizers
+-- use it too.
 --
 -- Column added to `events`:
 --   scanKeyword VARCHAR(80) NULL — a shared door code the organizer sets on

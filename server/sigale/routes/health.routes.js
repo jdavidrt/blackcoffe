@@ -1,9 +1,7 @@
 /*
- * Health route. GET /api/health is the Phase 0 connectivity probe
- * that src/api/client.js#health() targets. It does NOT touch the
- * database — it only proves the Express app is up and reachable
- * through CORS, so the frontend can verify wiring before any data
- * routes exist.
+ * Health route. GET /api/health is the liveness probe that
+ * src/api/client.js#health() targets. It does NOT touch the
+ * database — it only proves the Express app is up and reachable.
  */
 import { Router } from 'express';
 

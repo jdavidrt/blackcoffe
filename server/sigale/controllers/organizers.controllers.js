@@ -1,6 +1,6 @@
 /*
  * ============================================================
- * SÍGALE — ORGANIZERS CONTROLLER (Phase 2: account management)
+ * SÍGALE — ORGANIZERS CONTROLLER (account management)
  * Every handler here sits behind requireOrganizer + requireSuperAdmin at
  * the route layer — only a super_admin manages accounts. Passwords are
  * always bcrypt-hashed before they touch the database; passwordHash is

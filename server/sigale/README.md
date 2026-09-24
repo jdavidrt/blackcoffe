@@ -1,148 +1,92 @@
-# Sígale Backend
+# Sígale backend
 
-Express + MySQL backend for Sígale. **In production**, deployed as part of the
-shared BlackCoffe server (`coffeserver.onrender.com`) while keeping its own
-connection pool, its own migration set, and its own database.
+Express + `mysql2/promise` API. In production it runs **inside BlackCoffe's
+Express server** (`coffeserver.onrender.com`) with its own pool, migrations,
+scheduler and database schema. Schema and invariants:
+[`docs/architecture/DB_SCHEMA.md`](../docs/architecture/DB_SCHEMA.md); routes:
+[`docs/architecture/PROJECT_OVERVIEW.md`](../docs/architecture/PROJECT_OVERVIEW.md#api).
 
-> **Hard guardrail.** Sígale connects **only** to the dedicated `sigale` database
-> and touches **only** its own tables (`organizers`, `events`, `ticket_stages`,
-> `tickets`, `guest_passes`). It never references BlackCoffe tables (`orders`,
-> `deposits`, `clients`, `products`, `users`) and never runs anything under
-> `reference/`. Both `db.js` and `runMigrations.js` refuse to proceed unless
-> `DB_NAME` (or `SIGALE_DB_NAME`) resolves to `sigale`. See
-> `docs/SIGALE_2.0_IMPLEMENTATION_PLAN.md` §3.1.
+## Guardrail: isolation from BlackCoffe
 
-> **This folder contains only Sígale's backend.** BlackCoffe's read-only server
-> mirror used to sit here as `server/current-server/`; on 2026-08-04 it was moved
-> out to `/reference/blackcoffe-server-snapshot/` (git-ignored) so it can't be
-> mistaken for part of this app. Its nested `sigale/` subfolder — a stale copy of
-> this very backend, missing `guestPasses.controllers.js` and migrations 005–007 —
-> was deleted at the same time. See `reference/README.md`.
+Sígale connects only to the `sigale` schema and touches only its own tables.
+`db.js` and `runMigrations.js` both refuse to start unless `SIGALE_DB_NAME`
+(or `DB_NAME`) is `sigale`. Never create, alter, drop or write BlackCoffe's
+tables (`orders`, `deposits`, `clients`, `products`, `users`). The repo's
+`.env.local` points at BlackCoffe's `defaultdb`, so pass `database: 'sigale'`
+explicitly in any ad-hoc script. Production writes are irreversible: inspect
+read-only first and confirm the exact change.
 
 ## Layout
 
 | Path | Role |
-|------|------|
-| `index.js` | Express entry: helmet + CORS + JSON + routes + error middleware; `runMigrations()` before `listen` |
-| `integration.js` | `mountSigale` / `startSigale` — the seam BlackCoffe's server uses to mount Sígale into its own app. Deliberately not imported by `index.js`; **when you add a router to `index.js`, add it here too** or the deployed app won't serve it |
-| `config.js` | `PORT` (default 25060) |
-| `db.js` | Single `mysql2/promise` pool — `sigale` DB, `dateStrings:true`, **CA-cert SSL** |
-| `controllers/` | `events`, `purchases`, `admin`, `guestPasses`, `scan` |
-| `routes/` | `health`, `events`, `purchases`, `admin`, `guestPasses`, `scan` |
-| `middleware/requireOrganizer.js` | Re-validates Basic credentials on every `/api/admin/*` request **and** on the event writes |
-| `jobs/scheduler.js` | `node-cron`: auto-activate due stages + sweep abandoned holds |
-| `migrations/runMigrations.js` | Ledger-backed runner (`schema_migrations`) + post-cutover self-heal |
-| `seed/seedOrganizer.js` | One-off bcrypt seed of the initial organizer |
-| `seed/seedSampleEvent.js` | Seeds a sample event for local work |
-| `utils/time.js` | Single source for UTC ↔ Bogotá conversion |
-| `utils/emailNotifier.js` | Resend error mailer (`sendErrorEmail`) |
+|---|---|
+| `integration.js` | `mountSigale(app)` + `startSigale()` — the seam BlackCoffe uses in production |
+| `index.js` | standalone entry for local runs (helmet, CORS, routes, migrations → listen → scheduler). **Keep its router list in sync with `integration.js`** |
+| `db.js` | the pool: `sigale` only, `dateStrings: true`, CA-verified TLS when `DB_CA_CERT` is set, plain TCP locally |
+| `controllers/`, `routes/` | `events`, `purchases`, `admin`, `guestPasses`, `scan`, `organizers`, `health` |
+| `middleware/requireOrganizer.js` | Basic-auth bcrypt check per request (+ `requireSuperAdmin`) |
+| `utils/authz.js` | `assertNotDemo` (409), `assertOwnsEvent` (403) |
+| `utils/time.js` | UTC ↔ Bogotá helpers; persist UTC, read with `CONVERT_TZ` |
+| `utils/emailNotifier.js` | `sendErrorEmail` via Resend |
+| `jobs/scheduler.js` | stage activation, 24 h hold sweep, nightly demo rearm |
+| `migrations/` | ledger-backed runner + `*.sql` (see the data-model doc) |
+| `seed/` | `seedOrganizer.js` (first account, `super_admin`), `seedSampleEvent.js` (local `prueba-local` event) |
 
-## Migrations
+## Environment
 
-Applied in filename order, **once each**, tracked in a `schema_migrations`
-ledger. The DDL is still idempotent, but a recorded file is skipped rather than
-re-run.
+| Variable | Notes |
+|---|---|
+| `SIGALE_DB_NAME=sigale` | on the shared server (BlackCoffe owns `DB_NAME`); standalone runs use `DB_NAME=sigale` |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | shared with BlackCoffe in production |
+| `DB_CA_CERT` | path to the DigitalOcean CA cert; unset locally |
+| `SCAN_HASH_SECRET` | **required in production**; keys every QR hash, rotating it invalidates all issued tickets |
+| `RESEND_API_KEY`, `NOTIFICATION_EMAIL`, `FROM_EMAIL` | error mail |
+| `ORGANIZER_USERNAME`, `ORGANIZER_INITIAL_PASSWORD` | only for `seedOrganizer.js` |
+| `PORT` | standalone only (default 25060) |
 
-| File | What it does | Status |
-|------|--------------|--------|
-| `001_init.sql` | Original DDL: `organizers`, `events`, `ticket_stages`, `purchases`, `tickets` (the old two-table split) | **Pre-cutover history** |
-| `002_event_address.sql` | Adds `events.address` (guarded via `information_schema`) | Pre-cutover history |
-| `003_sequential_orderid.sql` | `orderId` `CHAR(3)` → `INT UNSIGNED`, globally unique, starts at 100 | Pre-cutover history |
-| `004_holders_snapshot.sql` | Adds `purchases.holdersSnapshot JSON` | **Retired by 005** — the `purchases` table no longer exists |
-| `005_tickets_merge_schema.sql` | Creates `tickets_v2`, the merged order+seat schema | **Superseded by the cutover** — that table is now simply `tickets` |
-| `006_guest_passes.sql` | Creates `guest_passes` (artist/crew/courtesy roster) | **Live** |
-| `007_single_active_stage.sql` | Adds the `closed` stage status + `uqOneActiveStagePerEvent` unique index (via the `activeFlag` generated column) | **Live** |
-| `008_multi_event.sql` | Adds `events.slug` (+ `uqEventSlug`), `isPublished`, `isDemo`, `salesOpen`; creates `order_counter` (persisted orderId high-water mark) seeded from `MAX(tickets.orderId)` | **Live** |
-| `010_organizer_roles.sql` | Adds `organizers.role` (`super_admin`/`event_admin`) + `isActive`; creates `organizer_events` (many-to-many organizer↔event assignment) | **Migration drafted, application code written 2026-09-15, NEITHER applied nor deployed anywhere.** Backend (`requireSuperAdmin`, `assertOwnsEvent`, `organizers.controllers.js`) and frontend (`RequireSuperAdmin`, `/organizers`) exist on disk but untested against a real DB. Promotes the pre-existing account to `super_admin` itself. See `MULTI_EVENT_PLAN.md` "Phase 2" and `MULTI_EVENT_PLAN_STATUS.md`. `009` is still the reserved, unwritten fresh-DB-bootstrap fix below — this one was numbered around it, not in place of it |
-| `011_preferred_artist.sql` | Adds `tickets.preferredArtist` (VARCHAR(160) NULL) — the buyer's chosen act from `events.artists`, order-invariant, required at the API for new orders, for "which artist sells the most tickets" reporting | **Migration drafted, application code written 2026-09-15 (wizard step 1, walk-in dropdown, API validation), not deployed/verified.** The `/tickets` column and `/dashboard` breakdown are still not built (deliberately skipped to avoid touching tested `TicketContext`/`csvUtils` APIs). See `docs/architecture/DB_SCHEMA.md` |
-| `012_event_archive.sql` | Adds `events.isArchived` (TINYINT(1) NOT NULL DEFAULT 0) — a super-admin "put away" switch (hide from landing + default organizer list, close sales), reversible; replaces the dropped event-delete idea | **Migration drafted, application code written 2026-09-15 (archive route + `/events-admin` UI), not deployed/verified.** See `docs/architecture/DB_SCHEMA.md` |
-| `013_scan_keyword.sql` | Adds `events.scanKeyword` (VARCHAR(80) NULL) — per-event shared door code for the new public `/scan` flow (pick event + type keyword → scan that event, no organizer login; multiple concurrent scanners). Must never leak in public payloads | **Migration drafted, application code written 2026-09-15 (public `/scan` flow, rate-limited), not deployed/verified.** See `docs/architecture/DB_SCHEMA.md` |
-| `014_promote_david_superadmin.sql` | Data-only, no new columns/tables. `UPDATE organizers SET role='super_admin', isActive=1 WHERE username='David'` (explicit, belt-and-suspenders alongside 010's own generic promotion) + `INSERT IGNORE INTO organizer_events` attributing every event that exists at the time it runs to David (attribution only — a `super_admin` already reaches every event via role alone; a later-created event is attributed by `createEvent`'s own `INSERT IGNORE`, not by this migration) | **Drafted 2026-09-15, depends on 010 having applied first (same run), not deployed/verified** |
+Template: `server/.env.example`. Secrets live only in git-ignored `.env` files.
 
-**Do not delete or renumber `001`–`005`.** They are kept in place so the ledger
-and the runner's self-heal logic stay coherent; the runner marks them applied
-rather than executing them once it detects a cut-over database.
+## Deploy
 
-### The purchases → tickets cutover
+1. `./sync-sigale-server.ps1` mirrors `server/` into
+   `C:\dev\BlackCoffe\server\sigale\` (robocopy `/MIR`, excluding
+   `node_modules`, `.git`, `.env*`, `*.log`).
+2. Commit and push **in the BlackCoffe repo**; Render redeploys it.
+3. BlackCoffe's `index.js` calls `mountSigale(app)` before its static/SPA
+   fallback and `startSigale()` after `listen`. `startSigale` runs pending
+   migrations, then starts the scheduler, and swallows its own errors so a
+   Sígale failure never takes BlackCoffe down. BlackCoffe's app owns
+   `helmet`, CORS (including `https://sigale.onrender.com`) and
+   `express.json` — `mountSigale` must not add them again.
+4. New Sígale dependencies go into BlackCoffe's `package.json` too.
 
-`purchases` and `tickets` were merged into a single `tickets` table (one row per
-seat, spanning the whole order lifecycle). This **has already happened in
-production**: `tickets_v2` was renamed to `tickets`, and the originals survive as
-`purchases_legacy_v1` / `tickets_legacy_v1`.
+Check after deploying: `GET /api/health` → `{ ok: true }` and
+`GET /api/scan/events` → 200.
 
-`runMigrations.js` detects `tickets_legacy_v1` and force-marks `001`–`005` as
-applied, because their DDL declares FK constraint names that the `RENAME TABLE`
-carried onto the renamed tables — re-running them throws `ER_FK_DUP_NAME` (1826),
-which aborts the boot loop and silently blocks every later migration.
+The frontend deploys separately: push to `main` and Render rebuilds the static
+site with `VITE_API_URL` from `.env.production`.
 
-The one-off script that performed the cutover lives at
-`legacy/server/merge_purchases_into_tickets.js`. **It is destructive and must
-never be run again.**
+## Local stack
 
-⚠️ **Known gap: a fresh, empty `sigale` database does not bootstrap correctly.**
-`001_init.sql` creates the *pre-merge* `tickets` table and nothing performs the
-rename, so the controllers would query the wrong shape. Standing up a brand-new
-environment requires writing a `009_*` migration that creates the merged table
-under its final name (renumbered from the originally-earmarked `008` once that
-slot was claimed by `008_multi_event.sql`). Production is unaffected.
+Production is live and `npm run dev` already proxies `/api` to it, so a local
+backend is rarely needed — and a fresh, empty database does not bootstrap (see
+the data-model doc). When you do need one, on Windows:
 
-Full column reference: `docs/architecture/TICKETS_SCHEMA.md`.
-
-## Scheduled jobs
-
-`startScheduler()` runs after `app.listen()` and registers two jobs that fire
-every minute (and once at boot, to catch up after downtime):
-
-- **activate stages** — `upcoming` stages whose `activatesAt <= UTC_TIMESTAMP()`
-  flip to `active`. Stages without an `activatesAt` are never touched on a timer.
-  Promotion first demotes the stage it supersedes to `closed`, because
-  `uqOneActiveStagePerEvent` allows only one `active` stage per event.
-- **sweep abandoned holds** — `pending_payment` rows past their 24h
-  `reservationExpiresAt` are marked `expired` and their cupo returned to the
-  stage, in one `FOR UPDATE` transaction. `payment_submitted` is **excluded** (a
-  buyer who sent a receipt waits for manual review).
-
-Both jobs compare against `UTC_TIMESTAMP()` in SQL, so the cron cadence is only
-"how often", never "at what wall-clock time".
-
-## Local run (only against the `sigale` DB)
-
-Production is already live — don't stand up a local stack just to check
-something that is already deployed. When you do need one:
-
-```
-cd server
-npm install
-cp .env.example .env        # fill DB_*, DB_CA_CERT, SCAN_HASH_SECRET, RESEND_*, ORGANIZER_*
-node index.js               # boots, migrates, listens on PORT
-npm run seed:organizer      # one-off; set ORGANIZER_INITIAL_PASSWORD first
+```powershell
+.\dev-local.ps1 -InitDb   # first run: create the local 'sigale' DB + user
+.\dev-local.ps1           # frees ports, starts the API (migrations on boot), seeds, starts Vite
 ```
 
-Verify wiring: `curl http://localhost:25060/api/health` → `{ "ok": true, ... }`.
-See `docs/LOCAL_TESTING.md` and the repo-root `dev-local.ps1` launcher.
+Or by hand: `cd server`, `npm install`, copy `.env.example` to `.env`, then
+`npm run dev` and `npm run seed:all`. Node ≥ 20.6 is required for
+`--env-file`.
 
-## Deploying
+## Security
 
-`server/` is mirrored into the BlackCoffe repo's `server/sigale/` folder by
-`/sync-sigale-server.ps1`, then committed **in the BlackCoffe repo**. The sync
-excludes `current-server/`, `node_modules/`, `.git`, `.env*`, and `*.log`. See
-`docs/SIGALE_MERGE_INTO_SHARED_SERVER.md`.
-
-## Security notes
-
-- Organizer password stored as a **bcrypt hash**, seeded from
-  `ORGANIZER_INITIAL_PASSWORD`.
-- DB SSL **verifies** the DigitalOcean CA cert (`DB_CA_CERT`);
-  `rejectUnauthorized` stays at its secure default.
-- **Organizer-only routes** (`/api/admin/*` **and** the event writes
-  `POST /api/events`, `PUT /api/events/:id`) re-validate credentials on every
-  request via `requireOrganizer`. The shared `verifyOrganizer` runs one
-  `bcrypt.compare` even for unknown usernames (constant-time — no enumeration).
-- `/api/login` is **rate-limited** (10/min); `helmet` is enabled; request bodies
-  are capped at **64 kb**.
-- `validationHash` is a **deterministic HMAC** minted only at confirm —
-  `HMAC_SHA256(SCAN_HASH_SECRET, "${orderId}:${seatIndex}").slice(0,16)`. Unique
-  per seat and stable across holder edits, but unguessable without the secret.
-  **Set `SCAN_HASH_SECRET` in the deployed environment** — it falls back to an
-  insecure dev default otherwise, and rotating it invalidates every issued QR.
-- Keep secrets in `server/.env` (git-ignored) only.
+- bcrypt hashes (cost 12); unknown usernames still run one compare against a
+  dummy hash, and inactive accounts fail exactly like wrong passwords.
+- `/api/login` is limited to 10/min; the public scan routes to 120/min/IP.
+- Parameterized queries everywhere; explicit column lists on public inserts;
+  64 kb JSON bodies.
+- `validationHash` is minted only at confirm and never before; the scanner
+  depends on that.

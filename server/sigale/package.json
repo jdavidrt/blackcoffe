@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Sigale 2.0 backend - Express + MySQL (sigale DB). Separate from BlackCoffe; merges into the shared server in Phase 6.",
+  "description": "Sigale backend - Express + MySQL (sigale DB). Mounted into the shared BlackCoffe server via integration.js.",
   "scripts": {
     "dev": "node --env-file=.env index.js",
     "start": "node index.js",

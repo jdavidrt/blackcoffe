@@ -1,12 +1,12 @@
 /*
  * ============================================================
- * SÍGALE — TIMEZONE (single source of truth)  [Phase 5, §5]
+ * SÍGALE — TIMEZONE (single source of truth)
  *
  * One module so every controller and job speaks the same time
  * dialect, instead of redeclaring `BOGOTA`/`UTC` and the
  * CONVERT_TZ dance in five places.
  *
- * The rule (ADR-0001 §8): persist UTC (UTC_TIMESTAMP() / the
+ * The rule: persist UTC (UTC_TIMESTAMP() / the
  * CURRENT_TIMESTAMP column defaults), read back in Bogotá wall
  * time with CONVERT_TZ, format AM/PM on the client. The pool runs
  * with dateStrings:true, so DATETIME values are plain strings the

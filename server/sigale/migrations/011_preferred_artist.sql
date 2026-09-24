@@ -1,9 +1,6 @@
 -- ============================================================
 -- SÍGALE — MIGRATION 011: tickets.preferredArtist (buyer's pick)
--- DRAFT — validated in docs/architecture/DB_SCHEMA.md 2026-09-15, NOT YET
--- applied anywhere (not local, not production). No backend code reads or
--- writes this column yet, and no frontend collects it — the wizard step and
--- the dashboard breakdown are the next slice, not part of this migration.
+-- Applied in production 2026-09-15.
 --
 -- Adds one order-level column so a buyer can record which band/artist they
 -- are coming to see, letting organizers report which act drives the most

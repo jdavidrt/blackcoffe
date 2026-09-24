@@ -18,7 +18,7 @@
  * later migration (e.g. 006_guest_passes). See the cutover
  * reconciliation below.
  *
- * GUARDRAIL (SIGALE_2.0_IMPLEMENTATION_PLAN 3.1): refuses to
+ * GUARDRAIL (server/README.md): refuses to
  * run unless DB_NAME=sigale. db.js enforces the same on the
  * pool; this is defense in depth.
  * ============================================================

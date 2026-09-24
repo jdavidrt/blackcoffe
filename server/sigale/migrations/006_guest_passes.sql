@@ -1,5 +1,5 @@
 -- ============================================================
--- SÍGALE 2.0 — MIGRATION 006: guest passes (artist/crew/courtesy)
+-- SÍGALE — MIGRATION 006: guest passes (artist/crew/courtesy)
 -- Free-entry roster, scoped to an event and to a band from the event's
 -- own lineup (events.artists). NOT part of the tickets/ticket_stages/
 -- payment pipeline (no price, no QR/scan integration) — door staff

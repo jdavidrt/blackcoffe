@@ -1,7 +1,7 @@
 -- ============================================================
 -- SÍGALE — MIGRATION 014: promote 'David' to super_admin + attribute every event
--- DRAFT — depends on migration 010 (organizers.role/isActive + the
--- organizer_events table) having already applied in the same run.
+-- Applied in production 2026-09-15. Depends on migration 010
+-- (organizers.role/isActive + the organizer_events table).
 -- Data-only, no new columns/tables.
 --
 -- Two idempotent statements:
@@ -14,7 +14,7 @@
 --      account is never left promoted-but-locked-out.
 --   2. INSERT IGNORE INTO organizer_events — one row per (David, event) for
 --      every event that exists at the time this runs. This is ATTRIBUTION
---      only (Phase 2 decision #2): a super_admin already reaches every
+--      only: a super_admin already reaches every
 --      event through role alone (the authorization check never consults
 --      organizer_events for a super_admin), so this grants nothing new — it
 --      records "David personally organizes this event" for a future "my

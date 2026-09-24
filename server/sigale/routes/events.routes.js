@@ -1,25 +1,20 @@
 /*
- * Events routes (ADR §7, extended for multi-event).
- *   GET  /api/events/active     public     — deploy-window compat only; resolver
- *                                             for the old "one active event" (isActive)
- *   GET  /api/events/all        organizer  — every event, for the panel selector
- *   GET  /api/events/by-slug/:slug public  — event + active stage + cupos, by slug
- *   GET  /api/events            public     — published events, for the root landing grid
- *   GET  /api/events/:id        public     — event + active stage + cupos, by id
- *   POST /api/events            organizer  — create (requireOrganizer)
- *   PUT  /api/events/:id        organizer  — edit   (requireOrganizer)
+ * Events routes.
+ *   GET   /api/events/all            organizer  — events the caller can manage (role-scoped)
+ *   GET   /api/events/by-slug/:slug  public     — event + stages + cupos, by slug
+ *   GET   /api/events                public     — published events, for the root landing grid
+ *   GET   /api/events/:id            public     — event + stages + cupos, by id
+ *   POST  /api/events                super_admin — create
+ *   PUT   /api/events/:id            organizer  — edit (assertOwnsEvent inside)
+ *   PATCH /api/events/:id/archive    super_admin — archive / unarchive
  *
- * Route order matters: literal paths (/active, /all, /by-slug/:slug) must be
- * declared before the bare list (/) and the param route (/:id), or they'd be
- * swallowed as a slug/id value.
- * Security pass (plan §6): the write routes mutate inventory, so they
- * re-validate organizer credentials on every call, the same per-request
- * check used for /api/admin/*.
+ * Route order matters: literal paths (/all, /by-slug/:slug) must be declared
+ * before the bare list (/) and the param route (/:id). The write routes
+ * re-validate organizer credentials on every call.
  */
 import { Router } from 'express';
 import { requireOrganizer, requireSuperAdmin } from '../middleware/requireOrganizer.js';
 import {
-  getActiveEvent,
   listAllEvents,
   getEventBySlug,
   listPublishedEvents,
@@ -31,14 +26,11 @@ import {
 
 const router = Router();
 
-router.get('/api/events/active', getActiveEvent);
 router.get('/api/events/all', requireOrganizer, listAllEvents);
 router.get('/api/events/by-slug/:slug', getEventBySlug);
 router.get('/api/events', listPublishedEvents);
 router.get('/api/events/:id', getEventById);
 
-// Phase 2: creating an event is super_admin-only; editing is open to any
-// organizer who owns the event (assertOwnsEvent inside updateEvent).
 router.post('/api/events', requireOrganizer, requireSuperAdmin, createEvent);
 router.put('/api/events/:id', requireOrganizer, updateEvent);
 router.patch('/api/events/:id/archive', requireOrganizer, requireSuperAdmin, archiveEvent);

@@ -5,11 +5,11 @@
 -- runMigrations.js MARKS this file applied (it does not execute it)
 -- once it detects a cut-over database via `tickets_legacy_v1`.
 -- DO NOT delete, renumber, or "fix" this file.
--- Current schema: docs/architecture/TICKETS_SCHEMA.md
+-- Current schema: docs/architecture/DB_SCHEMA.md
 -- ============================================================
 
 -- ============================================================
--- SÍGALE 2.0 - MIGRATION 003: sequential orderId starting at 100
+-- SÍGALE — MIGRATION 003: sequential orderId starting at 100
 -- Converts purchases.orderId from CHAR(3) random folio to INT
 -- UNSIGNED sequential identifier. New orderIds are computed in
 -- the controller as MAX(orderId) + 1, starting at 100.

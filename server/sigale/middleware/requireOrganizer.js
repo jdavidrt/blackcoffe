@@ -1,11 +1,10 @@
 /*
- * requireOrganizer — per-request credential check (locked decision #5:
- * no JWT/session). Reads HTTP Basic credentials, bcrypt-compares the
+ * requireOrganizer — per-request credential check (no JWT/session). Reads HTTP Basic credentials, bcrypt-compares the
  * password against the organizers row. HTTPS-only in production so the
  * header isn't exposed. Attach to every /api/admin/* route and to the
  * organizer-only event writes.
  *
- * Security pass (plan §6): `verifyOrganizer` is the single credential
+ * `verifyOrganizer` is the single credential
  * check shared with POST /api/login. When the username does not exist it
  * still runs a bcrypt.compare against a fixed dummy hash, so a missing
  * user and a wrong password take the same time — no username enumeration
@@ -37,14 +36,11 @@ function parseBasic(header) {
  * success, or null on any failure (including a deactivated account).
  * Always performs exactly one bcrypt.compare.
  *
- * Phase 2 (roles): selects `role` + `isActive` alongside the credentials.
- * A row with `isActive = 0` fails the same as a wrong password — it must
- * not leak "this account exists but is deactivated" through a different
- * status code or message (same enumeration-safety reasoning as DUMMY_HASH).
- * Pre-migration-010 rows have no `role`/`isActive` columns yet only during
- * the deploy window before that migration runs; MySQL then simply omits
- * them from the row and `organizer.role` is undefined — callers must treat
- * that the same as `event_admin` (least privilege), never as super_admin.
+ * Selects `role` + `isActive` alongside the credentials. A row with
+ * `isActive = 0` fails the same as a wrong password — it must not leak
+ * "this account exists but is deactivated" through a different status code
+ * or message (same enumeration-safety reasoning as DUMMY_HASH). A missing
+ * role is treated as `event_admin` (least privilege), never as super_admin.
  */
 export async function verifyOrganizer(username, password) {
   if (!username || !password) {

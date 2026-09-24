@@ -2,7 +2,7 @@
  * ============================================================
  * SÍGALE — ADMIN CONTROLLER (organizer panel)
  * Login + the purchase-review loop. Inventory transitions use
- * getConnection() + FOR UPDATE (ADR §6). validationHash is a
+ * getConnection() + FOR UPDATE. validationHash is a
  * server-generated DETERMINISTIC HMAC over (orderId, seatIndex)
  * keyed by SCAN_HASH_SECRET, minted only at confirm; the QR is
  * built client-side from it and never stored.
@@ -38,7 +38,7 @@ const validationHashFor = (orderId, seatIndex) =>
 /**
  * POST /api/login  (public, rate-limited at the route)
  * Validates username + bcrypt password via the shared verifyOrganizer
- * (constant-time against username enumeration, plan §6). Returns ok +
+ * (constant-time against username enumeration). Returns ok +
  * username + role (no token): the client re-sends Basic creds on each
  * /api/admin/* call. `role` is for UI gating only — the server is the
  * actual gate on every write (requireSuperAdmin / assertOwnsEvent).
@@ -72,9 +72,8 @@ export const login = async (req, res) => {
 export const getAdminPurchases = async (req, res) => {
   try {
     const { status, orderId, eventId } = req.query;
-    // Phase 2: eventId is now required (every organizer read is scoped to
-    // one event) so an event_admin's access can be checked before any row
-    // is returned.
+    // eventId is required (every organizer read is scoped to one event) so
+    // an event_admin's access can be checked before any row is returned.
     if (!eventId) {
       return res.status(400).json({ message: 'eventId requerido' });
     }
@@ -158,8 +157,8 @@ export const getAdminPurchases = async (req, res) => {
 export const getAdminTickets = async (req, res) => {
   try {
     const { status, eventId } = req.query;
-    // Phase 2: eventId is now required, and access is checked before any
-    // row is returned (see the same guard on getAdminPurchases above).
+    // eventId is required, and access is checked before any row is
+    // returned (same guard as getAdminPurchases above).
     if (!eventId) {
       return res.status(400).json({ message: 'eventId requerido' });
     }

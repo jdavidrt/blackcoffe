@@ -11,7 +11,7 @@
  *  - mountSigale() must NOT add a second helmet(), cors(), or express.json()
  *    — BlackCoffe's app already has those.
  *  - startSigale() is wrapped in try/catch so a Sigale boot failure never
- *    takes BlackCoffe down (plan S10 rollback safety).
+ *    takes BlackCoffe down.
  */
 
 import healthRoutes from './routes/health.routes.js';

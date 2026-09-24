@@ -1,5 +1,5 @@
 -- ============================================================
--- SÍGALE 2.0 — MIGRATION 007: enforce one active stage per event
+-- SÍGALE — MIGRATION 007: enforce one active stage per event
 -- Two "Etapa 1" ticket_stages rows both reached status='active' for the
 -- same event in production (root cause: updateEvent's stage-reconciliation
 -- left an orphaned-but-ticket-referenced stage 'active' instead of demoting

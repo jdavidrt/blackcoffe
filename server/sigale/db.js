@@ -7,13 +7,13 @@
  *   LOCAL  — DB_CA_CERT empty → plain TCP to 127.0.0.1:3306, no SSL.
  *            Safe: the socket never leaves the machine.
  *   PROD   — DB_CA_CERT set   → TLS with the DigitalOcean CA cert;
- *            rejectUnauthorized stays true (ADR-0001 §9).
+ *            rejectUnauthorized stays true.
  *
  * GUARDRAIL: DB_NAME must be 'sigale'. This pool must NEVER connect
- * to BlackCoffe's database. See SIGALE_2.0_IMPLEMENTATION_PLAN §3.1.
+ * to BlackCoffe's database (see the guardrail in server/README.md).
  *
  * dateStrings:true keeps DATETIME as strings so the driver never
- * shifts them by the Node process timezone (ADR-0001 §8).
+ * shifts them by the Node process timezone.
  * ============================================================
  */
 
@@ -28,7 +28,7 @@ const DB_NAME = process.env.SIGALE_DB_NAME ?? process.env.DB_NAME;
 if (DB_NAME !== 'sigale') {
   throw new Error(
     `[sigale/db] Refusing to connect: SIGALE_DB_NAME (or DB_NAME) must be 'sigale' (got '${DB_NAME ?? 'undefined'}'). ` +
-      'Sígale never touches the BlackCoffe database — see SIGALE_2.0_IMPLEMENTATION_PLAN §3.1.',
+      'Sígale never touches the BlackCoffe database — see server/README.md.',
   );
 }
 

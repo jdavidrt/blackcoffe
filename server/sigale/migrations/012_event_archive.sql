@@ -1,8 +1,6 @@
 -- ============================================================
 -- SÍGALE — MIGRATION 012: events.isArchived (archive, never delete)
--- DRAFT — validated in docs/architecture/DB_SCHEMA.md 2026-09-15, NOT YET
--- applied anywhere (not local, not production). No backend code reads or
--- writes this column yet.
+-- Applied in production 2026-09-15.
 --
 -- Replaces the briefly-considered "super_admin can DELETE an event" idea,
 -- which was dropped: deleting an event's ticket rows collides with the

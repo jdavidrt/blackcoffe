@@ -1,9 +1,10 @@
 /*
  * ============================================================
  * SÍGALE — EVENTS CONTROLLER
- * Read the active event (public) and create/edit it (organizer).
+ * Public reads (published list, by slug, by id) and organizer writes
+ * (create, edit, archive).
  *
- * Conventions (ADR-0001):
+ * Conventions:
  *   - Money as DECIMAL; timestamps persisted UTC, read back as -05:00
  *     with CONVERT_TZ; eventDate/openingTime/activatesAt are Bogotá
  *     wall-clock from the organizer, converted to UTC on write.
@@ -13,9 +14,8 @@
  *   - Aforo invariant (Σ stage.totalQuantity ≤ venueCapacity) validated
  *     in the app; 409 on violation.
  *
- * Organizer-only writes (create/edit) sit behind requireOrganizer at
- * the route layer (per-request bcrypt check, plan §6); the read routes
- * (active / by id) stay public.
+ * Organizer-only writes sit behind requireOrganizer (per-request bcrypt
+ * check) at the route layer; the read routes stay public.
  * ============================================================
  */
 
@@ -27,12 +27,12 @@ import { assertNotDemo, assertOwnsEvent } from '../utils/authz.js';
 // Columns we expose to the public, with datetimes converted to Bogotá time.
 // isArchived IS exposed here (unlike scanKeyword, which never appears in any
 // public payload): getEventById/getEventBySlug deliberately stay reachable
-// for an archived event ("still resolvable by direct slug", Phase 2 spec), so
+// for an archived event (still resolvable by direct slug), so
 // LandingPage/PurchaseFlow need isArchived to gate the CTA and wizard
 // ((salesOpen && !isArchived) || isDemo).
 const EVENT_SELECT = `
   SELECT id, slug, name, description, artists, venue, address, venueCapacity,
-         flyerImageUrl, bankQrImageUrl, whatsappNumber, isActive,
+         flyerImageUrl, bankQrImageUrl, whatsappNumber,
          isPublished, isDemo, salesOpen, isArchived,
          CONVERT_TZ(eventDate,   '${UTC}', '${BOGOTA}') AS eventDate,
          CONVERT_TZ(openingTime, '${UTC}', '${BOGOTA}') AS openingTime,
@@ -84,26 +84,6 @@ async function buildEventPayload(conn, eventRow) {
 }
 
 /**
- * GET /api/events/active  (public)
- * Resolver for "the one active event" (events.isActive = 1).
- */
-export const getActiveEvent = async (req, res) => {
-  const conn = await pool.getConnection();
-  try {
-    const [[event]] = await conn.query(`${EVENT_SELECT} WHERE isActive = 1 LIMIT 1`);
-    if (!event) {
-      return res.status(404).json({ message: 'No hay un evento activo' });
-    }
-    res.json(await buildEventPayload(conn, event));
-  } catch (error) {
-    sendErrorEmail(req, error, 'getActiveEvent');
-    return res.status(500).json({ message: error.message });
-  } finally {
-    conn.release();
-  }
-};
-
-/**
  * GET /api/events/:id  (public)
  * Event + active stage + cupos restantes.
  */
@@ -130,7 +110,7 @@ export const getEventById = async (req, res) => {
  */
 export const listPublishedEvents = async (req, res) => {
   try {
-    // Archived events (Phase 2) are excluded regardless of isPublished — an
+    // Archived events are excluded regardless of isPublished — an
     // archived event is "put away", not merely unlisted.
     const [rows] = await pool.query(
       `${EVENT_LIST_SELECT} WHERE isPublished = 1 AND isArchived = 0 ORDER BY eventDate DESC`,
@@ -147,12 +127,12 @@ export const listPublishedEvents = async (req, res) => {
  * Every event the caller can manage, for the organizer's event selector and
  * the events-admin page.
  *
- * Phase 2 role scoping: a `super_admin` sees every event (archived excluded
+ * Role scoping: a `super_admin` sees every event (archived excluded
  * unless includeArchived=1, for the events-admin "show archived" toggle); an
  * `event_admin` sees only events it is assigned to via `organizer_events`
  * (archived always excluded — an event_admin has no archive UI). This is the
  * ONLY response that carries `scanKeyword` — never the public list/by-slug/
- * by-id payloads (migration 013's security invariant).
+ * by-id payloads.
  */
 export const listAllEvents = async (req, res) => {
   try {
@@ -214,17 +194,17 @@ const REQUIRED_EVENT_FIELDS = ['name', 'eventDate', 'openingTime', 'venue', 'ven
 // instead (it's ordinary event data, not a literal app route), so attempting
 // to claim it surfaces the ER_DUP_ENTRY 409 below, not this one.
 const RESERVED_SLUGS = new Set([
-  'admin', 'scan', 'compra', 'tickets', 'dashboard', 'evento', 'edit',
-  'edit-event', 'create-event', 'sell-tickets', 'guest-passes',
-  'lista-puerta', 'validate-qr', 'api', 'assets', 'sw.js', 'manifest.json',
-  'robots.txt', 'favicon.ico', 'events-admin', 'organizers',
+  'admin', 'scan', 'tickets', 'dashboard', 'edit', 'create-event',
+  'sell-tickets', 'guest-passes', 'lista-puerta', 'events-admin',
+  'organizers', 'api', 'assets', 'sw.js', 'manifest.json', 'robots.txt',
+  'favicon.ico',
 ]);
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
- * Validate a submitted slug. A missing/empty slug is valid (deploy-window
- * compat — the old frontend doesn't send one; only the new create/edit form
- * requires it client-side). Returns an error message string, or null.
+ * Validate a submitted slug. A missing/empty slug is valid at the API (the
+ * column is nullable; the create/edit form requires one client-side).
+ * Returns an error message string, or null.
  */
 function validateSlug(slug) {
   if (slug === undefined || slug === null || slug === '') {
@@ -240,7 +220,7 @@ function validateSlug(slug) {
 }
 
 /**
- * Normalize a submitted `scanKeyword` (Phase 2, migration 013):
+ * Normalize a submitted `scanKeyword`:
  *   - undefined (field omitted)             -> { value: undefined } — "no change" sentinel
  *   - null / '' (explicitly cleared)         -> { value: null }      — disables public scanning
  *   - a string                               -> trimmed, 6–80 chars, else an error message
@@ -313,8 +293,7 @@ async function insertStages(conn, eventId, stages) {
 
 /**
  * POST /api/events  (organizer — requireOrganizer at the route)
- * Creates the event + its stages in one transaction and marks it the
- * single active event (clears isActive on all others).
+ * Creates the event + its stages in one transaction (super_admin only).
  */
 export const createEvent = async (req, res) => {
   const validationError = validateEventPayload(req.body);
@@ -335,17 +314,15 @@ export const createEvent = async (req, res) => {
     await conn.beginTransaction();
 
     const b = req.body;
-    // isActive is never written by this API anymore (multi-event: there is
-    // no more "the one active event" — see isPublished). isDemo is never
-    // settable via the public API either; only the one-off prod flip sets it.
+    // isDemo is never settable through the API.
     const [result] = await conn.query(
       `INSERT INTO events
          (slug, name, description, artists, eventDate, openingTime, venue, address, venueCapacity,
-          flyerImageUrl, bankQrImageUrl, whatsappNumber, isActive, isPublished, salesOpen, scanKeyword)
+          flyerImageUrl, bankQrImageUrl, whatsappNumber, isPublished, salesOpen, scanKeyword)
        VALUES (?, ?, ?, CAST(? AS JSON),
                CONVERT_TZ(?, '${BOGOTA}', '${UTC}'),
                CONVERT_TZ(?, '${BOGOTA}', '${UTC}'),
-               ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+               ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         b.slug || null,
         b.name,
@@ -368,10 +345,8 @@ export const createEvent = async (req, res) => {
     const eventId = result.insertId;
     await insertStages(conn, eventId, b.stages);
 
-    // Attribution (Phase 2, decision #2): the creating account is recorded
-    // as assigned to the event it just made, whether super_admin (a "my
-    // events" filter) or, in the future, any role that gains create rights.
-    // Idempotent no-op if the row somehow already exists.
+    // Attribution: the creating account is recorded as assigned to the
+    // event it just made. Idempotent no-op if the row already exists.
     if (req.organizer?.id) {
       await conn.query(
         'INSERT IGNORE INTO organizer_events (organizerId, eventId) VALUES (?, ?)',
@@ -434,10 +409,9 @@ export const updateEvent = async (req, res) => {
       return res.status(403).json({ message: ownError });
     }
     const isDemo = Number(current.isDemo) === 1;
-    // Phase 2: slug and isPublished are super_admin-only edits. An
-    // event_admin's request keeps whatever is already stored for both,
-    // exactly like the pre-existing demo carve-out below — same mechanism,
-    // two different reasons.
+    // Slug and isPublished are super_admin-only edits. An event_admin's
+    // request keeps whatever is already stored for both, exactly like the
+    // demo carve-out below — same mechanism, two different reasons.
     const isSuperAdmin = req.organizer?.role === 'super_admin';
 
     // Demo row (or a non-super_admin caller): slug is permanently fixed —
@@ -459,12 +433,10 @@ export const updateEvent = async (req, res) => {
       return res.status(409).json({ message: scanKeywordError });
     }
 
-    // isPublished/salesOpen fall back to the current value when the body
-    // omits them (deploy-window compat: the old form doesn't send these
-    // fields, so an edit through it must not silently unpublish/close sales
-    // on an existing event). isPublished ALSO falls back for a non-super_admin
-    // caller even when submitted — toggling landing visibility is
-    // super_admin-only (Phase 2 decision #4).
+    // isPublished/salesOpen keep the stored value when the body omits them,
+    // so a partial payload never silently unpublishes or closes sales.
+    // isPublished ALSO keeps the stored value for a non-super_admin caller
+    // even when submitted — toggling landing visibility is super_admin-only.
     const isPublished = (b.isPublished !== undefined && isSuperAdmin)
       ? (b.isPublished ? 1 : 0)
       : Number(current.isPublished);
@@ -645,8 +617,8 @@ export const updateEvent = async (req, res) => {
 
 /**
  * PATCH /api/events/:id/archive  (super_admin — requireSuperAdmin at the route)
- * body: { isArchived: 0 | 1 }. Reversible "put away" switch (Phase 2,
- * migration 012) — the replacement for event deletion. Archiving only blocks
+ * body: { isArchived: 0 | 1 }. Reversible "put away" switch — the
+ * replacement for event deletion. Archiving only blocks
  * NEW sales (enforced in purchases.controllers.js / admin.controllers.js);
  * confirming pending orders, ticket edits, guest passes, and scanning all
  * keep working, so an organizer can finish an archived event. The demo is

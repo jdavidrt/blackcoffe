@@ -1,6 +1,6 @@
 /*
  * ============================================================
- * SÍGALE — SHARED AUTHORIZATION HELPERS (Phase 2: roles + demo)
+ * SÍGALE — SHARED AUTHORIZATION HELPERS (roles + demo)
  * Two per-event guards used across every mutating/scoped admin
  * controller. Both take an open connection/pool and an eventId,
  * and return a Spanish error message (or null) rather than
@@ -11,7 +11,7 @@
  */
 
 /**
- * Multi-event read-only-demo guard. Returns a Spanish 409 message when the
+ * Read-only-demo guard. Returns a Spanish 409 message when the
  * given event is the permanent demo, else null. Must be called by EVERY
  * mutating admin path that touches tickets/ticket_stages for a specific
  * event; `markUsed` in scan.controllers.js is the one deliberate exception
@@ -24,7 +24,7 @@ export async function assertNotDemo(conn, eventId) {
 }
 
 /**
- * Role-based event-ownership guard (Phase 2). `organizer` is `req.organizer`
+ * Role-based event-ownership guard. `organizer` is `req.organizer`
  * ({ id, username, role }) as set by requireOrganizer. A `super_admin`
  * always passes (role check only — no query). An `event_admin` needs a row
  * in `organizer_events` for this event, else a Spanish 403 message.

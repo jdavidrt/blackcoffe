@@ -1,12 +1,9 @@
 /*
- * Purchases routes (ADR §7).
- *   POST /api/purchases                    public  — transactional reserve
- *   POST /api/purchases/:orderId/submitted public  — "ya realicé el pago"
- *
- * The public status (`GET /api/purchases/:orderId`) and recovery
- * (`GET /api/recover`) endpoints were removed: buyers no longer have a
- * "Ver el estado de mi compra" page. Tickets are delivered by the
- * organizer via WhatsApp/email after confirmation.
+ * Purchases routes (public, one-way).
+ *   POST /api/purchases                    — transactional reserve
+ *   POST /api/purchases/:orderId/submitted — "ya realicé el pago"
+ * Tickets are delivered by the organizer via WhatsApp/email after
+ * confirmation; there is no public order-status endpoint.
  */
 import { Router } from 'express';
 import {

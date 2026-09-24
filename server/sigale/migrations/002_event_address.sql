@@ -5,11 +5,11 @@
 -- runMigrations.js MARKS this file applied (it does not execute it)
 -- once it detects a cut-over database via `tickets_legacy_v1`.
 -- DO NOT delete, renumber, or "fix" this file.
--- Current schema: docs/architecture/TICKETS_SCHEMA.md
+-- Current schema: docs/architecture/DB_SCHEMA.md
 -- ============================================================
 
 -- ============================================================
--- SÍGALE 2.0 — MIGRATION 002: events.address
+-- SÍGALE — MIGRATION 002: events.address
 -- Adds the venue street address captured by the organizer form.
 -- The 001 schema only stored `venue` (name); the public landing and
 -- organizer Home both surface a full address, so it gets its own column.

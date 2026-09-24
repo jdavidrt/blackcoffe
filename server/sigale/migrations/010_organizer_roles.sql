@@ -1,16 +1,13 @@
 -- ============================================================
--- SÍGALE 2.0 — MIGRATION 010: organizer roles + event ownership
--- DRAFT — validated in MULTI_EVENT_PLAN.md 2026-09-11/15, NOT YET APPLIED
--- anywhere (not local, not production). Schema-only: no backend code reads
--- these columns/table yet. Safe to apply ahead of the code: it is additive
--- and promotes the pre-existing account(s) itself (see the end of the file).
+-- SÍGALE — MIGRATION 010: organizer roles + event ownership
+-- Applied in production 2026-09-15. Additive; promotes the pre-existing
+-- account(s) itself (see the end of the file).
 --
 -- Adds role-based access: `super_admin` (sees/manages every event and every
 -- organizer account, unconditionally) vs `event_admin` (scoped to events
 -- explicitly assigned via `organizer_events`). Many-to-many, not a single
 -- `events.ownerId` column, because one event can have co-admins and one
--- admin can be assigned to several events (validated decision, see
--- MULTI_EVENT_PLAN.md "Phase 2").
+-- admin can be assigned to several events.
 --
 -- Columns added to `organizers`:
 --   role      ENUM('super_admin','event_admin') NOT NULL DEFAULT 'event_admin'

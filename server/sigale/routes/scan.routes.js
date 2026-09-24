@@ -1,18 +1,12 @@
 /*
- * Door-scan routes.
- *   POST /api/admin/scan          organizer — mark one ticket used (API-only;
- *                                  no UI calls this anymore, kept for compat)
- *   GET  /api/scan/events         public, rate-limited — events open to public scan
- *   POST /api/scan                public, rate-limited — keyword + hash -> mark used
- * Each mark is idempotent and FOR UPDATE (ADR §6); see scan.controllers.js.
- * The old GET /api/admin/scan/manifest and POST /api/admin/scan/sync routes
- * (offline-cache design, no client ever called them) are removed — dead code,
- * not worth guarding under the new role model.
+ * Door-scan routes (public, rate-limited).
+ *   GET  /api/scan/events  — events open to public scan
+ *   POST /api/scan         — keyword + hash -> mark used
+ * Each mark is idempotent and FOR UPDATE; see scan.controllers.js.
  */
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { requireOrganizer } from '../middleware/requireOrganizer.js';
-import { scanTicket, listPublicScanEvents, publicScanTicket } from '../controllers/scan.controllers.js';
+import { listPublicScanEvents, publicScanTicket } from '../controllers/scan.controllers.js';
 
 const router = Router();
 
@@ -26,8 +20,6 @@ const publicScanLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Demasiadas solicitudes, espera un momento' },
 });
-
-router.post('/api/admin/scan', requireOrganizer, scanTicket);
 
 router.get('/api/scan/events', publicScanLimiter, listPublicScanEvents);
 router.post('/api/scan', publicScanLimiter, publicScanTicket);

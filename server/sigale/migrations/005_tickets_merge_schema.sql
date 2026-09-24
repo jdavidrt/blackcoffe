@@ -5,11 +5,11 @@
 -- runMigrations.js MARKS this file applied (it does not execute it)
 -- once it detects a cut-over database via `tickets_legacy_v1`.
 -- DO NOT delete, renumber, or "fix" this file.
--- Current schema: docs/architecture/TICKETS_SCHEMA.md
+-- Current schema: docs/architecture/DB_SCHEMA.md
 -- ============================================================
 
 -- ============================================================
--- SÍGALE 2.0 — MIGRATION 005: tickets/purchases merge (schema only)
+-- SÍGALE — MIGRATION 005: tickets/purchases merge (schema only)
 -- Creates the new unified lifecycle table (`tickets_v2`) alongside the
 -- still-live `purchases`/`tickets` tables. Purely additive — never
 -- touches existing data, so it is safe to auto-apply on every boot.

@@ -5,11 +5,10 @@
  *
  *     node server/seed/seedOrganizer.js
  *
- * Security (SIGALE_2.0_IMPLEMENTATION_PLAN §6, ADR §9):
+ * Security:
  *   - The password is read from ORGANIZER_INITIAL_PASSWORD at
- *     runtime and bcrypt-hashed here. The plaintext printed in
- *     the ADR is considered LEAKED — do not reuse it; set a
- *     freshly rotated value in the environment instead.
+ *     runtime and bcrypt-hashed here. Use a freshly generated
+ *     value; never commit it.
  *   - Only the hash is ever written to the database.
  *   - Idempotent: re-running does not duplicate the organizer.
  *
@@ -26,8 +25,7 @@ const password = process.env.ORGANIZER_INITIAL_PASSWORD;
 async function seed() {
   if (!password) {
     throw new Error(
-      'Set ORGANIZER_INITIAL_PASSWORD to a freshly rotated value before seeding. ' +
-        'Never reuse the plaintext printed in ADR-0001 (treat it as leaked).',
+      'Set ORGANIZER_INITIAL_PASSWORD to a freshly generated value before seeding.',
     );
   }
 
@@ -35,7 +33,7 @@ async function seed() {
 
   // Idempotent: insert once; on a repeat run the unique username
   // collides and we leave the existing row untouched.
-  // Phase 2 (roles): this script only ever bootstraps the FIRST account, so
+  // This script only ever bootstraps the FIRST account, so
   // it is always a super_admin — every account created afterwards (via the
   // organizers-admin API) defaults to event_admin instead.
   const [result] = await pool.query(

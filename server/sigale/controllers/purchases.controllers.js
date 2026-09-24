@@ -1,7 +1,7 @@
 /*
  * ============================================================
  * SÍGALE — PURCHASES CONTROLLER (public purchase flow)
- * The transactional heart of the system (ADR-0001 §6).
+ * The transactional heart of the system.
  *
  * Every inventory path uses pool.getConnection() + beginTransaction()
  * + SELECT ... FOR UPDATE so concurrent reservations on the same stage
@@ -14,13 +14,13 @@
  * catches a concurrent duplicate order, since the value can't be repeated
  * per-row without breaking the constraint.
  *
- * Security (plan §6): explicit column lists on the public INSERT (no
+ * Security: explicit column lists on the public INSERT (no
  * `SET ?` mass-assignment — an attacker must not be able to force
  * status='confirmed'); parameterized everywhere, including the bulk
  * multi-row VALUES ? insert (each row is an explicit array built by us,
  * never req.body passed through directly).
  *
- * Hold semantics (decision #4): reservationExpiresAt = createdAt + 24h
+ * Hold semantics: reservationExpiresAt = createdAt + 24h
  * (real hold). The 20-minute countdown is frontend copy only.
  *
  * QR rule: validationHash is minted ONLY at confirm — never before. This
@@ -36,7 +36,7 @@ import { toSqlUtc } from '../utils/time.js';
 const MAX_TICKETS_PER_PURCHASE = 6;
 const ORDER_ID_RETRIES = 25;
 const ORDER_ID_START = 100; // first order in the system is #100
-const RESERVATION_HOLD_MS = 24 * 60 * 60 * 1000; // 24h hold (decision #4)
+const RESERVATION_HOLD_MS = 24 * 60 * 60 * 1000; // 24h hold
 
 /**
  * Compute the next sequential orderId inside an open transaction.
@@ -63,10 +63,10 @@ async function nextOrderId(conn) {
 
 /**
  * Resolve + validate the buyer's preferred artist against the event's own
- * line-up (Phase 2, migration 011). `eventArtists` is the raw `events.artists`
- * JSON column value (may already be parsed, or still a string from mysql2).
- * An event with no line-up needs no artist — the column stays NULL for it
- * (legacy rows are NULL for the same reason: the feature didn't exist yet).
+ * line-up. `eventArtists` is the raw `events.artists` JSON column value (may
+ * already be parsed, or still a string from mysql2). An event with no line-up
+ * needs no artist — the column stays NULL for it (as it does for orders placed
+ * before the column existed).
  * Otherwise a non-empty, exact, in-line-up value is required — returns
  * { value, error } so callers can 400 with a specific message.
  */
@@ -143,16 +143,15 @@ export const createPurchase = async (req, res) => {
       return res.status(409).json({ message: 'La etapa no está disponible' });
     }
 
-    // Multi-event gate: the demo event never sells for real — its wizard
-    // simulates the flow locally, but the backend must refuse regardless of
-    // what a client sends — and online sales are closed per-event via
-    // salesOpen (replaces the retired global ONLINE_SALES_OPEN flag).
+    // The demo event never sells for real — its wizard simulates the flow
+    // locally, but the backend must refuse regardless of what a client
+    // sends — and online sales are closed per-event via salesOpen.
     const [[event]] = await conn.query('SELECT isDemo, salesOpen, isArchived, artists FROM events WHERE id = ?', [stage.eventId]);
     if (event?.isDemo) {
       await conn.rollback();
       return res.status(409).json({ message: 'El evento de demostración es de solo lectura' });
     }
-    // Archived blocks NEW sales regardless of salesOpen (Phase 2) — an
+    // Archived blocks NEW sales regardless of salesOpen — an
     // organizer finishing an archived event can still confirm/reject
     // existing orders, but no new order may be opened against it.
     if (event?.isArchived) {

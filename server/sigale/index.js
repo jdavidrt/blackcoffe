@@ -1,10 +1,9 @@
 /*
  * ============================================================
  * SÍGALE — EXPRESS ENTRY POINT
- * Mirrors BlackCoffe's index.js but is a fully SEPARATE app: its
- * own pool (db.js → DB_NAME=sigale), its own migrations, its own
- * routes. It must never import or run any file under /reference/
- * (the read-only BlackCoffe mirror).
+ * Standalone entry for local runs. In production BlackCoffe's host
+ * app mounts Sígale through integration.js instead — keep the two
+ * route lists in sync. Own pool (db.js → sigale), own migrations.
  *
  * Boot order matches BlackCoffe: runMigrations() resolves before
  * app.listen() so the schema exists before the first request.
@@ -32,20 +31,20 @@ const app = express();
 
 app.use(helmet());
 
-// CORS — Sígale origins only. Add the production frontend domain here
-// when it is known (the shared server's CORS list must include it).
+// CORS — local origins only. This standalone entry is for local runs; in
+// production Sígale is mounted by integration.js and BlackCoffe's host app
+// owns CORS (its list includes https://sigale.onrender.com).
 app.use(
   cors({
     origin: [
       'http://localhost:5173', // Vite dev server
       'http://localhost:25060', // local backend
-      // 'https://sigale.onrender.com', // TODO: Sígale production frontend
     ],
     credentials: true,
   }),
 );
 
-// Cap request bodies (plan §6): no endpoint needs more than a small JSON
+// Cap request bodies: no endpoint needs more than a small JSON
 // payload, so an oversized body is rejected (413) before it reaches a handler.
 app.use(express.json({ limit: '64kb' }));
 
@@ -73,7 +72,7 @@ runMigrations()
   .then(() => {
     app.listen(PORT);
     console.log(`[${new Date().toISOString()}] [sigale] Server running on port ${PORT}`);
-    // Recurring jobs (Phase 5): auto-activate stages + sweep abandoned holds.
+    // Recurring jobs: auto-activate stages, sweep abandoned holds, rearm the demo.
     startScheduler();
   })
   .catch((err) => {

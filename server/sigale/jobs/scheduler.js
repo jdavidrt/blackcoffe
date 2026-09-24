@@ -1,10 +1,9 @@
 /*
  * ============================================================
- * SÍGALE — SCHEDULED JOBS  [Phase 5, Track A]
+ * SÍGALE — SCHEDULED JOBS
  *
- * Two recurring jobs, one minute apart from the wall clock, both
- * comparing against UTC_TIMESTAMP() so they agree with the UTC the
- * schema stores (ADR-0001 §8):
+ * Two every-minute jobs, both comparing against UTC_TIMESTAMP() so
+ * they agree with the UTC the schema stores, plus a nightly one:
  *
  *   1. activateDueStages — flip `upcoming` stages to `active` once
  *      their scheduled `activatesAt` has arrived, demoting whichever stage
@@ -18,10 +17,14 @@
  *
  *   2. sweepExpiredHolds — recycle abandoned reservations. Every
  *      `pending_payment` ticket row past its 24h `reservationExpiresAt`
- *      (decision #4) is marked `expired` and its held cupo returned to
+ *      is marked `expired` and its held cupo returned to
  *      the stage, in one FOR UPDATE transaction. `payment_submitted`
  *      is DELIBERATELY excluded: a buyer who sent a receipt waits for
  *      the organizer's manual review, however long that takes.
+ *
+ *   3. rearmDemoTickets — nightly at midnight Bogotá, resets `isUsed`
+ *      on the demo event's seeded tickets so visitors can scan them
+ *      again (the one demo write the read-only guard allows).
  *
  * Design notes:
  *   - node-cron schedules in the *server's* local zone, but the jobs
@@ -32,7 +35,7 @@
  *   - Errors are caught and mailed via sendErrorEmail with a synthetic
  *     request, then swallowed — a job failure must never crash boot or
  *     the process.
- *   - Both jobs run once at startup so a server that was down through a
+ *   - Jobs 1 and 2 run once at startup so a server that was down through a
  *     scheduled activation/expiry catches up immediately.
  * ============================================================
  */
@@ -56,7 +59,7 @@ export async function activateDueStages() {
   try {
     await conn.beginTransaction();
 
-    // Phase 2: an archived event's stages must never auto-activate — archiving
+    // An archived event's stages must never auto-activate — archiving
     // means "no new sales," and a scheduled activation is exactly that.
     const [due] = await conn.query(
       `SELECT ts.id, ts.eventId FROM ticket_stages ts

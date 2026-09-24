@@ -1,5 +1,5 @@
 /*
- * Organizer-account routes (Phase 2: roles). Every handler is super_admin-
+ * Organizer-account routes. Every handler is super_admin-
  * only — account management is not something an event_admin ever touches.
  *   GET   /api/admin/organizers            list every account
  *   POST  /api/admin/organizers            create an account

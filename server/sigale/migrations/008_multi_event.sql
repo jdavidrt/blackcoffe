@@ -1,5 +1,5 @@
 -- ============================================================
--- SÍGALE 2.0 — MIGRATION 008: multi-event (slugs, publish, demo, sales gate)
+-- SÍGALE — MIGRATION 008: multi-event (slugs, publish, demo, sales gate)
 -- Converts the platform from single-active-event to multi-event: every
 -- event gets a URL slug, several events can sell simultaneously, the root
 -- landing lists only "published" events, and one event can be flagged as
@@ -17,9 +17,8 @@
 --                still reachable by direct slug URL (soft-launch).
 --   isDemo       TINYINT(1) NOT NULL DEFAULT 0 — the permanent read-only
 --                Astromelias showpiece. Never written by the public API.
---   salesOpen    TINYINT(1) NOT NULL DEFAULT 0 — per-event replacement for
---                the retired global ONLINE_SALES_OPEN flag. Default 0
---                preserves today's "closed" behavior for every existing row.
+--   salesOpen    TINYINT(1) NOT NULL DEFAULT 0 — per-event online-sales
+--                switch. Default 0 keeps every existing row closed.
 --
 -- New table `order_counter`: a persisted high-water mark for orderId, so a
 -- per-event "Delete All Tickets" can never make an orderId reusable.
