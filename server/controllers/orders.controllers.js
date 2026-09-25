@@ -148,7 +148,10 @@ export const getDepositedOrdersByDate = async (req, res) => {
             JOIN
                 clients ON orders.clientId = clients.id
             LEFT JOIN
-                deposits ON deposits.orderId = orders.id
+                -- IGNORE INDEX keeps the hash-join plan: with idx_deposits_order MySQL switches to
+                -- one index lookup per order, which measured ~2x slower here because the date
+                -- filter can't use an index yet (docs/PERFORMANCE_AUDIT.md, N2).
+                deposits IGNORE INDEX (idx_deposits_order) ON deposits.orderId = orders.id
                     AND DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ?
             WHERE
                 ((deposits.depositId IS NOT NULL AND deposits.isDeleted = 0)
@@ -278,8 +281,9 @@ export const getOrder = async (req, res) => {
  * when merging it into an existing order.
  */
 export const createOrder = async (req, res) => {
-    const conn = await pool.getConnection();
+    let conn;
     try {
+        conn = await pool.getConnection();
         await conn.beginTransaction();
 
         console.log(`[createOrder] Request body:`, req.body);
@@ -329,12 +333,12 @@ export const createOrder = async (req, res) => {
         console.log(`[createOrder] New order created`);
         res.json({ shopId, clientId, items: newItemsJson });
     } catch (error) {
-        await conn.rollback();
+        await conn?.rollback().catch(() => {});
         console.error(`[createOrder] Error:`, error);
         sendErrorEmail(req, error, 'createOrder');
         return res.status(500).json({ message: 'Error creando la orden' });
     } finally {
-        conn.release();
+        conn?.release();
     }
 }
 

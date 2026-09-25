@@ -4,7 +4,7 @@ Deployment configuration, database schema, and timezone-handling reference for t
 
 ## Table of Contents
 
-1. [Deployment Guide](#deployment-guide)
+1. [Deployment Guide](#deployment-guide), which starts with [Hosting & Infrastructure](#hosting--infrastructure-production) (services, plans, regions, environment variables)
 2. [Database Schema](#database-schema)
 3. [Timezone Implementation](#timezone-implementation)
 4. [Local Testing Against the Real DB](#local-testing-against-the-real-db)
@@ -13,17 +13,52 @@ Deployment configuration, database schema, and timezone-handling reference for t
 
 # Deployment Guide
 
+## Hosting & Infrastructure (production)
+
+Verified with the owner on 2026-09-24; measurements come from [PERFORMANCE_AUDIT.md](PERFORMANCE_AUDIT.md).
+
+| Piece | Provider / service | Plan | Region | URL |
+|---|---|---|---|---|
+| **API server** (BlackCoffe + the co-hosted Sígale API, one Node process) | Render **Web Service** `coffeserver` | **Starter**: 512 MB RAM, 0.5 CPU, always on (no sleeping) | **Oregon** (US West) | https://coffeserver.onrender.com |
+| **Frontend** (production) | Render **Global Static Site** `blackcofeepedidos` (served from a CDN) | — | global CDN | https://blackcofeepedidos.onrender.com |
+| **Database** | DigitalOcean **Managed MySQL** cluster `pedidos` (MySQL 8.0.45) | **Basic 2 GB RAM / 1 vCPU**, **30 GiB additional storage**, **primary only** (no standby node) | **NYC3** (New York) | host in `DB_HOST` |
+| Error alert emails | Resend | — | — | `NOTIFICATION_EMAIL` inbox |
+| Sígale frontend (not BlackCoffe) | Render (Sígale's PWA) | — | — | https://sigale.onrender.com |
+
+**Databases on the `pedidos` cluster:**
+- `defaultdb` is BlackCoffe's.
+- `sigale` belongs to Sígale; never point BlackCoffe at it (guardrail in `CLAUDE.md`).
+- Both apps currently connect as the `doadmin` admin user.
+
+**Environment variables on the Render service:**
+
+| Group | Variables |
+|---|---|
+| Database | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (`defaultdb`), read by [server/db.js](../server/db.js) |
+| Error alerts | `RESEND_API_KEY`, `NOTIFICATION_EMAIL`, `FROM_EMAIL` |
+| Port | `PORT`, set by Render |
+| Sígale | Its own variables, e.g. `SIGALE_DB_NAME` (`sigale`) and `DB_CA_CERT`; see `server/sigale/README.md` |
+
+**Things that follow from this setup:**
+- **The API and the database are in different regions.** Each database round trip from Oregon to NYC3 costs about 85 ms (measured), which adds up on multi-query operations such as payments. The recommended fix is to move the API to Render **Virginia**, not to move the database; see [PERFORMANCE_AUDIT.md §8](PERFORMANCE_AUDIT.md#8-infrastructure-put-the-api-next-to-the-database).
+- **A primary-only cluster means any DigitalOcean maintenance is downtime.** Keep the maintenance window on Sunday early morning; the nightly backup job runs Monday to Saturday.
+- **The frontend's API address is hardcoded** as `RENDER_SERVER` in [client/src/utils/config.js](../client/src/utils/config.js), and **Sígale's app calls the same backend**. Changing the API's URL means redeploying the static site and coordinating with Sígale's owners.
+- **Render cannot move an existing service to another region.** A region change means creating a new service in the new region.
+- **The service runs scheduled jobs:** BlackCoffe's nightly order backup (23:00 Monday–Saturday, Bogotá time) and Sígale's every-minute jobs. Never run two copies of the service at the same time for long.
+
 ## Overview
 This is a full-stack application with:
-- **Backend**: Express.js server (serves API + static frontend)
-- **Frontend**: React + Vite (built and served by backend in production)
-- **Database**: MySQL on DigitalOcean
+- **Backend**: Express.js server (serves the API; it can also serve the built frontend from `client/dist`)
+- **Frontend**: React + Vite. Production users load it from the Render Global Static Site (see the table above)
+- **Database**: MySQL on DigitalOcean (see the table above)
 
 ## Deployment Configuration
 
 ### 1. Backend Deployment (Render.com)
 
 **Service Type**: Web Service
+
+> ⚠️ **Unverified (2026-09-24):** the root `package.json` has no `build` or `start` script, so the two commands below may not match what Render actually runs. Copy the real ones from the Render dashboard (Settings → Build & Deploy) into this section.
 
 **Build Command**:
 ```bash
@@ -35,11 +70,7 @@ npm install && npm run build
 npm start
 ```
 
-**Environment Variables** (Set in Render dashboard):
-```
-PORT=25060
-```
-*Note: The database credentials are already in `server/db.js`. For better security, consider moving them to environment variables.*
+**Environment Variables** (set in the Render dashboard): see the variable list under [Hosting & Infrastructure](#hosting--infrastructure-production). `server/db.js` reads the database credentials from environment variables; none are hardcoded.
 
 **Important Settings**:
 - **Auto-Deploy**: Enable (deploys on git push)
@@ -52,7 +83,7 @@ The frontend is already configured to connect to your deployed backend:
 - Production API: `https://coffeserver.onrender.com`
 - Local development: `http://localhost:25060`
 
-**No separate frontend deployment needed** - the backend serves the built frontend from `client/dist`.
+**The production frontend is a separate deployment**: the Render Global Static Site `blackcofeepedidos`. The backend can also serve `client/dist`, but users load the static site.
 
 ### 3. Build Process
 
@@ -83,7 +114,7 @@ Frontend runs on: http://localhost:5173
 - [x] Frontend API URL configured correctly (no `localhost` in production)
 - [x] `package.json` has `start` and `build` scripts
 - [x] `.gitignore` excludes `node_modules` and `dist`
-- [ ] Database credentials moved to environment variables (recommended for security)
+- [x] Database credentials moved to environment variables (`server/db.js` reads `DB_*`)
 
 ## Common Issues
 
@@ -108,13 +139,9 @@ This URL serves both:
 
 ## Next Steps (Optional Security Improvements)
 
-1. **Move database credentials to environment variables**:
-   - Create `.env` file (already in `.gitignore`)
-   - Update `server/db.js` to use `process.env` variables
-   - Set environment variables in Render dashboard
+1. ~~**Move database credentials to environment variables**~~ ✅ Done: `server/db.js` reads `DB_*` from the environment.
 
-2. **Add CORS configuration**:
-   - Restrict CORS to only allow your frontend domain
+2. ~~**Add CORS configuration**~~ ✅ Done: `server/index.js` has an origin allowlist, which is shared with Sígale's origin (guardrail).
 
 3. **Enable HTTPS redirect** (Render does this automatically)
 

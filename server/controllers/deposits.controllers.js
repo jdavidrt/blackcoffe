@@ -61,8 +61,9 @@ export const getDepositsByDate = async (req, res) => {
  * paid/paidAt from the locked order row's current items + deposit total.
  */
 export const createDeposit = async (req, res) => {
-    const conn = await pool.getConnection();
+    let conn;
     try {
+        conn = await pool.getConnection();
         await conn.beginTransaction();
 
         const { orderId, depositValue, paymentMethod, collectedBy } = req.body;
@@ -156,12 +157,12 @@ export const createDeposit = async (req, res) => {
             paid: isFullyPaid
         });
     } catch (error) {
-        await conn.rollback();
+        await conn?.rollback().catch(() => {});
         console.error(`[${new Date().toISOString()}] createDeposit - ERROR:`, error);
         sendErrorEmail(req, error, 'createDeposit');
         return res.status(500).json({ message: "Error procesando el abono" });
     } finally {
-        conn.release();
+        conn?.release();
     }
 }
 
@@ -176,9 +177,10 @@ export const createDeposit = async (req, res) => {
  */
 export const deleteDeposit = async (req, res) => {
     const depositId = req.params.id;
-    const conn = await pool.getConnection();
+    let conn;
 
     try {
+        conn = await pool.getConnection();
         await conn.beginTransaction();
 
         const [depositRows] = await conn.query(
@@ -272,11 +274,11 @@ export const deleteDeposit = async (req, res) => {
             paid: stillFullyPaid ? 1 : 0
         });
     } catch (error) {
-        await conn.rollback();
+        await conn?.rollback().catch(() => {});
         console.error(`[${new Date().toISOString()}] deleteDeposit - ERROR:`, error);
         sendErrorEmail(req, error, 'deleteDeposit');
         return res.status(500).json({ message: "Error eliminando el depósito" });
     } finally {
-        conn.release();
+        conn?.release();
     }
 };

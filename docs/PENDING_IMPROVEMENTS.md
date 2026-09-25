@@ -146,6 +146,9 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
 - **5.1** (critical, biggest single item) — `orders.items` is a JSON-in-TEXT column; delivery-status queries use `LIKE '%"delivered":false%'`, forcing a full table scan with no index possible. Proposed fix: normalize into a dedicated `order_items` table (see the branch's own audit doc for the exact `CREATE TABLE` if this is picked up later — not reproduced here since it needs re-validation against current schema first).
 - **5.2** — Some client/product text columns are too narrow (historically `VARCHAR(20)` on `clientName`/`premises` per the branch's audit, already widened on `main`'s current schema — reverify against current `REFERENCE.md` schema before treating as still-open) while `abandonReason` has no application-level length cap.
 - **5.3** — Missing indexes on hot-path columns: `orders.paid`, `orders.clientId`, `orders.isAbandoned`, `orders.paidAt`, `deposits.orderId`, `deposits.isDeleted`, `deposits.depositCreatedAt`, `clients.mall`, `clients.isDeleted`.
+  - **Confirmed in production on 2026-09-24:** `orders`, `deposits` and `clients` have *no* index besides the primary key, and the main pages read about 25,000 rows per request.
+  - The three indexes that help today are [PERFORMANCE_AUDIT.md](PERFORMANCE_AUDIT.md) QW1: `orders(paid)`, `orders(clientId, paid)` and `deposits(orderId)`. **Implemented 2026-09-24** as the boot migration `server/migrations/add_performance_indexes.js`, verified locally, **pending deploy**.
+  - The date-column indexes only help after the date filters are rewritten (audit N2). The `clients` table is too small to need any.
 - **5.4** — No foreign-key constraints anywhere (`orders.clientId`, `deposits.orderId`, `deposits.clientId` are soft references only) — this is precisely why the `/ordenesSinCliente` orphaned-orders cleanup page has to exist.
 - **5.5** — Soft-deleted deposits are never archived/purged; every query pays the scan cost forever.
 - **5.6** — `getDeposits` has no `WHERE`/`LIMIT` — returns every deposit ever made.
@@ -156,6 +159,12 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
 - **6.4** — `sumarDepositos`/`sumarDepositosPorMall` in `DepositedOrdersPage.jsx` recompute on every render instead of being memoized.
 - **6.5** — Most controller `SELECT`s pull every column (including the potentially large `items` TEXT/JSON) even for dashboard/count views that don't need it.
 - **6.6** — No pagination on `/orders`, `/deposits`, `/abonos`, `/clients` — tolerable at current (~10k row) volume, won't be at 10x that.
+- **6.7 — Performance audit (2026-09-24), in progress.** The client reported the app getting "slow or stuck" several times a day, on phones and PCs, on all pages. Full evidence and fixes are in [PERFORMANCE_AUDIT.md](PERFORMANCE_AUDIT.md).
+  - Quick wins **QW1–QW4 implemented and verified locally on 2026-09-24, pending deploy**: indexes; crash-proofing the `getConnection()`-outside-`try` handlers; request-timing logs; a GET timeout plus a failed-load dialog in the frontend. The results are in the audit's "Evaluation" section.
+  - **QW5 (the database maintenance window) is still open**; it is a DigitalOcean setting for the owner.
+  - Next steps N1–N7.
+  - Infrastructure: move the API from Render Oregon to Render Virginia, next to the NYC3 database.
+  - The audit confirms 5.3, 5.6, 6.2, 6.3 and 6.5 with production data. Mark items done here as they ship.
 
 ### Leftover items (from the old "Code Improvement Opportunities" list)
 - **Frontend error boundaries** — no React error boundary exists anywhere; a component crash white-screens the whole app. Fully open.
@@ -165,6 +174,7 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
 
 ## Doc map
 
-- **[REFERENCE.md](REFERENCE.md)** — Deployment Guide, Database Schema, Timezone Implementation. Pure reference material, not improvement tracking.
+- **[REFERENCE.md](REFERENCE.md)** — Hosting & Infrastructure (services, plans, regions), Deployment Guide, Database Schema, Timezone Implementation. Pure reference material, not improvement tracking.
+- **[PERFORMANCE_AUDIT.md](PERFORMANCE_AUDIT.md)** — a dated snapshot (2026-09-24) of production measurements and evidence, created at the owner's request. Its items are tracked here (5.3, 6.7), not there.
 - **This file** — the sole improvement/audit tracker going forward. Update it in place; don't spin up a new incident-specific doc the next time something breaks.
 - **CLAUDE.md** — source of truth for what's actually shipped to `main` ("Completed Improvements" + "Core Business Rules" sections).

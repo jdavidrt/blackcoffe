@@ -94,8 +94,9 @@ export const getBackupsByDate = async (req, res) => {
  * paid-immutability guard stays untouched. Records an order_restores audit row.
  */
 export const restoreOrderFromSnapshot = async (req, res) => {
-    const conn = await pool.getConnection();
+    let conn;
     try {
+        conn = await pool.getConnection();
         await conn.beginTransaction();
 
         const orderId = Number(req.params.id);
@@ -196,12 +197,12 @@ export const restoreOrderFromSnapshot = async (req, res) => {
             paid: snapPaid,
         });
     } catch (error) {
-        await conn.rollback();
+        await conn?.rollback().catch(() => {});
         console.error(`[${new Date().toISOString()}] restoreOrderFromSnapshot - ERROR:`, error);
         sendErrorEmail(req, error, 'restoreOrderFromSnapshot');
         return res.status(500).json({ message: "Error restaurando la orden" });
     } finally {
-        conn.release();
+        conn?.release();
     }
 };
 

@@ -75,8 +75,21 @@ This is a monorepo with separate client (React) and server (Express) application
 
 **Co-hosted foreign sub-server**: [server/sigale/](server/sigale/) is a different app (a ticketing platform, "Sígale 2.0") sharing this Express process only for hosting economics. It has its own MySQL database (`sigale`), own `package.json`, own migrations, and is mounted read-only-to-us via [server/sigale/integration.js](server/sigale/integration.js). See the guardrail at the top of this file — do not edit anything under that folder as part of BlackCoffe work.
 
+### Hosting & Infrastructure (production)
+
+Verified 2026-09-24. Full details, including environment variables, are in [REFERENCE.md → Hosting & Infrastructure](docs/REFERENCE.md#hosting--infrastructure-production).
+
+| Piece | Service | Plan | Region |
+|---|---|---|---|
+| API (BlackCoffe + Sígale, one Node process) | Render Web Service `coffeserver` (https://coffeserver.onrender.com) | Starter: 512 MB, 0.5 CPU, never sleeps | **Oregon** |
+| Frontend | Render Global Static Site `blackcofeepedidos` (https://blackcofeepedidos.onrender.com) | — | global CDN |
+| Database | DigitalOcean Managed MySQL `pedidos` (MySQL 8), databases `defaultdb` (BlackCoffe) and `sigale` | Basic 2 GB / 1 vCPU, 30 GiB additional storage, **primary only** | **NYC3** |
+
+- **The API and the database are in different regions.** Each database round trip costs about 85 ms. When writing server code, avoid adding sequential queries to a request.
+- **Performance problems are tracked in [PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md).** The main tables have no indexes besides the primary key; it also covers crash-prone handlers and the recommendation to move the API to Render Virginia.
+
 ### Database Integration
-- **MySQL Database**: Hosted on DigitalOcean (credentials in `server/db.js`)
+- **MySQL Database**: DigitalOcean Managed MySQL (see "Hosting & Infrastructure" above); credentials come from `DB_*` environment variables read by `server/db.js`
 - **Connection Pool**: Uses mysql2/promise with connection pooling
 - **Timezone Handling**: All timestamps use Colombia timezone (UTC-5)
   - **AUTO Timestamps** (`createdAt`, `depositCreatedAt`): Stored in UTC, retrieved with `CONVERT_TZ(field, '+00:00', '-05:00')`
@@ -1923,6 +1936,19 @@ Enforced in two places — add both when restricting a new user:
    - **Not adopted this pass**: 2.7 (input validation/column allowlisting — deferred, not requested) and 1.6 (checkbox write-serialization via a local `cart` ref — explicitly rejected, reintroduces the stale-cart-race shape `main` already eliminated). 2.6 (CORS includes localhost in prod) documented as intentionally preserved for local dev, not fixed. See [PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md) for full detail on all of the above.
 
 9. **Order Backup / Restore System ("Copias de seguridad")** ✅ **COMPLETED** (2026-07-07): Nightly snapshot + restore feature. New tables `order_snapshots` (21-day pruned) / `order_restores` (never pruned); idempotent migration chained after `runMigrations`; `node-cron` job at 23:00 Mon–Sat (America/Bogota, no boot catch-up) doing prune-first + delta-only gzip snapshots; three endpoints (`GET /backupsByDate/:date`, `PUT /order/:id/restore` — atomic, `deposit` never touched, NOT via `updateOrder`; `GET /orderRestores/:orderId`); new `/copiasSeguridad` admin-only page with calendar, search, mobile bottom-sheet detail, and client-side `.txt` export; restore badge on `Invoice.jsx`/`CollectOrderForm.jsx` only. Frontend built and validated against an in-browser mock first (`backups.mock.js`, `USE_MOCK` flag in `backups.api.js`, now `false`). **Nothing under `server/sigale/` touched** — job wired alongside the Sigale boot line. Files: 6 new (`migrations/create_backup_tables.js`, `jobs/orderBackup.job.js`, `controllers/backups.controllers.js`, `routes/backups.routes.js`, `client/src/api/backups.api.js`, `client/src/pages/BackupsPage.jsx`) + `backups.mock.js`; modified `server/index.js`, `server/database/db.sql`, `server/utils/emailNotifier.js` (ROUTE_PAGE_MAP), `client/src/App.jsx`, `Navbar.jsx`, `Invoice.jsx`, `CollectOrderForm.jsx`. See the dedicated "Order Backup / Restore System" section above. Backend syntax-checked (`node --check`) + client build passes; live-DB verification (test client 1557) pending owner's `.env.local`.
+10. **Performance quick wins QW1–QW4** ✅ **IMPLEMENTED, PENDING DEPLOY** (2026-09-24). Full detail and evaluation: [PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md) §3.
+   - **QW1: indexes.** New boot migration `server/migrations/add_performance_indexes.js`, chained after `runBackupMigrations`. It adds `orders(paid)`, `orders(clientId, paid)` and `deposits(orderId)`.
+     - Safeguards: additive only; created only if missing; online (`INPLACE`, `LOCK=NONE`); `lock_wait_timeout = 10` so it can never queue the app behind it.
+     - `getDepositedOrdersByDate` carries `IGNORE INDEX (idx_deposits_order)` to keep its faster hash-join plan. Remove it when that query's date filter is rewritten (audit N2).
+   - **QW2: crash-proofing.** `pool.getConnection()` moved inside `try` (with `conn?.rollback().catch()` and `conn?.release()`) in `createOrder`, `createDeposit`, `deleteDeposit` and `restoreOrderFromSnapshot`. `/ping` wrapped in `try/catch`. A `process.on('unhandledRejection')` backstop in `server/index.js` logs and emails instead of exiting; it covers Sígale too, being process-wide.
+   - **QW3: request log.** `morgan('tiny')` in `server/index.js`. It skips `/users/` (the login URL carries the password) and `/api/` (Sígale).
+   - **QW4: frontend.** `client/src/main.jsx` gives GET requests a 20 s timeout (writes keep none, to avoid duplicate payments). It also shows a "No se pudieron cargar los datos" dialog with a "Reintentar" button when a GET gets no answer or a 5xx; otherwise pages would falsely show "No hay …".
+   - **Verified locally:** against a MySQL 8.0 container with production's schema and settings plus production-scale synthetic data (no production data copied).
+     - Data checksums are unchanged by the migration.
+     - Rows read per request on the main pages dropped from about 25,000 to 2–1,100.
+     - The order-creation lock no longer blocks other orders.
+     - A database outage now returns a 500 instead of killing the process.
+     - The dialog was verified in headless Chromium.
 
 ### Priority Improvements Available for Implementation
 
@@ -2011,7 +2037,8 @@ The combined server can't boot locally (Sigale DB guardrail), so verify by impor
 ## 📚 Additional Documentation
 
 ### Technical Documentation
-- **[REFERENCE.md](docs/REFERENCE.md)** - Deployment Guide, Database Schema, Timezone Implementation, and Local Testing Against the Real DB (test client `1557`, why the full server can't boot locally without Sigale's own DB config)
+- **[PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md)** - Performance audit (2026-09-24): production database statistics, latency measurements, quick wins (QW1–QW5), next steps, and the infrastructure recommendation (move the API from Render Oregon to Virginia, next to the NYC3 database)
+- **[REFERENCE.md](docs/REFERENCE.md)** - Hosting & Infrastructure (services, plans, regions, environment variables), Deployment Guide, Database Schema, Timezone Implementation, and Local Testing Against the Real DB (test client `1557`, why the full server can't boot locally without Sigale's own DB config)
 - **[PENDING_IMPROVEMENTS.md](docs/PENDING_IMPROVEMENTS.md)** - Consolidated tracker for all known pending improvements and audit findings (data integrity, security, scalability, performance), including what's already coded on the unmerged `claude/friendly-burnell-b334da` branch
 
 ### Project Documentation

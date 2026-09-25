@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import morgan from "morgan";
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { PORT } from "./config.js";
@@ -7,6 +8,7 @@ import { sendErrorEmail } from "./utils/emailNotifier.js";
 
 import { runMigrations } from "./migrations/add_client_snapshot.js";
 import { runBackupMigrations } from "./migrations/create_backup_tables.js";
+import { runIndexMigrations } from "./migrations/add_performance_indexes.js";
 import { startOrderBackupJob } from "./jobs/orderBackup.job.js";
 import indexRoutes from "./routes/index.routes.js";
 import ordersRoutes from "./routes/orders.routes.js";
@@ -23,6 +25,19 @@ import { mountSigale, startSigale } from "./sigale/integration.js";
 
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Backstop for async errors that escape a route handler: Express 4 doesn't catch
+// them, and Node would otherwise exit — restarting the service for every user of
+// BlackCoffe and Sigale (docs/PERFORMANCE_AUDIT.md, QW2). Log and alert instead.
+process.on('unhandledRejection', (reason) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  console.error(`[${new Date().toISOString()}] Unhandled promise rejection:`, error);
+  sendErrorEmail({ method: 'PROCESS', path: 'unhandledRejection' }, error, 'unhandledRejection');
+});
+
+// Response time of every BlackCoffe request in Render's logs (docs/PERFORMANCE_AUDIT.md, QW3).
+// Skips /users/ (the login URL carries the password) and /api/ (Sigale's routes).
+app.use(morgan('tiny', { skip: (req) => req.path.startsWith('/users/') || req.path.startsWith('/api/') }));
 
 // CORS configuration - allow both production and development domains.
 // Sigale's PWA is hosted separately and points VITE_API_URL at this shared
@@ -71,7 +86,7 @@ app.get('*', (req, res) => {
   res.sendFile(join(__dirname, '../client/dist', 'index.html'));
 });
 
-runMigrations().then(runBackupMigrations).then(() => {
+runMigrations().then(runBackupMigrations).then(runIndexMigrations).then(() => {
   app.listen(PORT);
   console.log(`[${new Date().toISOString()}] BlackCoffe Server running on port ${PORT}`);
   // Sigale boot is fire-and-forget: it runs its own migrations + scheduler.
