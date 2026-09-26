@@ -32,6 +32,9 @@ function colombiaTimestamp() {
     return col.toISOString().replace('T', ' ').slice(0, 19) + ' COL';
 }
 
+// Request data is interpolated into the email's HTML — anyone can POST /clientError.
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
 // ─── Route → page name map ────────────────────────────────────────────────────
 const ROUTE_PAGE_MAP = [
     // Deposits
@@ -93,6 +96,9 @@ const REQUIRED_FIELDS = {
 };
 
 function analyzeBody(body, functionName) {
+    if (functionName === 'clientError') {
+        return { label: 'Reportado por el navegador', color: '#2563EB', detail: 'La petición falló en el navegador del usuario (sin respuesta, tiempo agotado o servidor caído); el backend no la procesó.' };
+    }
     if (!body || Object.keys(body).length === 0) {
         return { label: 'Sin datos enviados', color: '#6B7280', detail: 'El cuerpo de la solicitud estaba vacío o era nulo.' };
     }
@@ -151,42 +157,42 @@ export async function sendErrorEmail(req, error, functionName) {
         const orderId   = body.orderId   || params.id   || null;
         const clientId  = body.clientId  || params.clientId || null;
         const ids = [];
-        if (orderId)  ids.push(`Orden ID: <strong style="font-size:16px">${orderId}</strong>`);
-        if (clientId) ids.push(`Cliente ID: <strong style="font-size:16px">${clientId}</strong>`);
+        if (orderId)  ids.push(`Orden ID: <strong style="font-size:16px">${esc(orderId)}</strong>`);
+        if (clientId) ids.push(`Cliente ID: <strong style="font-size:16px">${esc(clientId)}</strong>`);
 
         const idsBanner = ids.length
             ? `<div style="background:#FEF3C7;padding:14px 28px;border-bottom:1px solid #FDE68A;font-size:14px">${ids.join(' &nbsp;│&nbsp; ')}</div>`
             : '';
 
         const bodyJson = Object.keys(safeBody).length
-            ? `<pre style="background:#1a1a2e;color:#e2e8f0;padding:14px;border-radius:6px;font-size:12px;overflow-x:auto;margin:0">${JSON.stringify(safeBody, null, 2)}</pre>`
+            ? `<pre style="background:#1a1a2e;color:#e2e8f0;padding:14px;border-radius:6px;font-size:12px;overflow-x:auto;margin:0">${esc(JSON.stringify(safeBody, null, 2))}</pre>`
             : `<em style="color:#9CA3AF">Sin datos</em>`;
 
         const paramsHtml = Object.keys(params).length
-            ? `<code style="background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:12px">${JSON.stringify(params)}</code>`
+            ? `<code style="background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:12px">${esc(JSON.stringify(params))}</code>`
             : '<span style="color:#9CA3AF">—</span>';
 
         const queryHtml = Object.keys(query).length
-            ? `<code style="background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:12px">${JSON.stringify(query)}</code>`
+            ? `<code style="background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:12px">${esc(JSON.stringify(query))}</code>`
             : '<span style="color:#9CA3AF">—</span>';
 
         const userRow = user
-            ? `<tr><td style="${tdLeft}">Usuario</td><td style="${tdRight}">${user}</td></tr>`
+            ? `<tr><td style="${tdLeft}">Usuario</td><td style="${tdRight}">${esc(user)}</td></tr>`
             : '';
         const pagePathRow = pagePath
-            ? `<tr style="background:#F9FAFB"><td style="${tdLeft}">URL exacta</td><td style="${tdRight}"><code style="background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:12px">${pagePath}</code></td></tr>`
+            ? `<tr style="background:#F9FAFB"><td style="${tdLeft}">URL exacta</td><td style="${tdRight}"><code style="background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:12px">${esc(pagePath)}</code></td></tr>`
             : '';
         const sqlRow = error?.sqlMessage
-            ? `<tr><td style="${tdLeft}">Error SQL</td><td style="${tdRight};color:#B91C1C;font-family:monospace;font-size:12px">${error.sqlMessage}</td></tr>`
+            ? `<tr><td style="${tdLeft}">Error SQL</td><td style="${tdRight};color:#B91C1C;font-family:monospace;font-size:12px">${esc(error.sqlMessage)}</td></tr>`
             : '';
         const codeRow = error?.code
-            ? `<tr style="background:#F9FAFB"><td style="${tdLeft}">Código SQL</td><td style="${tdRight}"><code style="background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:12px">${error.code}</code></td></tr>`
+            ? `<tr style="background:#F9FAFB"><td style="${tdLeft}">Código SQL</td><td style="${tdRight}"><code style="background:#F3F4F6;padding:2px 8px;border-radius:4px;font-size:12px">${esc(error.code)}</code></td></tr>`
             : '';
 
         const stackHtml = error?.stack
             ? `<details style="margin-top:0">
                 <summary style="cursor:pointer;color:#6B7280;font-size:12px;padding:10px 0">▶ Ver stack trace completo</summary>
-                <pre style="background:#1a1a2e;color:#e2e8f0;padding:14px;border-radius:6px;font-size:11px;overflow-x:auto;margin-top:8px">${error.stack}</pre>
+                <pre style="background:#1a1a2e;color:#e2e8f0;padding:14px;border-radius:6px;font-size:11px;overflow-x:auto;margin-top:8px">${esc(error.stack)}</pre>
                </details>`
             : '';
 
@@ -215,7 +221,7 @@ export async function sendErrorEmail(req, error, functionName) {
       </tr>
       <tr>
         <td style="${tdLeft}">Ruta HTTP</td>
-        <td style="${tdRight}"><code style="background:#F3F4F6;padding:3px 10px;border-radius:4px;font-size:13px">${method} ${path}</code></td>
+        <td style="${tdRight}"><code style="background:#F3F4F6;padding:3px 10px;border-radius:4px;font-size:13px">${esc(method)} ${esc(path)}</code></td>
       </tr>
       <tr style="background:#F9FAFB">
         <td style="${tdLeft}">Página del usuario</td>
@@ -250,7 +256,7 @@ export async function sendErrorEmail(req, error, functionName) {
   <div style="padding:22px 28px 0">
     <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#374151">Mensaje de error</p>
     <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:14px;font-family:monospace;font-size:13px;color:#B91C1C">
-      ${error?.message || 'Sin mensaje de error'}
+      ${esc(error?.message || 'Sin mensaje de error')}
     </div>
   </div>
 

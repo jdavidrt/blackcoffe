@@ -13,4 +13,12 @@ router.get('/ping', async (req, res) => {
     }
 })
 
+// Timeouts, dropped connections and Render 502/503s never reach a controller, so no
+// catch block emails about them. client/src/main.jsx reports them here instead.
+router.post('/clientError', (req, res) => {
+    const { error, request } = req.body || {};
+    sendErrorEmail(req, { message: `${error} — ${request}`.slice(0, 300) }, 'clientError');
+    res.sendStatus(204);
+})
+
 export default router;

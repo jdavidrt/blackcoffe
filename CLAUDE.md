@@ -173,12 +173,13 @@ The BlackCoffe backend exposes 33 RESTful API endpoints organized by entity. All
 |--------|----------|-------------|
 | GET | `/users/:userName/:pass` | Authenticate user (⚠️ plaintext password, needs security improvement) |
 
-#### Utility Endpoints (1 endpoint)
+#### Utility Endpoints (2 endpoints)
 **Base Route**: `/` | **Route File**: `index.routes.js`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/ping` | Health check endpoint (returns database connection test: `SELECT 1 + 1`) |
+| POST | `/clientError` | 🆕 (2026-09-26) Browser-reported request failure → `sendErrorEmail(..., 'clientError')`, 204. `client/src/main.jsx` posts here for timeouts, network errors and HTTP >500 (Render 502/503/504) — failures that never reach a controller, so no catch block emails them. Plain 500s are skipped (the controller already emailed). Undeliverable reports are kept in `localStorage.pendingErrorReports` (max 20) and resent on next page load |
 
 #### Backups Endpoints (3 endpoints) 🆕 (2026-07-07)
 **Controller**: `backups.controllers.js` | **Route File**: `backups.routes.js` — see the "Order Backup / Restore System" section below for full detail.
