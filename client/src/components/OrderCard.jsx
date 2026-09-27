@@ -36,7 +36,8 @@ function orderCard({ order }) {
         <p className="p-2 flex items-center h-content">{order.premises} {order.clientName} - {order.mall}</p>
       </b>
       <div className="flex items-center gap-2 p-2 ml-auto shrink-0">
-        <b><p className="text-green-500 px-2">${calculateOrderTotal(order)}</p></b>
+        {/* `total` comes precomputed from /orders/ (no items); calculateOrderTotal is the fallback. */}
+        <b><p className="text-green-500 px-2">${order.total ?? calculateOrderTotal(order)}</p></b>
         <button
           type="button"
           className="w-8 h-8 rounded-md flex items-center justify-center bg-slate-300 text-black"

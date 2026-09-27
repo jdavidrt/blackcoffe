@@ -1,7 +1,7 @@
 import pool from '../db.js'
 import { sendErrorEmail } from '../utils/emailNotifier.js'
 
-const computeOrderTotal = (itemsJson) => {
+export const computeOrderTotal = (itemsJson) => {
     try {
         const items = JSON.parse(itemsJson || '[]');
         if (!Array.isArray(items)) return 0;
@@ -11,15 +11,6 @@ const computeOrderTotal = (itemsJson) => {
     }
 };
 
-export const getDeposits = async (req, res) => {
-    try {
-        const [result] = await pool.query("SELECT *, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt, deposits.isDeleted, deposits.deletedAt as deletedAt FROM deposits join orders on orders.id = deposits.orderId ORDER BY deposits.depositCreatedAt ASC")
-        res.json(result)
-    } catch (error) {
-        sendErrorEmail(req, error, 'getDeposits');
-        return res.status(500).json({ message: 'Error obteniendo los abonos' });
-    }
-}
 
 export const getDepositsByOrder = async (req, res) => {
     try {

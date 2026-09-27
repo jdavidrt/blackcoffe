@@ -37,6 +37,10 @@ export const getOrderRequest = async (id) =>
 export const updateOrderRequest = async (id, newFields) =>
   await axios.put(`${API_CONFIG.RENDER_SERVER}/order/${id}`, newFields);
 
+// Sets one item's delivery state on the server's current items (never send the whole list back).
+export const setItemDeliveredRequest = async (id, itemId, delivered, deliveredAt) =>
+  await axios.put(`${API_CONFIG.RENDER_SERVER}/order/${id}/delivered`, { itemId, delivered, deliveredAt });
+
 export const toggleOrderDoneRequest = async (id, done) =>
   await axios.put(`${API_CONFIG.RENDER_SERVER}/order/${id}`, {
     done,

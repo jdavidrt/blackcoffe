@@ -7,7 +7,7 @@ Deployment configuration, database schema, and timezone-handling reference for t
 1. [Deployment Guide](#deployment-guide), which starts with [Hosting & Infrastructure](#hosting--infrastructure-production) (services, plans, regions, environment variables)
 2. [Database Schema](#database-schema)
 3. [Timezone Implementation](#timezone-implementation)
-4. [Local Testing Against the Real DB](#local-testing-against-the-real-db)
+4. [Local Testing Against the Real DB](#local-testing-against-the-real-db), including the [Local integrity check](#local-integrity-check-throwaway-mysql-container)
 
 ---
 
@@ -115,6 +115,7 @@ Frontend runs on: http://localhost:5173
 - [x] `package.json` has `start` and `build` scripts
 - [x] `.gitignore` excludes `node_modules` and `dist`
 - [x] Database credentials moved to environment variables (`server/db.js` reads `DB_*`)
+- [ ] If an endpoint stops sending a field the current frontend reads (e.g. `items` → `total` on the order lists, 2026-09-26), deploy the static site **before** the API and ask staff to reload; an old page on a new API can show wrong totals (every Cobrar card marked PAGADO)
 
 ## Common Issues
 
@@ -327,7 +328,8 @@ Tables with soft delete capability:
 - **Client edits are never blocked** — `updateClient` has no active-order check, since `clientId` (the FK orders actually use) is untouched by renaming a client or changing their premises/mall/phone
 - **Client deletion is blocked** while the client has any active (unpaid, non-abandoned) order
 - **Order deletion is blocked** if the order has any deposit history, including soft-deleted deposits
-- **Order edits are blocked entirely** once `paid = 1` (full freeze, including delivery toggles)
+- **Order edits are blocked entirely** once `paid = 1` (full freeze, including delivery toggles). Since 2026-09-26 the check runs under the order's row lock (`SELECT … FOR UPDATE`) in `updateOrder` and `setItemDelivered`, so an edit can't slip in while a payment completes
+- **Order items are never written from a copy the browser loaded earlier**: Nueva Orden merges on the server, delivery checkboxes send one item, Editar Orden sends `expectedItems` and gets 409 on conflict (CLAUDE.md Core Business Rule #10)
 
 See CLAUDE.md "Completed Improvements #5, #6, #7" for the implementation history of these rules.
 
@@ -729,3 +731,33 @@ BlackCoffe has no separate local/test database — `server/db.js` always connect
 - **Client id `1557`** ("26 Prueba", premises `TEST`, mall `Otros`) is a designated test client — safe to create/merge orders, make/delete deposits, etc. against it when smoke-testing backend changes. It is not a real customer.
 - **Server-side deploys are the project owner's responsibility.** After backend changes are made and locally verified, wait for them to commit and deploy (e.g. push to whichever branch Render auto-deploys from) rather than deploying as part of a task.
 - **`server/sigale/`'s DB guardrail blocks booting the full combined server locally** with only BlackCoffe's `.env.local` — it hard-fails unless `SIGALE_DB_NAME`/`DB_NAME === 'sigale'` (intentional, see CLAUDE.md's Sigale guardrail; do not work around it). To exercise BlackCoffe controller logic against the real DB without booting Express/Sigale at all, import the controller functions directly (e.g. from `orders.controllers.js`, `deposits.controllers.js`) and invoke them with minimal mock `req`/`res` objects — this bypasses `server/index.js` (and therefore Sigale's mount) entirely while still hitting the real DB and running the real SQL/transaction logic.
+
+## Local integrity check (throwaway MySQL container)
+
+[server/tests/orderIntegrity.check.mjs](../server/tests/orderIntegrity.check.mjs) exercises the order write paths and list payloads (CLAUDE.md Core Business Rules #10 and #11) through real HTTP requests and real MySQL row locks. It **writes test rows**, so it refuses to run unless `DB_HOST` is `127.0.0.1`/`localhost`; never point it at production. It deletes its rows at the end.
+
+One-time setup (Docker Desktop running, ~1 minute):
+
+```bash
+# MySQL 8.0 with production's sql_mode and lock-wait timeout (PERFORMANCE_AUDIT.md §3)
+docker run -d --name bc-locktest -e MYSQL_ROOT_PASSWORD=test -e MYSQL_DATABASE=defaultdb -p 33306:3306 \
+  mysql:8.0 --sql-mode=ANSI --innodb-lock-wait-timeout=120
+# wait until "docker exec bc-locktest mysqladmin -uroot -ptest ping" answers, then give it a few more seconds
+docker exec -i bc-locktest mysql --default-character-set=utf8mb4 -uroot -ptest defaultdb < server/database/db.sql
+# db.sql lags production: add the columns the code uses
+docker exec bc-locktest mysql -uroot -ptest defaultdb -e "ALTER TABLE orders MODIFY items MEDIUMTEXT; ALTER TABLE deposits ADD dueOnDeposit int, ADD isDeleted tinyint(1) DEFAULT 0, ADD deletedAt datetime, ADD deletedBy varchar(255); ALTER TABLE clients ADD isDeleted tinyint(1) DEFAULT 0, ADD deletedAt datetime, ADD deletedBy varchar(255);"
+# the app's own boot migrations (snapshot columns, backup tables, indexes)
+export DB_HOST=127.0.0.1 DB_PORT=33306 DB_USER=root DB_PASSWORD=test DB_NAME=defaultdb
+node --input-type=module -e "for (const [m, fn] of [['add_client_snapshot','runMigrations'],['create_backup_tables','runBackupMigrations'],['add_performance_indexes','runIndexMigrations']]) await (await import('./server/migrations/' + m + '.js'))[fn](); process.exit(0)"
+```
+
+Run (from the repo root, same `DB_*` variables):
+
+```bash
+node server/tests/orderIntegrity.check.mjs   # prints "ok 1" … "ok 8"; exits non-zero on the first failed assertion
+```
+
+Notes:
+- Use `--default-character-set=utf8mb4` whenever you insert text through `docker exec … mysql`; the container client defaults to latin1 and stores "Alta Tecnología" mis-encoded, so mall filters stop matching.
+- The script mounts only BlackCoffe's order and deposit routers on a random port, so Sígale's database guardrail isn't involved.
+- Clean up with `docker rm -f bc-locktest`.

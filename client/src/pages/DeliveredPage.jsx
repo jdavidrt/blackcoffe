@@ -33,6 +33,8 @@ function DeliveredOrdersPage() {
     const loadOrders = async () => {
         setLoading(true);
         try {
+            // The filters below read dateFilter; without this it kept the last date picked in an earlier visit.
+            localStorage.setItem('dateFilter', fechaActual);
             await loadDeliveredOrders(fechaActual);
         } finally {
             setLoading(false);

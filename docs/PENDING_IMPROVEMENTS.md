@@ -34,6 +34,10 @@ Full detail lives in `CLAUDE.md`'s "Completed Improvements" section (items 0–7
 | 1.8 | `UserProvider.autenticateUser` now calls `setUser()` *before* its `return` (previously unreachable dead code, so context never populated on login); `LoginForm.jsx` calls `autenticateUser` once per submit instead of twice | this pass, 2026-07-06 |
 | 1.4 | `CollectOrderForm.jsx` now sends `localStorage.getItem('user')` as `collectedBy` in the atomic deposit payload, instead of `order.mall` | this pass, 2026-07-06 |
 | 2.6 | **Preserved, not fixed** — localhost origins (`localhost:5173`, `localhost:25060`) stay in `server/index.js`'s CORS allowlist deliberately, to keep local dev working. That array is also flagged by this repo's Sigale guardrail (shared with the Sigale production origin), so it isn't touched casually. Revisit only alongside the full auth overhaul in Priority 2 | intentionally kept, documented 2026-07-06 |
+| 5.6 | `GET /deposits` **removed** (route, controller, API function, `loadDeposits`). Unused, and one request ran the 512 MB instance out of memory on 2026-09-26 | 2026-09-26, pending deploy (CLAUDE.md Completed Improvements #12) |
+| 6.5 (list screens) | `/orders/`, `/unPaidOrders/:mall` return `total` instead of `items`; `/deliveredOrders/:date` returns only that day's delivered items + `total`. 2.8 MB / 2.26 MB / 2.0 MB → 55 / 34 / 97 KB | 2026-09-26, pending deploy (CLAUDE.md rule #11) |
+| — | Order items never written from a browser copy: server-side merge for Nueva Orden, per-item `PUT /order/:id/delivered` for every delivery checkbox, `updateOrder` under row lock with an `expectedItems` 409 check. Supersedes 1.6 | 2026-09-26, pending deploy (CLAUDE.md rule #10) |
+| — | Browser-reported request failures (timeouts, network errors, 502/503) emailed via `POST /clientError`; notifier HTML-escapes request data | `91f7770` (CLAUDE.md Completed Improvements #11) |
 
 ---
 
@@ -45,7 +49,7 @@ Full detail lives in `CLAUDE.md`'s "Completed Improvements" section (items 0–7
 
 Two items from the branch remain genuinely open:
 - **2.7** (input validation / column allowlisting) — considered, deliberately deferred this pass (not requested).
-- **1.6** (checkbox write-serialization via `latestCartRef`) — considered and explicitly **rejected**: adopting it reintroduces the local-`cart`-state shape that caused the C1 stale-cart-race bug `main` already eliminated (see the regression-risk callout below). Do not adopt as originally coded on the branch.
+- **1.6** (checkbox write-serialization via `latestCartRef`) — **superseded 2026-09-26**: checkboxes no longer send the item list at all; each click sends one item to `PUT /order/:id/delivered`, which the server applies under a row lock (CLAUDE.md rule #4/#10). Original note: considered and explicitly **rejected**: adopting it reintroduces the local-`cart`-state shape that caused the C1 stale-cart-race bug `main` already eliminated (see the regression-risk callout below). Do not adopt as originally coded on the branch.
 
 The branch itself is still unmerged and should still not be merged/rebased as a unit — the rest of this section (which describes what it's missing and why) remains accurate for what's left in it (2.7, 1.6, and Priority 2's auth items).
 
@@ -151,20 +155,20 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
   - The date-column indexes only help after the date filters are rewritten (audit N2). The `clients` table is too small to need any.
 - **5.4** — No foreign-key constraints anywhere (`orders.clientId`, `deposits.orderId`, `deposits.clientId` are soft references only) — this is precisely why the `/ordenesSinCliente` orphaned-orders cleanup page has to exist.
 - **5.5** — Soft-deleted deposits are never archived/purged; every query pays the scan cost forever.
-- **5.6** — `getDeposits` has no `WHERE`/`LIMIT` — returns every deposit ever made.
+- ~~**5.6** — `getDeposits` has no `WHERE`/`LIMIT` — returns every deposit ever made.~~ **Done 2026-09-26: endpoint removed** (nothing called it; one request exhausted the instance's memory).
 
 ### Performance (audit section 6)
 - **6.2** — The `LIKE '%"delivered":false%'` full-table-scan pattern also shows up in `getNotDeliveredOrders`/`getDeliveredOrders` — same root cause as 5.1.
 - **6.3** — `window.location.reload()` is used as a poor-man's state sync after nearly every mutation (payment, deposit delete, checkbox toggle) — full SPA reload on every action, several seconds of dead screen on slow connections.
 - **6.4** — `sumarDepositos`/`sumarDepositosPorMall` in `DepositedOrdersPage.jsx` recompute on every render instead of being memoized.
-- **6.5** — Most controller `SELECT`s pull every column (including the potentially large `items` TEXT/JSON) even for dashboard/count views that don't need it.
-- **6.6** — No pagination on `/orders`, `/deposits`, `/abonos`, `/clients` — tolerable at current (~10k row) volume, won't be at 10x that.
+- **6.5** — Most controller `SELECT`s pull every column (including the potentially large `items` TEXT/JSON) even for dashboard/count views that don't need it. **Partly done 2026-09-26**: Cuentas por cobrar, Cobrar por mall and Entregados no longer send full items (CLAUDE.md rule #11). Still sending full items: `/depositedOrdersByDate/:date` (Cobros del día, ~330 KB), `/depositsByDate/:date` (Abonos), `/abandonedOrders` (~165 KB), `/unPaidOrdersByClient/:id` (only its `id` is used by `ClientForm`).
+- **6.6** — No pagination on `/orders`, `/abonos`, `/clients` (`/deposits` was removed 2026-09-26) — tolerable at current (~10k row) volume, won't be at 10x that.
 - **6.7 — Performance audit (2026-09-24), in progress.** The client reported the app getting "slow or stuck" several times a day, on phones and PCs, on all pages. Full evidence and fixes are in [PERFORMANCE_AUDIT.md](PERFORMANCE_AUDIT.md).
   - Quick wins **QW1–QW4 implemented and verified locally on 2026-09-24, pending deploy**: indexes; crash-proofing the `getConnection()`-outside-`try` handlers; request-timing logs; a GET timeout plus a failed-load dialog in the frontend. The results are in the audit's "Evaluation" section.
   - **QW5 (the database maintenance window) is still open**; it is a DigitalOcean setting for the owner.
   - Next steps N1–N7.
   - Infrastructure: move the API from Render Oregon to Render Virginia, next to the NYC3 database.
-  - The audit confirms 5.3, 5.6, 6.2, 6.3 and 6.5 with production data. Mark items done here as they ship.
+  - The audit confirms 5.3, 5.6, 6.2, 6.3 and 6.5 with production data. Mark items done here as they ship. N5 and N7 shipped in code 2026-09-26 (pending deploy).
 
 ### Leftover items (from the old "Code Improvement Opportunities" list)
 - **Frontend error boundaries** — no React error boundary exists anywhere; a component crash white-screens the whole app. Fully open.

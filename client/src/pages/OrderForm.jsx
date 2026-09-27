@@ -10,12 +10,11 @@ import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
-import { createCartSnapshot, validateSafeMerge } from '../utils/orderValidation';
 import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 import ProgressiveProductList from '../components/ProgressiveProductList';
 
 function OrderForm() {
-  const { unPaidOrder, createOrder, getOrder, updateOrder, getUnPaidOrdersbyClient, resetUnPaidOrder } = useOrders();
+  const { createOrder, getOrder, updateOrder } = useOrders();
   const { products, loadProducts, } = useProducts();
   const { clients, loadClients } = useClients()
   const [refresh, setRefresh] = useState(true);
@@ -30,6 +29,9 @@ function OrderForm() {
     items: ""
   });
   const submittingRef = useRef(false);
+  // Edit mode: the items exactly as loaded, so the server can refuse a save that would
+  // overwrite changes made to the order after this form opened.
+  const loadedItemsRef = useRef(undefined);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [formKey, setFormKey] = useState(0);
   const [orderLoaded, setOrderLoaded] = useState(false);
@@ -83,11 +85,9 @@ function OrderForm() {
     loadClients(newMall);
   };
 
-  const selectClient = async (value) => {
-    const newClient = value;
-    await getUnPaidOrdersbyClient(value);
+  const selectClient = (value) => {
     setClientChanged(true)
-    setClient(newClient);
+    setClient(value);
   };
 
   const calculateTotal = () => {
@@ -122,6 +122,7 @@ function OrderForm() {
         loadClients([])
         setMall(order.mall)
         setClient(order.clientId)
+        loadedItemsRef.current = order.items;
         setCart(safeJSONParse(order.items, []))
         setOrder({
           clientId: order.clientId,
@@ -171,6 +172,7 @@ function OrderForm() {
           clientId: client || values.clientId,
           shopId: values.shopId,
           items: JSON.stringify(cart),
+          expectedItems: loadedItemsRef.current,
         });
         navigate('/');
       } else {
@@ -183,23 +185,15 @@ function OrderForm() {
           return;
         }
 
-        // Check if client has an existing unpaid order to merge into
-        // unPaidOrder is a single order object (not an array) set by getUnPaidOrdersbyClient
-        if (unPaidOrder && unPaidOrder.id) {
-          const existingItems = safeJSONParse(unPaidOrder.items, []);
-          const mergedItems = [...existingItems, ...cart];
-          setLoadingMessage("Agregando productos a orden existente...");
-          await updateOrder(unPaidOrder.id, {
-            items: JSON.stringify(mergedItems),
-          });
-        } else {
-          setLoadingMessage("Creando orden...");
-          await createOrder({
-            clientId: client,
-            shopId: 1,
-            items: JSON.stringify(cart),
-          });
-        }
+        // One open order per client: if the client already has an unpaid order, the server
+        // adds these products to it (under a row lock, on its CURRENT items). Merging here from
+        // a copy loaded when the client was picked erased anything added in between.
+        setLoadingMessage("Guardando orden...");
+        await createOrder({
+          clientId: client,
+          shopId: 1,
+          items: JSON.stringify(cart),
+        });
         // Reset form fully for next order
         setCart([]);
         setClient(null);
@@ -208,13 +202,20 @@ function OrderForm() {
         setMall("Alta Tecnología");
         loadClients("Alta Tecnología");
         setSearchTerm('');
-        resetUnPaidOrder();
         setFormKey(prev => prev + 1);
       }
     } catch (error) {
       console.error('[OrderForm] Error during order submission:', error);
       const paidOrderId = error.response?.status === 400 && error.response?.data?.orderId;
-      if (paidOrderId) {
+      if (error.response?.status === 409) {
+        Modal.error({
+          title: 'La orden cambió',
+          content: 'Alguien modificó esta orden mientras usted la editaba (agregó productos o marcó entregas). Sus cambios no se guardaron: recargue para ver la versión actual y vuelva a hacerlos.',
+          okText: 'Recargar',
+          okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
+          onOk: () => window.location.reload(),
+        });
+      } else if (paidOrderId) {
         Modal.error({
           title: 'Orden ya pagada',
           content: (
@@ -230,6 +231,9 @@ function OrderForm() {
           ),
           onOk: () => navigate('/'),
         });
+      } else if (!error.response) {
+        // No answer: the save may have gone through, and a retry would add the products twice.
+        alert("No se recibió respuesta del servidor. La orden pudo haberse guardado: revise 'Cuentas por cobrar' antes de intentar de nuevo.");
       } else {
         alert("Error al procesar la orden. Intenta de nuevo.");
       }

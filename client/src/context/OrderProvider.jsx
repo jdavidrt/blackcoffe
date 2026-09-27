@@ -7,7 +7,6 @@ import {
   getOrderRequest,
   updateOrderRequest,
   getUnpaidOrders,
-  loadUnPaidOrdersbyClient,
   getNotDeliveredOrdersRequest,
   getDeliveredOrdersRequest,
   getDepositedOrdersByDate,
@@ -29,7 +28,6 @@ export const useOrders = () => {
 
 export const OrderContextProvider = ({ children }) => {
   const [orders, setOrders] = useState([]);
-  var [unPaidOrder, setUnPaidOrder] = useState(null);
   const [abandonedOrders, setAbandonedOrders] = useState([]);
 
   async function loadOrders() {
@@ -72,28 +70,12 @@ export const OrderContextProvider = ({ children }) => {
     setOrders(response.data);
   }
 
+  // The server merges into the client's open (unpaid) order if there is one, under a row lock.
+  // Re-throws so OrderForm doesn't reset the form as if an order that failed had been saved.
   const createOrder = async (order) => {
-    try {
-      await createOrderRequest(order);
-      // setOrders([...orders, response.data]);
-    } catch (error) {
-      console.error(error);
-    }
+    const response = await createOrderRequest(order);
+    return response.data;
   };
-
-
-  async function getUnPaidOrdersbyClient(clientId) {
-    const response = await loadUnPaidOrdersbyClient(clientId);
-    if (response.data.length > 0) {
-      setUnPaidOrder(response.data[0]);
-    } else {
-      setUnPaidOrder(null);
-    }
-  }
-
-  function resetUnPaidOrder() {
-    setUnPaidOrder(null);
-  }
 
   const getOrder = async (id) => {
     try {
@@ -151,7 +133,6 @@ export const OrderContextProvider = ({ children }) => {
     <OrderContext.Provider
       value={{
         orders,
-        unPaidOrder,
         abandonedOrders,
         loadOrders,
         loadCollectedOrders,
@@ -160,8 +141,6 @@ export const OrderContextProvider = ({ children }) => {
         getOrder,
         updateOrder,
         loadUnPaidOrders,
-        getUnPaidOrdersbyClient,
-        resetUnPaidOrder,
         loadUnDeliveredOrders,
         loadDeliveredOrders,
         loadDepositedOrderByDate,

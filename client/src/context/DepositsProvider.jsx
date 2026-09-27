@@ -1,6 +1,5 @@
 import { createContext, useContext, useState } from "react";
 import {
-    getDepositsRequest,
     getDepositByOrderIdRequest,
     createDepositRequest,
     deleteDepositById as deleteDepositByIdRequest,
@@ -20,10 +19,6 @@ export const useDeposits = () => {
 export const DepositContextProvider = ({ children }) => {
     const [deposits, setDeposits] = useState([]);
 
-    async function loadDeposits() {
-        const response = await getDepositsRequest();
-        setDeposits(response.data);
-    }
 
     const createDeposit = async (deposits) => {
         try {
@@ -66,7 +61,6 @@ export const DepositContextProvider = ({ children }) => {
         <DepositContext.Provider
             value={{
                 deposits,
-                loadDeposits,
                 createDeposit,
                 getDepositsByOrderId,
                 deleteDepositById,

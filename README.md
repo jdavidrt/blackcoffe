@@ -171,7 +171,7 @@ Central hub displaying all unpaid orders across all mall locations. Features com
 #### Create New Order (`/nuevaOrden`)
 **Component**: `OrderForm.jsx` | **Navigation**: Green "Nueva Orden" button
 
-Interactive order creation interface with client selection, dynamic product cart, quantity adjustments, and delivery details. Uses Formik for form handling and Context API for state management. **If the selected client already has an unpaid order, new products are merged into it rather than creating a second order.** Orders are created with initial status of unpaid, undelivered, and uncollected.
+Interactive order creation interface with client selection, dynamic product cart, quantity adjustments, and delivery details. Uses Formik for form handling and Context API for state management. **If the selected client already has an unpaid order, new products are merged into it rather than creating a second order** (the server does the merge on the order's current contents, so products added from another phone at the same time are never lost). Orders are created with initial status of unpaid, undelivered, and uncollected.
 
 **Workflow**: Select client → Add products → Adjust quantities → Add delivery details → Submit (merges into existing order if one exists)
 
@@ -263,7 +263,7 @@ Dedicated management interface for orders marked as abandoned (`isAbandoned = 1`
 #### Delivery Routes (`/recorrido`)
 **Component**: `DeliveryOrdersPage.jsx` | **Navigation**: Orange "Recorrido" button
 
-Delivery route management and order fulfillment tracking. Lists all orders ready for delivery, organized by location and premises for efficient routing. Supports marking individual items as delivered and tracking delivery timestamps.
+Delivery route management and order fulfillment tracking. Lists all orders ready for delivery, organized by location and premises for efficient routing. Supports marking individual items as delivered and tracking delivery timestamps. Each checkbox updates only that item on the server, so products added to the order after the page loaded are kept.
 
 **Features**: Route planning, Partial deliveries, Delivery status updates, Real-time tracking
 
@@ -655,24 +655,26 @@ See **[REFERENCE.md](docs/REFERENCE.md#timezone-implementation)** for complete t
 
 ### RESTful API Endpoints
 
-The backend exposes **47 RESTful API endpoints** organized by entity with consistent patterns:
+The backend exposes **41 routes** (counted from `server/routes/*.routes.js`, 2026-09-26) organized by entity with consistent patterns:
 
 **Endpoint Structure**: `HTTP_METHOD /entity/action/:parameter`
 
 **Core Entities**:
-- **Orders**: 15 endpoints (CRUD, filtering by status, location, date)
-- **Clients**: 6 endpoints (CRUD, filtering by mall)
+- **Orders**: 16 endpoints (CRUD, filtering by status, location, date, per-item delivery)
+- **Clients**: 8 endpoints (CRUD, filtering by mall, soft delete/restore)
 - **Products**: 5 endpoints (CRUD operations)
-- **Deposits**: 5 endpoints (CRUD, soft delete with recalculation)
+- **Deposits**: 4 endpoints (by order, by date, create, soft delete with recalculation)
+- **Backups**: 4 endpoints (nightly order snapshots and restore)
 - **Users**: 1 endpoint (authentication)
-- **Utility**: 1 endpoint (health check)
+- **Query**: 1 endpoint (read-only queries page)
+- **Utility**: 2 endpoints (health check, browser error reports)
 
 **API Pattern**:
 1. **Routes** (`server/routes/*.routes.js`) - Define HTTP endpoints
 2. **Controllers** (`server/controllers/*.controllers.js`) - Business logic and database queries
 3. **Frontend Services** (`client/src/api/*.api.js`) - Axios-based HTTP client functions
 
-**Complete API Reference**: See **[CLAUDE.md](CLAUDE.md#complete-api-endpoints-reference)** for detailed documentation of all 47 endpoints with parameters and descriptions.
+**Complete API Reference**: See **[CLAUDE.md](CLAUDE.md#complete-api-endpoints-reference)** for detailed documentation of the endpoints with parameters and descriptions.
 
 ---
 

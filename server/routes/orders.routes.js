@@ -14,7 +14,8 @@ import {
     getOrphanedOrders,
     getAbandonedOrders,
     markOrderAsAbandoned,
-    unmarkOrderAsAbandoned
+    unmarkOrderAsAbandoned,
+    setItemDelivered
 } from "../controllers/orders.controllers.js"
 const router = Router();
 
@@ -39,6 +40,8 @@ router.get('/order/:id', getOrder);
 router.post('/order', createOrder);
 
 router.put('/order/:id', updateOrder);
+
+router.put('/order/:id/delivered', setItemDelivered);
 
 router.delete('/order/:id', deleteOrder);
 

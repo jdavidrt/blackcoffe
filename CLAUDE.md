@@ -109,25 +109,26 @@ The API follows a consistent RESTful pattern:
 
 ### Complete API Endpoints Reference
 
-The BlackCoffe backend exposes 33 RESTful API endpoints organized by entity. All endpoints are prefixed with the base URL (`http://localhost:25060` in development, `https://coffeserver.onrender.com` in production).
+The BlackCoffe backend exposes 41 routes (counted from `server/routes/*.routes.js` on 2026-09-26; the tables below cover the main ones, backups are listed further down). All endpoints are prefixed with the base URL (`http://localhost:25060` in development, `https://coffeserver.onrender.com` in production).
 
-#### Orders Endpoints (15 endpoints)
+#### Orders Endpoints (16 endpoints)
 **Base Route**: `/orders` | **Controller**: `orders.controllers.js` | **Route File**: `orders.routes.js`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/orders/` | Get all orders with client details (JOIN with clients table) |
+| GET | `/orders/` | Unpaid, non-abandoned orders with client details (dashboard). **Returns `total` instead of `items`** (2026-09-26): 2.8 MB → 55 KB. See Rule #11 "Order list payloads" |
 | GET | `/order/:id` | Get single order by ID with client information |
 | GET | `/orphanedOrders/` | Get orders without assigned clients (`clientId IS NULL` or invalid) |
 | GET | `/notDeliveredOrders/` | Get all orders pending delivery (`delivered = 0`) |
-| GET | `/deliveredOrders/:date` | Get orders delivered on specific date (Colombia timezone) |
+| GET | `/deliveredOrders/:date` | Orders with items delivered on `:date` (Entregados). **`items` holds only the items delivered on `:date`** (still a JSON string) **plus the full order `total`** (2026-09-26): 2.0 MB → 97 KB |
 | GET | `/collectedOrders/:date` | Get orders collected/paid on specific date |
 | GET | `/depositedOrdersByDate/:date` | Get orders with deposits on specific date (includes partially and fully paid) |
-| GET | `/unPaidOrders/:mall` | Get unpaid orders filtered by mall location (`paid = 0` AND `mall = :mall`) |
+| GET | `/unPaidOrders/:mall` | Unpaid orders filtered by mall location (`paid = 0` AND `mall = :mall`). **Returns `total` instead of `items`** (2026-09-26): Alta Tecnología 2.26 MB → 34 KB. See Rule #11 "Order list payloads" |
 | GET | `/unPaidOrdersByClient/:clientId` | Get all unpaid orders for specific client |
 | GET | `/abandonedOrders` | Get all abandoned orders (`isAbandoned = 1`) |
-| POST | `/order` | Create new order (requires `clientId`, `items` JSON) |
-| PUT | `/order/:id` | Update existing order (any field except ID) |
+| POST | `/order` | Save products for a client (requires `clientId`, `items` JSON). **If the client already has an open (unpaid, non-abandoned) order, merges into it** under `SELECT … FOR UPDATE` (lowest id first); otherwise inserts. Returns `{ id, clientId }` or `{ id, clientId, mergedInto }` — no longer echoes `items` (2026-09-26). The ONLY path Nueva Orden uses (see Rule #1) |
+| PUT | `/order/:id` | Update existing order (any field except ID). **Runs in a transaction holding the order row lock** (2026-09-26). Optional `expectedItems` (the `items` string as the caller loaded it): if it no longer matches the row → **409** `{ message, orderId }` and nothing is written. Paid → 400 `{ orderId }`. Only Editar Orden calls it now |
+| PUT | `/order/:id/delivered` | 🆕 (2026-09-26) Set ONE item's delivery state: body `{ itemId, delivered: boolean, deliveredAt: 'YYYY-MM-DD' }`. Locks the row and applies it to the order's **current** items (idempotent: sets, doesn't flip). 400 invalid body / paid order (with `orderId`), 404 unknown order, **409** item no longer in the order. Used by every delivery checkbox (Recorrido, Entregados, Cobrar Orden) |
 | PUT | `/order/:id/abandon` | Mark order as abandoned (sets `isAbandoned = 1`, records `abandonedAt`, `abandonedBy`, `abandonReason`) |
 | PUT | `/order/:id/reactivate` | Reactivate abandoned order (sets `isAbandoned = 0`, clears abandonment fields) |
 | DELETE | `/order/:id` | Soft delete order (actual deletion, not soft delete for orders) |
@@ -155,16 +156,17 @@ The BlackCoffe backend exposes 33 RESTful API endpoints organized by entity. All
 | PUT | `/product/:id` | Update product information (name, price, description) |
 | DELETE | `/product/:id` | Delete product (validation prevents deletion if used in orders) |
 
-#### Deposits Endpoints (5 endpoints)
+#### Deposits Endpoints (4 endpoints)
 **Base Route**: `/deposits` | **Controller**: `deposits.controllers.js` | **Route File**: `deposits.routes.js`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/deposits` | Get all deposits with order information (JOIN with orders and clients) |
 | GET | `/deposits/:id` | Get all deposits for specific order ID (includes deleted deposits with `isDeleted` status) |
 | GET | `/depositsByDate/:date` | Get all deposits made on specific date (Colombia timezone) |
 | POST | `/deposits` | **Atomic** (2026-07-06): create a deposit AND update the parent order in one transaction. Requires only `orderId`, `depositValue`, `paymentMethod`, `collectedBy` — the server computes `lastDeposit`/`newDeposit`/`dueOnDeposit`/`paid`/`paidAt` itself from the locked order row (previously required the client to compute and send all of those). See item 8 in "Completed Improvements" |
 | DELETE | `/deposits/:id` | **Atomic** (2026-07-06): soft-deletes and recalculates all remaining active deposits' cumulative totals in a single batched query (previously an N+1 loop). Recomputes `paid` from the new running total and clears `paidAt` on an actual 1→0 transition, rather than forcing `paid = 0` unconditionally |
+
+⛔ **`GET /deposits` was removed (2026-09-26).** It returned every deposit ever made joined with `orders.*` (each order's full `items`): tens of MB. Nothing in the app called it, and a single request ran the 512 MB instance out of memory (502s for BlackCoffe **and** Sígale). Don't reintroduce an unbounded list endpoint; `/abonos` uses `/depositsByDate/:date`.
 
 #### Users Endpoints (1 endpoint)
 **Base Route**: `/users` | **Controller**: `users.controllers.js` | **Route File**: `users.routes.js`
@@ -258,11 +260,11 @@ client/src/context/
 
 ##### OrderProvider (14 methods)
 **Hook**: `useOrders()`
-**State**: `orders`, `unPaidOrder`, `abandonedOrders`
+**State**: `orders`, `abandonedOrders` (`unPaidOrder`, `getUnPaidOrdersbyClient` and `resetUnPaidOrder` were removed 2026-09-26 with the browser-side merge, see Rule #1)
 
 | Method | Parameters | Description |
 |--------|------------|-------------|
-| `loadOrders()` | none | Load all orders with client details |
+| `loadOrders()` | none | Load the dashboard's unpaid orders (each with `total`, no `items`) |
 | `loadUnDeliveredOrders()` | none | Load orders pending delivery (`delivered = 0`) |
 | `loadDeliveredOrders(date)` | date | Load orders delivered on specific date |
 | `loadCollectedOrders(date)` | date | Load orders collected/paid on specific date |
@@ -270,8 +272,7 @@ client/src/context/
 | `loadOrphanedOrders()` | none | Load orders without assigned clients |
 | `loadUnPaidOrders(mall)` | mall | Load unpaid orders filtered by location |
 | `getOrder(id)` | id | Get single order by ID, returns order object |
-| `getUnPaidOrdersbyClient(clientId)` | clientId | Get unpaid orders for specific client |
-| `createOrder(order)` | order object | Create new order |
+| `createOrder(order)` | order object | Save products for a client; the server merges into the client's open order if one exists. **Re-throws** on error (2026-09-26; it used to swallow errors, so a failed save reset the form as if it had worked) |
 | `updateOrder(id, newFields)` | id, newFields | Update existing order |
 | `deleteOrder(id)` | id | Delete order by ID |
 | `getAbandonedOrders()` | none | Load all abandoned orders |
@@ -304,13 +305,12 @@ client/src/context/
 | `deleteProduct(id)` | id | Delete product by ID |
 | `toggleProductDone(id)` | id | Toggle product status (legacy method) |
 
-##### DepositsProvider (5 methods)
+##### DepositsProvider (4 methods)
 **Hook**: `useDeposits()`
 **State**: `deposits`
 
 | Method | Parameters | Description |
 |--------|------------|-------------|
-| `loadDeposits()` | none | Load all deposits with order information |
 | `getDepositsByOrderId(id)` | orderId | Get all deposits for specific order |
 | `getDepositsByDate(date)` | date | Get deposits made on specific date |
 | `createDeposit(deposits)` | deposit object | Create new deposit record |
@@ -335,10 +335,10 @@ BlackCoffe uses Axios-based API service modules to communicate with the backend.
 **Service Files**:
 ```
 client/src/api/
-├── orders.api.js    (15 functions)
+├── orders.api.js    (16 functions)
 ├── clients.api.js   (6 functions)
 ├── products.api.js  (5 functions)
-├── deposits.api.js  (5 functions)
+├── deposits.api.js  (4 functions)
 └── users.api.js     (1 function)
 ```
 
@@ -350,7 +350,7 @@ client/src/api/
 
 #### API Service Functions Reference
 
-##### Orders API (`orders.api.js`) - 15 functions
+##### Orders API (`orders.api.js`) - 16 functions
 
 | Function | HTTP Method | Endpoint | Description |
 |----------|-------------|----------|-------------|
@@ -363,8 +363,9 @@ client/src/api/
 | `getDepositedOrdersByDate(date)` | GET | `/depositedOrdersByDate/:date` | Get orders with deposits by date |
 | `getUnpaidOrders(mall)` | GET | `/unPaidOrders/:mall` | Get unpaid orders by location |
 | `loadUnPaidOrdersbyClient(clientId)` | GET | `/unPaidOrdersByClient/:clientId` | Get client's unpaid orders |
-| `createOrderRequest(order)` | POST | `/order` | Create new order |
-| `updateOrderRequest(id, order)` | PUT | `/order/:id` | Update existing order |
+| `createOrderRequest(order)` | POST | `/order` | Save products (server merges into the open order) |
+| `updateOrderRequest(id, order)` | PUT | `/order/:id` | Update existing order (Editar Orden sends `expectedItems`) |
+| `setItemDeliveredRequest(id, itemId, delivered, deliveredAt)` | PUT | `/order/:id/delivered` | Set one item's delivery state (every delivery checkbox) |
 | `deleteOrderRequest(id)` | DELETE | `/order/:id` | Delete order |
 | `getAbandonedOrdersRequest()` | GET | `/abandonedOrders` | Get abandoned orders |
 | `markOrderAsAbandonedRequest(id, data)` | PUT | `/order/:id/abandon` | Mark order as abandoned |
@@ -391,11 +392,10 @@ client/src/api/
 | `updateProductRequest(id, product)` | PUT | `/product/:id` | Update existing product |
 | `deleteProductRequest(id)` | DELETE | `/product/:id` | Delete product |
 
-##### Deposits API (`deposits.api.js`) - 5 functions
+##### Deposits API (`deposits.api.js`) - 4 functions
 
 | Function | HTTP Method | Endpoint | Description |
 |----------|-------------|----------|-------------|
-| `getDepositsRequest()` | GET | `/deposits` | Get all deposits |
 | `getDepositsByOrderRequest(id)` | GET | `/deposits/:id` | Get deposits for order |
 | `getDepositsByDateRequest(date)` | GET | `/depositsByDate/:date` | Get deposits by date |
 | `createDepositRequest(deposit)` | POST | `/deposits` | Create new deposit |
@@ -452,16 +452,16 @@ Orders are the central entity with complex state tracking:
 #### 1. One Unpaid Order Per Client (Order Merging)
 When creating a new order via `/nuevaOrden` for a client who already has an unpaid order, the system **merges new products into the existing order** instead of creating a second one. This prevents order fragmentation — each client has at most one active (unpaid) order at any time.
 
-**Implementation flow:**
-1. User selects a client in `OrderForm.jsx` → `selectClient()` (line 85-90) triggers `getUnPaidOrdersbyClient(clientId)`
-2. `OrderProvider.jsx:89-96` fetches unpaid orders for that client and stores only the first result in `unPaidOrder` state
-3. On form submit (`OrderForm.jsx:149-157`):
-   - If `unPaidOrder && unPaidOrder.id` → calls `updateOrder()` with `[...existingItems, ...newCartItems]` (MERGE)
-   - If no unpaid order exists → calls `createOrder()` (NEW ORDER)
-4. After successful save in create mode: form resets (cart cleared, client cleared, mall defaults to "Alta Tecnología"), `resetUnPaidOrder()` called
-5. After successful save in edit mode: navigates to `/`
+**Implementation flow (server-side merge, 2026-09-26):**
+1. User selects a client in `OrderForm.jsx` → `selectClient()` just stores the client id. No request: the form no longer loads the client's open order.
+2. On submit (create mode), `OrderForm` **always** calls `createOrder()` → `POST /order` with only the new cart.
+3. `createOrder` (orders.controllers.js) runs a transaction: `SELECT id, items FROM orders WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL) ORDER BY id FOR UPDATE`. If a row exists, it merges the cart into that row's **current** items with `stackMergeItems` (same-id items sum `quantity`); otherwise it inserts a new order. Two phones saving for the same client at once serialize on that lock.
+4. After a successful save: form resets (cart cleared, client cleared, mall defaults to "Alta Tecnología").
+5. After a successful save in edit mode: navigates to `/` (edit mode uses `updateOrder` with `expectedItems`, see Rule #10).
 
-**Backend validation:** `hasDuplicateItemIds()` in `orders.controllers.js:3-10` rejects submissions (HTTP 400) if duplicate item IDs are detected in the items JSON, preventing data corruption during merges.
+**Why not merge in the browser:** until 2026-09-26 the form loaded the open order when the client was picked and sent back `[...thatCopy, ...cart]` via `updateOrder`. Anything written to the order in between (products added from another phone, delivery ticks) was silently overwritten, lowering the total. The now-deleted `orderValidation.js` and `unPaidOrder` state belonged to that flow.
+
+**Errors:** `OrderProvider.createOrder` re-throws. The form alerts; if no response arrived at all, it warns that the order may have been saved and to check "Cuentas por cobrar" before retrying (a retry with the same item ids would stack quantities).
 
 #### 2. Item ID Generation & Uniqueness
 Each product added to the cart receives a composite ID: `{productId} {HH:mm:ss} {DD/MM/YY}`
@@ -483,11 +483,13 @@ Delivery is tracked at the **individual item level**, not at the order level. Ea
 - `delivered: boolean` — whether this item has been delivered (initially `false`)
 - `deliveredAt: "YYYY-MM-DD"` — date delivered (initially `""`)
 
-**Delivery workflow** (`OrderDeliveryCard.jsx`):
-1. Delivery driver checks checkbox next to item
-2. System sets `delivered = true`, `deliveredAt = getCurrentDate()`
-3. Calls `updateOrder()` with updated items JSON
-4. Page reloads after 3-second delay
+**Delivery workflow** (checkboxes in `OrderDeliveryCard.jsx` (Recorrido), `OrderDeliveredCard.jsx` (Entregados) and `CollectOrderForm.jsx` (Cobrar Orden), 2026-09-26):
+1. Delivery driver checks or unchecks the box next to an item
+2. The page calls `setItemDeliveredRequest(orderId, itemId, !item.delivered, getCurrentDate())` → `PUT /order/:id/delivered`, **only that item's new state**
+3. `setItemDelivered` (orders.controllers.js) locks the order row, finds the item by `id` in the order's **current** items, sets `delivered`/`deliveredAt`, and writes the list back. Unknown item → 409, paid order → 400 `{ orderId }`
+4. The two cards reload after 3 seconds; `CollectOrderForm` updates its local cart instead. On any error they show "No se pudo actualizar la entrega" with a "Recargar" button
+
+Until 2026-09-26 each click sent the page's whole copy of the items through `updateOrder`, erasing products added after the page loaded (reproduced: order total 7,000 → 2,000 after one click).
 
 **Backend query patterns:**
 - Undelivered orders: `WHERE orders.items LIKE '%"delivered":false%'` (`orders.controllers.js:36`)
@@ -538,7 +540,7 @@ Two paired rules that keep historical orders readable even as the client master 
 Extends rule #8 to the orders table itself. Once an order has accumulated payment history or has been fully paid, it becomes immutable.
 
 - **Block order deletion when any deposits exist.** `deleteOrder` (orders.controllers.js:349) queries `SELECT depositId FROM deposits WHERE orderId = ? LIMIT 1` and returns `400 { message: "Order has deposits", orderId }` if found. **Includes soft-deleted deposits** (`isDeleted = 1`) — those rows exist precisely to preserve audit history, which is meaningless if the parent order is hard-deleted.
-- **Block all modifications to paid orders.** `updateOrder` (orders.controllers.js:281) reads the current `paid` value before applying changes; if `paid = 1`, returns `400 { message: "Order is already paid and cannot be modified", orderId }`. This is intentionally a full freeze:
+- **Block all modifications to paid orders.** `updateOrder` and `setItemDelivered` read the current `paid` value **under the row lock** (`SELECT … FOR UPDATE`, 2026-09-26) before applying changes; if `paid = 1`, they return `400 { message: "Order is already paid and cannot be modified", orderId }`. Before the lock, an edit arriving while a payment completed could still modify the just-paid order (reproduced locally in 99 of 100 simultaneous edit + payment pairs). This is intentionally a full freeze:
   - Items, quantities, `unitValue`, `clientId`, `deposit`, etc. cannot be changed.
   - **Delivery toggles are also blocked.** `OrderDeliveryCard` and `OrderDeliveredCard` both hide the checkbox when `order.paid === 1` and show a "Pagado – sin modificaciones" label. If a toggle somehow reaches the backend, both cards catch the 400 and surface a `Modal.error` linking to `/factura/:id`.
 - **Frontend guard points.**
@@ -556,9 +558,38 @@ Extends rule #8 to the orders table itself. Once an order has accumulated paymen
 | Submit form for a paid order (race condition) | "Orden ya pagada" | "Esta orden ya fue pagada y no puede ser modificada." | `/factura/:id` |
 | Toggle item delivery on a paid order | "Orden ya pagada" | "Esta orden ya fue pagada y no puede modificarse, incluyendo el estado de entrega de sus productos." | `/factura/:id` |
 | Delete an orphaned order with deposits | "Orden con abonos registrados" | "Esta orden tiene abonos registrados y no puede ser eliminada." | `/cobrarOrden/:id` |
+| Save Editar Orden after someone else changed the order (409) | "La orden cambió" | "Alguien modificó esta orden mientras usted la editaba (agregó productos o marcó entregas). Sus cambios no se guardaron: recargue para ver la versión actual y vuelva a hacerlos." | — ("Recargar" button reloads) |
+| Delivery checkbox fails (409 item gone, network, 5xx) | "No se pudo actualizar la entrega" | server message, or "Revise la conexión y recargue la página." | — ("Recargar" button reloads) |
 
 All links use the full style set per the mandatory "Styling inside Ant Design Modals" pattern below:
 `style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}`.
+
+#### 10. Order items are only ever written against the server's current copy ✅ (2026-09-26)
+An order's `items` list can be changed from several phones at once (Nueva Orden, Recorrido, Entregados, Cobrar Orden, Editar Orden). **Never send back a list the browser loaded earlier**: that erases whatever was written in between, and the total silently drops. Every write path now either sends only its own change or proves it saw the latest version, and all of them lock the order row (`SELECT … FOR UPDATE`), so they also serialize with `createDeposit`/`deleteDeposit`:
+
+| Screen | Request | What the server does |
+|---|---|---|
+| Nueva Orden | `POST /order` with only the new cart | Merges into the client's open order's current items (Rule #1) |
+| Delivery checkboxes | `PUT /order/:id/delivered` `{ itemId, delivered, deliveredAt }` | Sets that one item on the current items (Rule #4) |
+| Editar Orden | `PUT /order/:id` with the edited list **and `expectedItems`** (the `items` string exactly as loaded, kept in `loadedItemsRef`) | If the row's items differ from `expectedItems` → **409**, nothing written; the form shows "La orden cambió" and reloads |
+| Payment | `POST /deposits` | Computes the total from the current items (see "Deposits and Payment System") |
+
+**How totals stay correct:** no total is stored anywhere. Every screen and `createDeposit` compute it from the order's current `items` at request time (`computeOrderTotal` on the server, `calculateOrderTotal` in the browser: same formula, keep them in sync if pricing ever changes). `deposits.dueOnDeposit` is history ("owed right after that payment") and is never used as the current debt. So a total can only be wrong if items are lost, which the table above prevents. A screen can still show a total that is out of date until it reloads, but `createDeposit` always checks the payment against the current total.
+
+**Verified by** [server/tests/orderIntegrity.check.mjs](server/tests/orderIntegrity.check.mjs) (see REFERENCE.md "Local integrity check"): concurrent Nueva Orden saves, a product added after the Recorrido page loaded, stale edits, 25 edit-vs-payment races, the paid-order freeze, no transaction left open by rejected requests, and the list payloads below.
+
+#### 11. Order list payloads: `total` instead of `items` ✅ (2026-09-26)
+Some open orders carry 600+ items (up to ~90 KB each). The list screens only show each order's total, so the server computes it (`withTotal` → `computeOrderTotal`, the same function `createDeposit` validates payments with) and drops `items`:
+
+| Screen | Endpoint | Before → after (production data, 2026-09-26) | Frontend reads |
+|---|---|---|---|
+| Cuentas por cobrar | `/orders/` | 2.8 MB → 55 KB | `OrderCard`: `order.total ?? calculateOrderTotal(order)` |
+| Cobrar por mall | `/unPaidOrders/:mall` | Alta Tecnología 2.26 MB → 34 KB | `OrderCollectCard`: same fallback (Cobros del día still sends items) |
+| Entregados | `/deliveredOrders/:date` | 2.0 MB → 97 KB | `items` = only that day's delivered items (JSON string, still searched for the date by `DeliveredPage`); `OrderDeliveredCard` uses `total` for "Debe"/"Total" |
+
+- **Deploy the frontend before (or together with) the backend.** An old page receiving no `items` computes every total as 0: `OrderCollectCard` would then show **PAGADO** on every card. Staff should reload after a deploy.
+- Pages that edit or pay a single order (`/cobrarOrden/:id`, `/editarOrden/:id`, Recorrido) still load full items, because they display them.
+- `DeliveredPage` now also writes `localStorage.dateFilter` on its first load; before, it kept the date picked in an earlier visit, so its filters could hide today's deliveries.
 
 ### Deposits and Payment System
 The BlackCoffe system implements a comprehensive payment tracking system that supports both partial payments (deposits) and full order payments. This system allows café managers to handle complex payment scenarios where customers may pay in installments or make partial payments over time.
@@ -604,7 +635,6 @@ The payment system is built around two main tables:
 - `createDeposit(deposits)`: Creates new deposit via API — contract-agnostic wrapper; as of 2026-07-06 the object it forwards is `{orderId, depositValue, paymentMethod, collectedBy}` (built in `CollectOrderForm.jsx`'s `handleConfirmPayment`)
 - `getDepositsByOrderId(id)`: Fetches deposits for an order
 - `getDepositsByDate(date)`: Retrieves daily deposits
-- `loadDeposits()`: Loads all deposits into state
 - `deleteDepositById(id)`: ✅ **WORKING** - Soft deletes a deposit via API
 
 #### Payment Processing Workflow
@@ -1199,7 +1229,7 @@ The BlackCoffe system provides a comprehensive navigation menu with role-based a
 - Uses Formik for form handling
 - Context API for products and clients state
 - JSON serialization for order items
-- Creates order with `paid = 0`, `delivered = 0`, `collected = 0`
+- Creates order with `paid = 0`, `delivered = 0`, `collected = 0`, **or adds the products to the client's open order** (merged on the server under a row lock, see Core Business Rule #1)
 
 ---
 
@@ -1215,6 +1245,7 @@ The BlackCoffe system provides a comprehensive navigation menu with role-based a
 - Update delivery details
 - Update order notes
 - **Restrictions**: Cannot edit fully paid orders
+- **Conflict check (2026-09-26)**: the save sends `expectedItems` (the items as loaded). If someone changed the order meanwhile (added products, ticked deliveries), the server answers 409 and the form shows "La orden cambió" with a "Recargar" button instead of overwriting their changes (Core Business Rule #10)
 
 **Warning System**:
 - Confirmation modal before saving changes
@@ -1483,14 +1514,14 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
 4. Update delivery status in real-time
 
 **Technical Details**:
-- Updates order items JSON to mark individual products as delivered
+- Each checkbox sends only that item's new state (`PUT /order/:id/delivered`); the server applies it to the order's current items under a row lock, so products added after the page loaded are kept (Core Business Rule #4)
 - Tracks delivery timestamps
 - Supports partial deliveries (some items delivered, others pending)
 
 ---
 
 #### `/entregados` - Entregados (Delivered Orders)
-**Component**: `DeliveredOrdersPage.jsx`
+**Component**: `DeliveredPage.jsx` (imported as `DeliveredOrdersPage` in `App.jsx`), cards: `OrderDeliveredCard.jsx`
 **Navigation**: "Entregados" (accessed via link, not in main nav menu)
 **Purpose**: Track completed deliveries and delivery history
 
@@ -1502,6 +1533,7 @@ This route previously showed "Cuentas al día" (fully paid orders). The function
   - View delivery timestamps
   - Track delivery completion
 - **Order Status**: Shows which orders are fully delivered vs partially delivered
+- **Payload (2026-09-26)**: `/deliveredOrders/:date` sends only the items delivered on that date plus the order's full `total` (2.0 MB → 97 KB), see Core Business Rule #11
 - **Search & Filter**: Search by client, date, or location
 
 **Use Cases**:
@@ -1950,6 +1982,20 @@ Enforced in two places — add both when restricting a new user:
      - The order-creation lock no longer blocks other orders.
      - A database outage now returns a 500 instead of killing the process.
      - The dialog was verified in headless Chromium.
+11. **Browser-reported request failures by email** ✅ (2026-09-26, commit `91f7770`). Triggered by a client screenshot of the "No se pudieron cargar los datos" dialog on Cobrar Alta T. with no alert email: timeouts, dropped connections and Render 502/503s never reach a controller's `catch`, so nothing emailed.
+   - `client/src/main.jsx` posts them to the new `POST /clientError` (`server/routes/index.routes.js`) → `sendErrorEmail(..., 'clientError')`. Condition: no HTTP status or status **> 500** (plain 500s already email from the controller). Covers writes too.
+   - The report includes the request, error, elapsed ms, page, user, `navigator.onLine`, connection type and time. That tells the cases apart: ~20000 ms + "timeout" = slow; "Network Error" + offline = phone signal; HTTP 502/503 = Render down.
+   - If the report can't be delivered (server down), it's kept in `localStorage.pendingErrorReports` (max 20) and resent on the next page load with `sentLate: true`.
+   - `emailNotifier.js` now HTML-escapes every request-derived value (`esc()`), since anyone can POST `/clientError`. Emails are still rate-limited per function+message (60 s). Not capped globally: varying the message could flood the inbox; same exposure as the rest of the unauthenticated API.
+12. **Order items written only against the server's copy + slim list payloads** ✅ **IMPLEMENTED, PENDING DEPLOY** (2026-09-26). See Core Business Rules #1, #4, #9, #10 and #11 for the full behavior.
+   - **Nueva Orden** always calls `POST /order`; the server merges into the open order under a row lock. The browser-side merge (`unPaidOrder` state, `getUnPaidOrdersbyClient`, `resetUnPaidOrder`, `orderValidation.js`) was deleted, which also removes one request when a client is picked. `OrderProvider.createOrder` re-throws. `POST /order` no longer echoes `items`.
+   - **Delivery checkboxes** (Recorrido, Entregados, Cobrar Orden) use the new `PUT /order/:id/delivered` (one item, row lock, idempotent).
+   - **`updateOrder`** runs in a transaction with `SELECT … FOR UPDATE`; Editar Orden sends `expectedItems` and gets a 409 "La orden cambió" dialog on conflict.
+   - **List payloads**: `/orders/`, `/unPaidOrders/:mall` return `total` instead of `items`; `/deliveredOrders/:date` returns that day's delivered items + `total` (2.8 MB / 2.26 MB / 2.0 MB → 55 / 34 / 97 KB on production data, all totals identical).
+   - **`GET /deposits` removed** (audit F9/N7): unbounded, unused, and one request ran the 512 MB instance out of memory on 2026-09-26 (502s for BlackCoffe and Sígale for roughly half a minute).
+   - `DeliveredPage` sets `localStorage.dateFilter` on first load.
+   - **Verified:** [server/tests/orderIntegrity.check.mjs](server/tests/orderIntegrity.check.mjs) (8 scenarios, local MySQL 8.0 container, REFERENCE.md "Local integrity check"). The same scenarios against the previous code: one delivery click erased a product added after page load (total 7,000 → 2,000), and 99 of 100 simultaneous edit + full-payment pairs ended **paid while still owing money**. Headless-Chromium run on a phone-sized screen through Nueva Orden ×2, Recorrido, Editar Orden (409 dialog + normal save), Cuentas por cobrar, Cobrar Alta T., Entregados and Cobrar Orden: 17/17 checks.
+   - **Deploy the frontend first** (or together): see Rule #11.
 
 ### Priority Improvements Available for Implementation
 

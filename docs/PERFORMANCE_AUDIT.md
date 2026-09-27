@@ -306,12 +306,14 @@ Summed over production's call volumes, these endpoints should need roughly **80%
 - `/orders/` returns 2.4 MB of `items` JSON (242 KB after Render's Brotli compression). `OrderCard` only uses it to compute the total.
 - Low priority, because the network transfer is compressed.
 - Already tracked as PENDING_IMPROVEMENTS 6.5. The fix is N5.
+- **✅ Done 2026-09-26 (N5), pending deploy**, and extended to two more screens after a client screenshot of the QW4 dialog on Cobrar Alta T. Measured on production data (uncompressed): `/orders/` 2.8 MB → 55 KB, `/unPaidOrders/Alta Tecnología` 2.26 MB → 34 KB (192 orders; the largest open order has 662 items), `/deliveredOrders/:date` 2.0 MB → 97 KB. All totals identical. Details: CLAUDE.md Core Business Rule #11.
 
 ### F9 — Latent risk: `GET /deposits` returns every deposit ever made
 
 - [getDeposits](../server/controllers/deposits.controllers.js#L14) returns all 34,169 deposits, joined with `orders.*` including `items`.
 - **Nothing in the current frontend calls it**: `loadDeposits` is defined but never used. If anything did, the response would be tens of MB.
 - Already tracked as PENDING_IMPROVEMENTS 5.6. The fix is N7.
+- **Confirmed 2026-09-26, then removed (N7, pending deploy).** During the follow-up investigation, one `GET /deposits` took 13 s and returned Render's 502 page. Unrelated endpoints then answered 502 for roughly half a minute before `/ping` recovered. That pattern fits the 512 MB instance running out of memory and restarting, which takes Sígale down too. Check Render → Events for an "Out of memory" around 18:20 Colombia time that day to confirm.
 
 ---
 
@@ -338,7 +340,7 @@ Typical waits, estimated from the measurements:
 
 The slowest statement recorded in 41.7 days took 2.1 s, so something else makes requests wait much longer or never finish. The candidates, most likely first:
 
-1. **Process crash and restart (F3).** This fits "all pages, all devices, several times a day". Check Render → Events.
+1. **Process crash and restart (F3).** This fits "all pages, all devices, several times a day". Check Render → Events. Besides unhandled errors, **memory** can kill the process: F9 did it with a single request (2026-09-26), and the 2–3 MB list responses of F8 (now slimmed) added to the peak when several phones loaded at once.
 2. **Database maintenance or restart on a primary-only cluster.** With F3, even a short database outage becomes a server crash. Check DigitalOcean → the cluster's activity/maintenance history (QW5).
 3. **A request stuck on a dead database connection.** It would hang until the operating system's TCP timeout (minutes). Evidence *against* this: the app opened only **about 209 database connections in 41.7 days**, so connections are stable. Revisit only if QW3's logs show requests lasting minutes.
 4. **Render platform incidents.** Check the history at status.render.com for the reported times.
@@ -366,7 +368,7 @@ Database statistics can be re-checked at any time with the SQL in Appendix B, ru
 
 - **N1 — Replace page reloads with in-place updates (F5, tracker 6.3).**
   - After `updateOrder` or `createDeposit` resolves, refetch only the affected list or order, and disable the control while it saves.
-  - Read PENDING_IMPROVEMENTS "A second, more subtle regression risk: the delivery-card checkbox fix" first. A naive local-state version reintroduces a stale-items race that overwrites deliveries.
+  - Read PENDING_IMPROVEMENTS "A second, more subtle regression risk: the delivery-card checkbox fix" first. That risk is lower since 2026-09-26: checkboxes send one item to `PUT /order/:id/delivered` instead of the whole list, and Editar Orden gets a 409 on stale data (CLAUDE.md rule #10). Still never write `items` from a local copy.
 - **N2 — Rewrite the date filters as ranges (F6), then index them.**
   - The database clock is **UTC** (verified), so a Colombia day `:date` for UTC-stored columns becomes: `col >= :date + INTERVAL 5 HOUR AND col < :date + INTERVAL 29 HOUR`.
   - For `paidAt`, which is stored in Colombia time: `paidAt >= :date AND paidAt < :date + INTERVAL 1 DAY`.
@@ -380,9 +382,9 @@ Database statistics can be re-checked at any time with the SQL in Appendix B, ru
 - **N4 — Cache CORS preflights (F4).**
   - Add `maxAge: 7200` to the `cors()` options in `server/index.js`.
   - **⚠️ Sígale:** that `cors()` call also carries Sígale's origin. This adds an option without touching the origins, but tell Sígale's owners.
-- **N5 — Slimmer dashboard payload (F8, tracker 6.5).** Compute totals on the server and drop `items` from `/orders/`. `OrderCard` would need to change accordingly.
+- ~~**N5 — Slimmer dashboard payload (F8, tracker 6.5).**~~ **Done 2026-09-26** for `/orders/`, `/unPaidOrders/:mall` and `/deliveredOrders/:date` (see F8). Still sending full items: `/depositedOrdersByDate/:date`, `/depositsByDate/:date`, `/abandonedOrders`.
 - **N6 — Normalize `items` into an `order_items` table (tracker 5.1).** Only if the `LIKE`-based delivery queries are still slow after QW1 and N2.
-- **N7 — Remove or paginate `GET /deposits` (F9, tracker 5.6).**
+- ~~**N7 — Remove or paginate `GET /deposits` (F9, tracker 5.6).**~~ **Done 2026-09-26: removed** (see F9).
 
 ---
 

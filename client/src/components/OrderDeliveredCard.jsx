@@ -1,9 +1,9 @@
 import { Fragment } from "react";
-import { useOrders } from "../context/OrderProvider";
 import { useNavigate } from "react-router-dom";
 import { LoginOutlined } from '@ant-design/icons';
 import { Modal } from 'antd';
 import { getOrderItems } from '../utils/jsonUtils';
+import { setItemDeliveredRequest } from '../api/orders.api';
 import { calculateOrderTotal, getItemDisplayTime, getItemDate } from '../utils/orderUtils';
 import { getCurrentDate, formatDate } from '../utils/dateUtils';
 import { getMallCardStyle } from '../utils/mallUtils';
@@ -11,29 +11,22 @@ import ProgressiveProductList from './ProgressiveProductList';
 
 function OrderDeliveredCard({ order }) {
   const navigate = useNavigate();
-  const { updateOrder } = useOrders();
   const deliveryDate = getCurrentDate();
   const isPaid = order.paid === 1;
+  // /deliveredOrders/:date sends only that day's delivered items, plus the full order `total`.
+  const orderTotal = order.total ?? calculateOrderTotal(order);
 
   const handleCheckboxChange = async (itemId) => {
-    const currentItems = getOrderItems(order);
-    if (currentItems.length === 0) {
+    const item = getOrderItems(order).find((it) => it.id === itemId);
+    if (!item) {
       Modal.error({ title: 'Error', content: 'No se pudieron leer los productos de la orden. Recargue la página.' });
       return;
     }
-    const updatedCart = currentItems.map((item) => {
-      if (item.id === itemId) {
-        return {
-          ...item,
-          delivered: !item.delivered,
-          deliveredAt: deliveryDate
-        };
-      }
-      return item;
-    });
 
     try {
-      await updateOrder(order.id, { items: JSON.stringify(updatedCart) });
+      // Only this item's new state goes to the server, which applies it to the order's current
+      // items: products added after this page loaded are kept.
+      await setItemDeliveredRequest(order.id, itemId, !item.delivered, deliveryDate);
       setTimeout(() => {
         window.location.reload();
       }, 3000);
@@ -54,6 +47,14 @@ function OrderDeliveredCard({ order }) {
             </div>
           ),
         });
+      } else {
+        Modal.error({
+          title: 'No se pudo actualizar la entrega',
+          content: error.response?.data?.message || 'Revise la conexión y recargue la página.',
+          okText: 'Recargar',
+          okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
+          onOk: () => window.location.reload(),
+        });
       }
     }
   };
@@ -70,10 +71,10 @@ function OrderDeliveredCard({ order }) {
             {order.deposit ? (
               <>
                 <span className="block">Abono: ${order.deposit}</span>
-                <span className="block text-red-500">Debe: ${calculateOrderTotal(order) - order.deposit}</span>
+                <span className="block text-red-500">Debe: ${orderTotal - order.deposit}</span>
               </>
             ) : (
-              <span className="text-zinc-950 px-2">Total: ${calculateOrderTotal(order)}</span>
+              <span className="text-zinc-950 px-2">Total: ${orderTotal}</span>
             )}
           </b>
         </div>

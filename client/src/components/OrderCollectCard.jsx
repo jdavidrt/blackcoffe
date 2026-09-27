@@ -8,7 +8,8 @@ function orderCard({ order }) {
   const navigate = useNavigate();
   const isCobrosHoy = window.location.pathname.includes("/cobrosHoy");
 
-  const orderTotal = calculateOrderTotal(order);
+  // /cobrarOrdenes/:mall gets `total` precomputed by the server (no items); /cobrosHoy still sends items.
+  const orderTotal = order.total ?? calculateOrderTotal(order);
   const isFullyPaid = order.deposit >= orderTotal;
 
   return (

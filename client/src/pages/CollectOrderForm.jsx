@@ -12,10 +12,11 @@ import { formatDate, extractDate, formatDepositDateTime } from '../utils/dateUti
 import ProgressiveProductList from '../components/ProgressiveProductList';
 import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 import { getOrderRestoresRequest } from '../api/backups.api';
+import { setItemDeliveredRequest } from '../api/orders.api';
 
 function CollectOrderForm() {
 
-  const { getOrder, updateOrder, markOrderAsAbandoned } = useOrders();
+  const { getOrder, markOrderAsAbandoned } = useOrders();
   const { getDepositsByOrderId, createDeposit, deleteDepositById } = useDeposits();
   const [client, setClient] = useState([]);
   const [cart, setCart] = useState([]);
@@ -47,26 +48,23 @@ function CollectOrderForm() {
 
 
   const handleCheckboxChange = async (itemId) => {
-    setCart((prevCart) => {
-      const updatedCart = prevCart.map((item) => {
-        if (item.id === itemId) {
-          return {
-            ...item,
-            delivered: !item.delivered,
-            deliveredAt: fechaActual
-          };
-        }
-        return item;
+    const delivered = !cart.find((item) => item.id === itemId)?.delivered;
+    setCart((prevCart) => prevCart.map((item) =>
+      item.id === itemId ? { ...item, delivered, deliveredAt: fechaActual } : item
+    ));
+    try {
+      // Only this item's new state goes to the server, which applies it to the order's current
+      // items: products added after this page loaded are kept.
+      await setItemDeliveredRequest(params.id, itemId, delivered, fechaActual);
+    } catch (error) {
+      Modal.error({
+        title: 'No se pudo actualizar la entrega',
+        content: error.response?.data?.message || 'Revise la conexión y recargue la página.',
+        okText: 'Recargar',
+        okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
+        onOk: () => window.location.reload(),
       });
-
-      var values = {};
-      values.items = JSON.stringify(updatedCart);
-
-      // Call async function here (in this case, updateOrder)
-      updateOrder(params.id, values);
-
-      return updatedCart;
-    });
+    }
   };
 
   const calculateTotal = () => {

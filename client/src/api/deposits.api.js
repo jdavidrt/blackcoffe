@@ -1,8 +1,5 @@
 import axios from "axios";
 import { API_CONFIG } from '../utils/config';
-export const getDepositsRequest = async () =>
-    await axios.get(`${API_CONFIG.RENDER_SERVER}/deposits`);
-
 export const createDepositRequest = async (product) =>
     await axios.post(`${API_CONFIG.RENDER_SERVER}/deposits`, product);
 

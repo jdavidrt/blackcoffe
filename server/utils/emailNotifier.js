@@ -60,6 +60,7 @@ const ROUTE_PAGE_MAP = [
     { method: 'PUT',    pattern: /^\/order\/[^/]+\/abandon$/,      page: 'Abandonadas  →  /ordenesAbandonadas' },
     { method: 'PUT',    pattern: /^\/order\/[^/]+\/reactivate$/,   page: 'Abandonadas  →  /ordenesAbandonadas' },
     { method: 'PUT',    pattern: /^\/order\/[^/]+\/restore$/,      page: 'Copias de Seguridad  →  /copiasSeguridad' },
+    { method: 'PUT',    pattern: /^\/order\/[^/]+\/delivered$/,    page: 'Entrega de productos  →  /recorrido, /entregados  o  /cobrarOrden/:id' },
     // Backups
     { method: 'GET',    pattern: /^\/backupsByDate\//,             page: 'Copias de Seguridad  →  /copiasSeguridad' },
     { method: 'GET',    pattern: /^\/orderRestores\//,             page: 'Copias de Seguridad  →  /copiasSeguridad' },

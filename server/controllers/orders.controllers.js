@@ -1,6 +1,12 @@
 import pool from '../db.js'
 import { sendErrorEmail } from '../utils/emailNotifier.js'
 import { tzColombia } from '../utils/sqlFragments.js'
+import { computeOrderTotal } from './deposits.controllers.js'
+
+// List screens (Cuentas por cobrar, Cobrar por mall) only show each order's total. Sending
+// `items` instead made those responses 2–3 MB (some open orders carry 600+ items) and timed
+// out on phones over 4G. Same function createDeposit uses, so the list matches the payment check.
+const withTotal = ({ items, ...order }) => ({ ...order, total: computeOrderTotal(items) });
 
 /**
  * Stack-merge two item lists by `id`: items with matching IDs have their
@@ -41,7 +47,7 @@ export const getOrders = async (req, res) => {
             WHERE orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
             ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC
         `);
-        res.json(result)
+        res.json(result.map(withTotal))
     } catch (error) {
         sendErrorEmail(req, error, 'getOrders');
         return res.status(500).json({ message: 'Error obteniendo las órdenes' });
@@ -107,7 +113,14 @@ export const getDeliveredOrders = async (req, res) => {
                 clients.clientname ASC,
                 orders.createdAt ASC
         `, [req.params.date]);
-        res.json(result);
+        // Entregados lists only the items delivered on :date and uses `total` for "Debe", so
+        // send just those items (still a JSON string: the page searches it for the date).
+        res.json(result.map((order) => {
+            let items;
+            try { items = JSON.parse(order.items || '[]'); } catch { items = []; }
+            const deliveredThatDay = Array.isArray(items) ? items.filter((it) => it && it.delivered && it.deliveredAt === req.params.date) : [];
+            return { ...withTotal(order), items: JSON.stringify(deliveredThatDay) };
+        }));
     } catch (error) {
         sendErrorEmail(req, error, 'getDeliveredOrders');
         return res.status(500).json({ message: 'Error obteniendo las órdenes entregadas' });
@@ -186,7 +199,7 @@ export const getUnPaidOrders = async (req, res) => {
             WHERE clients.mall = ? AND orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
             ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC
         `, [req.params.mall]);
-        res.json(result)
+        res.json(result.map(withTotal))
     } catch (error) {
         sendErrorEmail(req, error, 'getUnPaidOrders');
         return res.status(500).json({ message: 'Error obteniendo las órdenes por ubicación' });
@@ -293,6 +306,7 @@ export const createOrder = async (req, res) => {
         const [existing] = await conn.query(
             `SELECT id, items FROM orders
              WHERE clientId = ? AND paid = 0 AND (isAbandoned = 0 OR isAbandoned IS NULL)
+             ORDER BY id
              FOR UPDATE`,
             [clientId]
         );
@@ -320,18 +334,18 @@ export const createOrder = async (req, res) => {
             await conn.commit();
 
             console.log(`[createOrder] Merged into existing order ${target.id}`);
-            return res.json({ shopId, clientId, items: mergedJson, mergedInto: target.id });
+            // No items echo: the merged list can be 80+ KB and nothing reads it back.
+            return res.json({ id: target.id, clientId, mergedInto: target.id });
         }
 
-        const newItemsJson = JSON.stringify(parsedNewItems);
-        await conn.query(
+        const [insertResult] = await conn.query(
             "INSERT INTO orders(shopId, clientId, items) VALUES (?, ?, ?)",
-            [shopId, clientId, newItemsJson]
+            [shopId, clientId, JSON.stringify(parsedNewItems)]
         );
         await conn.commit();
 
         console.log(`[createOrder] New order created`);
-        res.json({ shopId, clientId, items: newItemsJson });
+        res.json({ id: insertResult.insertId, clientId });
     } catch (error) {
         await conn?.rollback().catch(() => {});
         console.error(`[createOrder] Error:`, error);
@@ -343,13 +357,14 @@ export const createOrder = async (req, res) => {
 }
 
 export const updateOrder = async (req, res) => {
+    let conn;
     try {
         console.log(`[updateOrder] Request params:`, req.params);
         console.log(`[updateOrder] Request body:`, req.body);
 
         // Audit fix 1.5: stack-merge (sum quantity) any colliding IDs in the
         // incoming items array instead of rejecting the request. A no-op for
-        // an already-deduped array (e.g. delivery-checkbox toggles).
+        // an already-deduped array.
         if (req.body.items) {
             try {
                 const parsed = JSON.parse(req.body.items);
@@ -361,17 +376,34 @@ export const updateOrder = async (req, res) => {
             }
         }
 
-        const [existing] = await pool.query('SELECT paid, clientId, items FROM orders WHERE id = ?', [req.params.id]);
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        // Lock the row until commit, like createDeposit/createOrder/setItemDelivered do, so a
+        // payment, a merge or a delivery toggle on this order waits instead of interleaving
+        // between the checks below and the UPDATE (e.g. editing an order that just got paid).
+        const [existing] = await conn.query('SELECT paid, clientId, items FROM orders WHERE id = ? FOR UPDATE', [req.params.id]);
         if (existing.length === 0) {
+            await conn.rollback();
             return res.status(404).json({ message: "Order not found" });
         }
         if (Number(existing[0].paid) === 1) {
+            await conn.rollback();
             return res.status(400).json({ message: "Order is already paid and cannot be modified", orderId: Number(req.params.id) });
         }
 
+        // Editar Orden sends the items it loaded. If they no longer match, someone changed the
+        // order while it was being edited (added products, marked deliveries): saving would
+        // silently erase that, so refuse and let the user reload.
+        const { expectedItems, ...updateData } = req.body;
+        if (expectedItems !== undefined && expectedItems !== existing[0].items) {
+            await conn.rollback();
+            return res.status(409).json({ message: "La orden cambió mientras se editaba", orderId: Number(req.params.id) });
+        }
+
         // Data-loss guard: refuse to overwrite a non-empty items array with an empty one.
-        // Real edits go through OrderForm (which validates cart.length > 0) and delivery toggles
-        // (which preserve every item). An incoming items="[]" indicates a stale-state race —
+        // Real edits go through OrderForm (which validates cart.length > 0; delivery toggles use
+        // setItemDelivered). An incoming items="[]" indicates a stale-state race —
         // never a legitimate update. Empty incoming + already-empty existing is also a no-op write.
         if (req.body.items !== undefined) {
             let incomingItems;
@@ -382,6 +414,7 @@ export const updateOrder = async (req, res) => {
                 })();
                 if (existingItems.length > 0) {
                     console.error(`[updateOrder] BLOCKED empty-items overwrite for order ${req.params.id}. Existing had ${existingItems.length} items.`);
+                    await conn.rollback();
                     return res.status(400).json({
                         message: "Empty items array rejected to prevent data loss",
                         orderId: Number(req.params.id)
@@ -389,8 +422,6 @@ export const updateOrder = async (req, res) => {
                 }
             }
         }
-
-        const updateData = { ...req.body };
 
         // Guard against a race condition: an item can be merged into this order
         // (OrderForm) between the moment a payment form snapshots the order total
@@ -411,7 +442,7 @@ export const updateOrder = async (req, res) => {
         }
 
         if (Number(updateData.paid) === 1) {
-            const [clientRows] = await pool.query(
+            const [clientRows] = await conn.query(
                 'SELECT clientName, premises, mall FROM clients WHERE id = ?',
                 [existing[0].clientId]
             );
@@ -422,17 +453,67 @@ export const updateOrder = async (req, res) => {
             }
         }
 
-        const result = await pool.query("UPDATE orders SET ? WHERE id = ?", [
+        const result = await conn.query("UPDATE orders SET ? WHERE id = ?", [
             updateData,
             req.params.id,
         ]);
+        await conn.commit();
 
         console.log(`[updateOrder] Update result:`, result);
         res.json(result);
     } catch (error) {
+        await conn?.rollback().catch(() => {});
         console.error(`[updateOrder] Error:`, error);
         sendErrorEmail(req, error, 'updateOrder');
         res.status(500).json({ message: 'Error actualizando la orden' });
+    } finally {
+        conn?.release();
+    }
+}
+
+// Delivery checkboxes (Recorrido, Entregados, Cobrar Orden) set ONE item's delivery state on
+// the order's current items, under the row lock. They used to send back the page's whole copy
+// of the items, which erased any product added to the order after the page loaded.
+export const setItemDelivered = async (req, res) => {
+    let conn;
+    try {
+        const { itemId, delivered, deliveredAt } = req.body;
+        if (itemId == null || typeof delivered !== 'boolean' || !/^\d{4}-\d{2}-\d{2}$/.test(deliveredAt)) {
+            return res.status(400).json({ message: 'Datos de entrega inválidos' });
+        }
+
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        const [rows] = await conn.query('SELECT paid, items FROM orders WHERE id = ? FOR UPDATE', [req.params.id]);
+        if (rows.length === 0) {
+            await conn.rollback();
+            return res.status(404).json({ message: "Order not found" });
+        }
+        if (Number(rows[0].paid) === 1) {
+            await conn.rollback();
+            return res.status(400).json({ message: "Order is already paid and cannot be modified", orderId: Number(req.params.id) });
+        }
+
+        let items;
+        try { items = JSON.parse(rows[0].items || '[]'); } catch { items = []; }
+        const item = Array.isArray(items) ? items.find((it) => it && it.id === itemId) : undefined;
+        if (!item) {
+            await conn.rollback();
+            return res.status(409).json({ message: 'Este producto ya no está en la orden. Recargue la página.' });
+        }
+        item.delivered = delivered;
+        item.deliveredAt = deliveredAt;
+
+        await conn.query('UPDATE orders SET items = ? WHERE id = ?', [JSON.stringify(items), req.params.id]);
+        await conn.commit();
+        res.json({ orderId: Number(req.params.id), itemId, delivered });
+    } catch (error) {
+        await conn?.rollback().catch(() => {});
+        sendErrorEmail(req, error, 'setItemDelivered');
+        res.status(500).json({ message: 'Error actualizando la entrega' });
+    } finally {
+        conn?.release();
     }
 }
 
