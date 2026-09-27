@@ -23,7 +23,7 @@
 2. **"Stuck" is *not* explained by query times.** The slowest query in 41.7 days took 2.1 s. The most likely cause is **the server process crashing and restarting** (§4 F3), which several code paths allow. Everyone on BlackCoffe (and Sígale) then waits for Render to restart the service. This needs confirming in the Render dashboard (§6).
 3. **It is a backend problem, not a device problem.** It happens on PCs too and on all pages. The frontend issues (full page reloads, a 2.3 MB bundle) make things worse, but they are secondary.
 4. **Fix order:**
-   - Apply the quick wins (§3). **QW1–QW4 were implemented and verified locally on 2026-09-24, and are pending deploy.**
+   - Apply the quick wins (§3). **QW1–QW4 shipped in `bae0493` (2026-09-24) and were confirmed live in production the same day** — see "Evaluation" below.
    - Measure.
    - Move the API server next to the database (§8). **Do not move the database to San Francisco** (see §8 for why).
 
@@ -45,17 +45,17 @@ The full reference, including environment variables, is in [REFERENCE.md](REFERE
 
 These are small, low-risk changes, ordered by impact.
 
-**Status (2026-09-24):**
-- **QW1–QW4 are implemented and verified locally** against a MySQL 8.0 copy of the production schema, filled with synthetic data at production scale. See "Evaluation" at the end of this section.
-- They take effect on the next deploy, which also runs the index migration.
+**Status (2026-09-26):**
+- **QW1–QW4 were verified locally on 2026-09-24** against a MySQL 8.0 copy of the production schema, filled with synthetic data at production scale, then deployed the same day (`bae0493`). See "Evaluation" at the end of this section.
+- **Confirmed live in production 2026-09-24 ≈21:05 Colombia time**: all three indexes (`idx_orders_paid`, `idx_orders_client_paid`, `idx_deposits_order`) present via `information_schema.STATISTICS`; row counts unchanged (25,618 orders / 386 unpaid) — a direct read-only check against production, not an estimate.
 - **QW5 is a DigitalOcean setting** for the owner to change.
 
 | # | Change | Fixes | Status |
 |---|---|---|---|
-| QW1 | Add 3 database indexes | F1, F2 | ✅ Implemented: `server/migrations/add_performance_indexes.js` |
-| QW2 | Stop database errors from crashing or hanging the server | F3 | ✅ Implemented |
-| QW3 | Log the response time of every request | lets you diagnose the next "stuck" episode | ✅ Implemented |
-| QW4 | Time out read requests in the frontend (GET only) and say so | endless spinners, or "No hay …" shown when a load failed | ✅ Implemented |
+| QW1 | Add 3 database indexes | F1, F2 | ✅ Deployed & confirmed live in production (2026-09-24) |
+| QW2 | Stop database errors from crashing or hanging the server | F3 | ✅ Deployed. Extended 2026-09-26 to `updateOrder` and the new `setItemDelivered` (see below) |
+| QW3 | Log the response time of every request | lets you diagnose the next "stuck" episode | ✅ Deployed |
+| QW4 | Time out read requests in the frontend (GET only) and say so | endless spinners, or "No hay …" shown when a load failed | ✅ Deployed |
 | QW5 | Set the database maintenance window to off-hours | downtime during business hours | ⏳ Owner (DigitalOcean setting) |
 
 ### QW1 — Add the missing indexes
@@ -103,11 +103,15 @@ A manual alternative is to run the SQL above from the DigitalOcean console; the 
 **Why:** see F3. On Express 4, a rejected promise in a route handler is never caught. On current Node versions (the Render service doesn't pin one), an uncaught rejection **terminates the process**.
 
 **What:**
-1. Move `const conn = await pool.getConnection()` inside the `try` block and guard the cleanup with `conn?.rollback()` and `conn?.release()`. The four places are:
-   - [orders.controllers.js:286](../server/controllers/orders.controllers.js#L286)
-   - [deposits.controllers.js:66](../server/controllers/deposits.controllers.js#L66)
-   - [deposits.controllers.js:183](../server/controllers/deposits.controllers.js#L183)
-   - [backups.controllers.js:99](../server/controllers/backups.controllers.js#L99)
+1. Move `const conn = await pool.getConnection()` inside the `try` block and guard the cleanup with `conn?.rollback()` and `conn?.release()`. The original four places (2026-09-24):
+   - [orders.controllers.js:299](../server/controllers/orders.controllers.js#L299) (`createOrder`)
+   - [deposits.controllers.js:57](../server/controllers/deposits.controllers.js#L57) (`createDeposit`)
+   - [deposits.controllers.js:174](../server/controllers/deposits.controllers.js#L174) (`deleteDeposit`)
+   - [backups.controllers.js:99](../server/controllers/backups.controllers.js#L99) (`restoreOrderFromSnapshot`)
+
+   Two more row-locking handlers were added 2026-09-26 (CLAUDE.md rule #10) and built with the same pattern from the start, not retrofitted:
+   - [orders.controllers.js:379](../server/controllers/orders.controllers.js#L379) (`updateOrder`, now also holds the row lock for the `expectedItems` conflict check)
+   - [orders.controllers.js:485](../server/controllers/orders.controllers.js#L485) (`setItemDelivered`, new endpoint)
 2. Wrap `/ping` in [index.routes.js:5](../server/routes/index.routes.js#L5) in `try/catch`.
 3. Add a backstop in `server/index.js`: `process.on('unhandledRejection', …)` that logs the error and calls `sendErrorEmail` instead of letting the process die.
    - **⚠️ Sígale:** this handler applies to the whole process, so Sígale is covered too. No Sígale file changes, but tell its owners.
