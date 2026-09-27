@@ -1,63 +1,20 @@
 import { Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { LoginOutlined } from '@ant-design/icons';
-import { Modal } from 'antd';
 import { getOrderItems } from '../utils/jsonUtils';
-import { setItemDeliveredRequest } from '../api/orders.api';
+import { useItemDelivery } from '../utils/useItemDelivery';
 import { calculateOrderTotal, getItemDisplayTime, getItemDate } from '../utils/orderUtils';
-import { getCurrentDate, formatDate } from '../utils/dateUtils';
+import { formatDate } from '../utils/dateUtils';
 import { getMallCardStyle } from '../utils/mallUtils';
 import ProgressiveProductList from './ProgressiveProductList';
 
 function OrderDeliveredCard({ order }) {
   const navigate = useNavigate();
-  const deliveryDate = getCurrentDate();
   const isPaid = order.paid === 1;
   // /deliveredOrders/:date sends only that day's delivered items, plus the full order `total`.
   const orderTotal = order.total ?? calculateOrderTotal(order);
 
-  const handleCheckboxChange = async (itemId) => {
-    const item = getOrderItems(order).find((it) => it.id === itemId);
-    if (!item) {
-      Modal.error({ title: 'Error', content: 'No se pudieron leer los productos de la orden. Recargue la página.' });
-      return;
-    }
-
-    try {
-      // Only this item's new state goes to the server, which applies it to the order's current
-      // items: products added after this page loaded are kept.
-      await setItemDeliveredRequest(order.id, itemId, !item.delivered, deliveryDate);
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
-    } catch (error) {
-      const paidOrderId = error.response?.status === 400 && error.response?.data?.orderId;
-      if (paidOrderId) {
-        Modal.error({
-          title: 'Orden ya pagada',
-          content: (
-            <div>
-              <p>Esta orden ya fue pagada y no puede modificarse, incluyendo el estado de entrega de sus productos.</p>
-              <a
-                href={`/factura/${paidOrderId}`}
-                style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}
-              >
-                Ver factura #{paidOrderId}
-              </a>
-            </div>
-          ),
-        });
-      } else {
-        Modal.error({
-          title: 'No se pudo actualizar la entrega',
-          content: error.response?.data?.message || 'Revise la conexión y recargue la página.',
-          okText: 'Recargar',
-          okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
-          onOk: () => window.location.reload(),
-        });
-      }
-    }
-  };
+  const { isDelivered, isSaving, toggle } = useItemDelivery(order.id, order.items);
 
   return (
     <div className={getMallCardStyle(order.mall)}>
@@ -107,12 +64,13 @@ function OrderDeliveredCard({ order }) {
                   <input
                     type="checkbox"
                     className="ml-2"
-                    value={item.delivered}
-                    checked={item.delivered}
-                    onChange={() => handleCheckboxChange(item.id)}
+                    checked={isDelivered(item)}
+                    disabled={isSaving(item)}
+                    onChange={() => toggle(item)}
                   />
                 )}
                 <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                {isSaving(item) && <p className="flex items-center text-xs text-gray-500">Guardando…</p>}
                 <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
                   {getItemDisplayTime(item.id)}
                 </p>

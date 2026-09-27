@@ -50,15 +50,24 @@ function DeliveryOrdersPage() {
 
     return (
         <div className="bg-slate-200 h-dvh rounded-md">
-            <div className="flex py-2">
+            <div className="flex flex-wrap items-center gap-2 py-2">
                 <h4 className="text-xl text-black font-bold text-center">Pedidos sin entregar: ({filteredOrders.length})</h4>
-                <div className="ml-auto flex">
+                <div className="ml-auto flex flex-wrap gap-y-2">
                     <button
                         type="button"
                         className="bg-indigo-700 px-2 py-1 text-black rounded-md"
 
                     >
                         <Link to="/entregados" className="text-white hover:text-black bg-gray-600 rounded px-3 py-2">Entregados</Link>
+                    </button>
+                    {/* Ticks no longer reload the page, so new orders from other phones show up here. */}
+                    <button
+                        type="button"
+                        className="bg-orange-700 text-white rounded-md px-3 py-1 mx-2"
+                        onClick={loadOrders}
+                        disabled={loading}
+                    >
+                        Actualizar
                     </button>
                     <button
                         type="button"

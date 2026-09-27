@@ -86,7 +86,9 @@ Verified 2026-09-24. Full details, including environment variables, are in [REFE
 | Database | DigitalOcean Managed MySQL `pedidos` (MySQL 8), databases `defaultdb` (BlackCoffe) and `sigale` | Basic 2 GB / 1 vCPU, 30 GiB additional storage, **primary only** | **NYC3** |
 
 - **The API and the database are in different regions.** Each database round trip costs about 85 ms. When writing server code, avoid adding sequential queries to a request.
-- **Performance problems are tracked in [PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md).** The main tables have no indexes besides the primary key; it also covers crash-prone handlers and the recommendation to move the API to Render Virginia.
+- ⛔ **Regions can't be changed on the current Render plan** (owner, 2026-09-26). The audit's "move the API to Render Virginia" recommendation is discarded for now, so the Bogotá → Oregon → NYC3 latency is a fixed cost: don't propose region moves as a fix.
+- **Staff use the app on mobile data across the malls** (Tigo, Bogotá), where the signal drops for seconds at a time. Every axios request goes through [client/src/utils/network.js](client/src/utils/network.js): timeouts, automatic retries, the bottom `ConnectionBanner`, and failure reports. **Never add `window.location.reload()`**: update the screen from the write's answer, or re-read only what changed. A new write may be marked for retries only if a resend can't apply it twice. See "Weak mobile signal" under Development Patterns.
+- **Performance problems are tracked in [PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md).** The main tables had no indexes besides the primary key (QW1 fixed the hot paths); it also covers crash-prone handlers and, in §10, mobile data.
 
 ### Database Integration
 - **MySQL Database**: DigitalOcean Managed MySQL (see "Hosting & Infrastructure" above); credentials come from `DB_*` environment variables read by `server/db.js`
@@ -126,7 +128,7 @@ The BlackCoffe backend exposes 41 routes (counted from `server/routes/*.routes.j
 | GET | `/unPaidOrders/:mall` | Unpaid orders filtered by mall location (`paid = 0` AND `mall = :mall`). **Returns `total` instead of `items`** (2026-09-26): Alta Tecnología 2.26 MB → 34 KB. See Rule #11 "Order list payloads" |
 | GET | `/unPaidOrdersByClient/:clientId` | Get all unpaid orders for specific client |
 | GET | `/abandonedOrders` | Get all abandoned orders (`isAbandoned = 1`) |
-| POST | `/order` | Save products for a client (requires `clientId`, `items` JSON). **If the client already has an open (unpaid, non-abandoned) order, merges into it** under `SELECT … FOR UPDATE` (lowest id first); otherwise inserts. Returns `{ id, clientId }` or `{ id, clientId, mergedInto }` — no longer echoes `items` (2026-09-26). The ONLY path Nueva Orden uses (see Rule #1) |
+| POST | `/order` | Save products for a client (requires `clientId`, `items` JSON). **If the client already has an open (unpaid, non-abandoned) order, merges into it** under `SELECT … FOR UPDATE` (lowest id first); otherwise inserts. Returns `{ id, clientId }` or `{ id, clientId, mergedInto }` — no longer echoes `items` (2026-09-26). Optional `Idempotency-Key` header (2026-09-26): a resend with an already-applied key answers `{ duplicate: true, clientId }` and changes nothing. The ONLY path Nueva Orden uses (see Rule #1) |
 | PUT | `/order/:id` | Update existing order (any field except ID). **Runs in a transaction holding the order row lock** (2026-09-26). Optional `expectedItems` (the `items` string as the caller loaded it): if it no longer matches the row → **409** `{ message, orderId }` and nothing is written. Paid → 400 `{ orderId }`. Only Editar Orden calls it now |
 | PUT | `/order/:id/delivered` | 🆕 (2026-09-26) Set ONE item's delivery state: body `{ itemId, delivered: boolean, deliveredAt: 'YYYY-MM-DD' }`. Locks the row and applies it to the order's **current** items (idempotent: sets, doesn't flip). 400 invalid body / paid order (with `orderId`), 404 unknown order, **409** item no longer in the order. Used by every delivery checkbox (Recorrido, Entregados, Cobrar Orden) |
 | PUT | `/order/:id/abandon` | Mark order as abandoned (sets `isAbandoned = 1`, records `abandonedAt`, `abandonedBy`, `abandonReason`) |
@@ -163,7 +165,7 @@ The BlackCoffe backend exposes 41 routes (counted from `server/routes/*.routes.j
 |--------|----------|-------------|
 | GET | `/deposits/:id` | Get all deposits for specific order ID (includes deleted deposits with `isDeleted` status) |
 | GET | `/depositsByDate/:date` | Get all deposits made on specific date (Colombia timezone) |
-| POST | `/deposits` | **Atomic** (2026-07-06): create a deposit AND update the parent order in one transaction. Requires only `orderId`, `depositValue`, `paymentMethod`, `collectedBy` — the server computes `lastDeposit`/`newDeposit`/`dueOnDeposit`/`paid`/`paidAt` itself from the locked order row (previously required the client to compute and send all of those). See item 8 in "Completed Improvements" |
+| POST | `/deposits` | **Atomic** (2026-07-06): create a deposit AND update the parent order in one transaction. Requires only `orderId`, `depositValue`, `paymentMethod`, `collectedBy` — the server computes `lastDeposit`/`newDeposit`/`dueOnDeposit`/`paid`/`paidAt` itself from the locked order row (previously required the client to compute and send all of those). Optional `Idempotency-Key` header (2026-09-26): a resend with an already-applied key answers `{ duplicate: true, orderId }` and records nothing. See item 8 in "Completed Improvements" |
 | DELETE | `/deposits/:id` | **Atomic** (2026-07-06): soft-deletes and recalculates all remaining active deposits' cumulative totals in a single batched query (previously an N+1 loop). Recomputes `paid` from the new running total and clears `paidAt` on an actual 1→0 transition, rather than forcing `paid = 0` unconditionally |
 
 ⛔ **`GET /deposits` was removed (2026-09-26).** It returned every deposit ever made joined with `orders.*` (each order's full `items`): tens of MB. Nothing in the app called it, and a single request ran the 512 MB instance out of memory (502s for BlackCoffe **and** Sígale). Don't reintroduce an unbounded list endpoint; `/abonos` uses `/depositsByDate/:date`.
@@ -181,7 +183,7 @@ The BlackCoffe backend exposes 41 routes (counted from `server/routes/*.routes.j
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/ping` | Health check endpoint (returns database connection test: `SELECT 1 + 1`) |
-| POST | `/clientError` | 🆕 (2026-09-26) Browser-reported request failure → `sendErrorEmail(..., 'clientError')`, 204. `client/src/main.jsx` posts here for timeouts, network errors and HTTP >500 (Render 502/503/504) — failures that never reach a controller, so no catch block emails them. Plain 500s are skipped (the controller already emailed). Undeliverable reports are kept in `localStorage.pendingErrorReports` (max 20) and resent on next page load |
+| POST | `/clientError` | 🆕 (2026-09-26) Browser-reported request failure → `sendErrorEmail(..., 'clientError')`, 204. `client/src/utils/network.js` posts here (after its retries) for timeouts, network errors and HTTP >500 (Render 502/503/504) — failures that never reach a controller, so no catch block emails them. Plain 500s are skipped (the controller already emailed). Undeliverable reports are kept in `localStorage.pendingErrorReports` (max 20) and resent on next page load |
 
 #### Backups Endpoints (3 endpoints) 🆕 (2026-07-07)
 **Controller**: `backups.controllers.js` | **Route File**: `backups.routes.js` — see the "Order Backup / Restore System" section below for full detail.
@@ -226,6 +228,7 @@ The BlackCoffe backend exposes 41 routes (counted from `server/routes/*.routes.j
 #### CORS Configuration
 - **Development**: Enabled for all origins
 - **Production**: Enabled for cross-origin requests (configured in `server/index.js`)
+- **Preflight cache**: `maxAge: 7200` (2026-09-26). Without it Chrome re-sent the preflight before every write (0.4–0.7 s each on a phone). The same `cors()` call carries Sígale's origin; the origins list is untouched
 
 #### Error Handling
 - Most endpoints lack try-catch blocks (improvement opportunity)
@@ -272,7 +275,7 @@ client/src/context/
 | `loadOrphanedOrders()` | none | Load orders without assigned clients |
 | `loadUnPaidOrders(mall)` | mall | Load unpaid orders filtered by location |
 | `getOrder(id)` | id | Get single order by ID, returns order object |
-| `createOrder(order)` | order object | Save products for a client; the server merges into the client's open order if one exists. **Re-throws** on error (2026-09-26; it used to swallow errors, so a failed save reset the form as if it had worked) |
+| `createOrder(order, requestKey)` | order object, idempotency key | Save products for a client; the server merges into the client's open order if one exists. **Re-throws** on error (2026-09-26; it used to swallow errors, so a failed save reset the form as if it had worked) |
 | `updateOrder(id, newFields)` | id, newFields | Update existing order |
 | `deleteOrder(id)` | id | Delete order by ID |
 | `getAbandonedOrders()` | none | Load all abandoned orders |
@@ -313,7 +316,7 @@ client/src/context/
 |--------|------------|-------------|
 | `getDepositsByOrderId(id)` | orderId | Get all deposits for specific order |
 | `getDepositsByDate(date)` | date | Get deposits made on specific date |
-| `createDeposit(deposits)` | deposit object | Create new deposit record |
+| `createDeposit(deposits, requestKey)` | deposit object, idempotency key | Create new deposit record (the key makes a resend safe) |
 | `deleteDepositById(id)` | depositId | Soft delete deposit (triggers recalculation) |
 
 ##### UserProvider (1 method)
@@ -363,7 +366,7 @@ client/src/api/
 | `getDepositedOrdersByDate(date)` | GET | `/depositedOrdersByDate/:date` | Get orders with deposits by date |
 | `getUnpaidOrders(mall)` | GET | `/unPaidOrders/:mall` | Get unpaid orders by location |
 | `loadUnPaidOrdersbyClient(clientId)` | GET | `/unPaidOrdersByClient/:clientId` | Get client's unpaid orders |
-| `createOrderRequest(order)` | POST | `/order` | Save products (server merges into the open order) |
+| `createOrderRequest(order, requestKey)` | POST | `/order` | Save products (server merges into the open order); sends `Idempotency-Key` and is retried |
 | `updateOrderRequest(id, order)` | PUT | `/order/:id` | Update existing order (Editar Orden sends `expectedItems`) |
 | `setItemDeliveredRequest(id, itemId, delivered, deliveredAt)` | PUT | `/order/:id/delivered` | Set one item's delivery state (every delivery checkbox) |
 | `deleteOrderRequest(id)` | DELETE | `/order/:id` | Delete order |
@@ -398,7 +401,7 @@ client/src/api/
 |----------|-------------|----------|-------------|
 | `getDepositsByOrderRequest(id)` | GET | `/deposits/:id` | Get deposits for order |
 | `getDepositsByDateRequest(date)` | GET | `/depositsByDate/:date` | Get deposits by date |
-| `createDepositRequest(deposit)` | POST | `/deposits` | Create new deposit |
+| `createDepositRequest(deposit, requestKey)` | POST | `/deposits` | Create new deposit; sends `Idempotency-Key` and is retried |
 | `deleteDepositRequest(id)` | DELETE | `/deposits/:id` | Soft delete deposit |
 
 ##### Users API (`users.api.js`) - 1 function
@@ -461,7 +464,7 @@ When creating a new order via `/nuevaOrden` for a client who already has an unpa
 
 **Why not merge in the browser:** until 2026-09-26 the form loaded the open order when the client was picked and sent back `[...thatCopy, ...cart]` via `updateOrder`. Anything written to the order in between (products added from another phone, delivery ticks) was silently overwritten, lowering the total. The now-deleted `orderValidation.js` and `unPaidOrder` state belonged to that flow.
 
-**Errors:** `OrderProvider.createOrder` re-throws. The form alerts; if no response arrived at all, it warns that the order may have been saved and to check "Cuentas por cobrar" before retrying (a retry with the same item ids would stack quantities).
+**Errors:** `OrderProvider.createOrder` re-throws. If no answer arrived (weak signal), the form shows "Orden sin confirmar". Resending is safe: the form keeps one `Idempotency-Key` per client + cart (`saveKeyRef`), so pressing Guardar again unchanged gets `{ duplicate: true }` ("Esta orden ya estaba guardada.") instead of stacking the quantities. A changed cart gets a new key.
 
 #### 2. Item ID Generation & Uniqueness
 Each product added to the cart receives a composite ID: `{productId} {HH:mm:ss} {DD/MM/YY}`
@@ -487,7 +490,7 @@ Delivery is tracked at the **individual item level**, not at the order level. Ea
 1. Delivery driver checks or unchecks the box next to an item
 2. The page calls `setItemDeliveredRequest(orderId, itemId, !item.delivered, getCurrentDate())` → `PUT /order/:id/delivered`, **only that item's new state**
 3. `setItemDelivered` (orders.controllers.js) locks the order row, finds the item by `id` in the order's **current** items, sets `delivered`/`deliveredAt`, and writes the list back. Unknown item → 409, paid order → 400 `{ orderId }`
-4. The two cards reload after 3 seconds; `CollectOrderForm` updates its local cart instead. On any error they show "No se pudo actualizar la entrega" with a "Recargar" button
+4. All three share [client/src/utils/useItemDelivery.jsx](client/src/utils/useItemDelivery.jsx) (2026-09-26). The checkbox shows "Guardando…" and is disabled while its request is on the way; then it updates from the server's answer. **No page reload.** A ticked item stays visible until the next load, so it can be unticked. The request is retried automatically (it's idempotent). Errors: no answer → "Entrega sin confirmar" and the checkbox reverts (tapping again is safe); 409/5xx → "No se pudo actualizar la entrega" with "Recargar" (remounts the app, no page reload). Recorrido has an "Actualizar" button, since ticks no longer refresh the list
 
 Until 2026-09-26 each click sent the page's whole copy of the items through `updateOrder`, erasing products added after the page loaded (reproduced: order total 7,000 → 2,000 after one click).
 
@@ -558,8 +561,12 @@ Extends rule #8 to the orders table itself. Once an order has accumulated paymen
 | Submit form for a paid order (race condition) | "Orden ya pagada" | "Esta orden ya fue pagada y no puede ser modificada." | `/factura/:id` |
 | Toggle item delivery on a paid order | "Orden ya pagada" | "Esta orden ya fue pagada y no puede modificarse, incluyendo el estado de entrega de sus productos." | `/factura/:id` |
 | Delete an orphaned order with deposits | "Orden con abonos registrados" | "Esta orden tiene abonos registrados y no puede ser eliminada." | `/cobrarOrden/:id` |
-| Save Editar Orden after someone else changed the order (409) | "La orden cambió" | "Alguien modificó esta orden mientras usted la editaba (agregó productos o marcó entregas). Sus cambios no se guardaron: recargue para ver la versión actual y vuelva a hacerlos." | — ("Recargar" button reloads) |
-| Delivery checkbox fails (409 item gone, network, 5xx) | "No se pudo actualizar la entrega" | server message, or "Revise la conexión y recargue la página." | — ("Recargar" button reloads) |
+| Save Editar Orden after someone else changed the order (409) | "La orden cambió" | "Alguien modificó esta orden mientras usted la editaba (agregó productos o marcó entregas). Sus cambios no se guardaron: recargue para ver la versión actual y vuelva a hacerlos." | — ("Recargar" remounts the app) |
+| Delivery checkbox fails (409 item gone, 5xx) | "No se pudo actualizar la entrega" | server message, or "Recargue para ver la versión actual de la orden." | — ("Recargar" remounts the app) |
+| Delivery checkbox gets no answer after 3 attempts (signal) | "Entrega sin confirmar" | "La señal está débil o se perdió y no se pudo confirmar la entrega. Toque la casilla otra vez cuando tenga mejor señal." | — (checkbox reverts) |
+| Payment gets no answer after 3 attempts (signal) | "Abono sin confirmar" | "…pudo haberse registrado o no. Cuando tenga mejor señal, toque "Cobrar Orden" otra vez con el mismo valor y método de pago: si ya estaba registrado, no se cobrará dos veces." | — (same key is reused) |
+| Nueva Orden / Editar Orden save gets no answer (signal) | "Orden sin confirmar" | Nueva Orden: "…toque Guardar otra vez sin cambiar nada: si ya estaba guardada, no se duplicará." Editar Orden: "…Revise la orden en 'Cuentas por cobrar'…" | — |
+| Any page load fails 3 times (no answer) | "Señal débil o sin conexión" | "Los datos no cargaron después de 3 intentos. Casi siempre es por la señal del celular…" (5xx: title "No se pudieron cargar los datos", "El servidor tuvo un problema…") | — ("Reintentar" remounts the app) |
 
 All links use the full style set per the mandatory "Styling inside Ant Design Modals" pattern below:
 `style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}`.
@@ -693,7 +700,7 @@ The system supports multiple payment methods:
 - Payment method is tracked per deposit and can vary between payments for the same order
 
 #### Real-time Payment Updates
-- After payment processing, system refreshes via `window.location.reload()` in `CollectOrderForm.jsx:190`
+- After a payment, `CollectOrderForm` updates the order and appends the deposit row from `POST /deposits`'s answer (no page reload since 2026-09-26). A `{ duplicate: true }` answer, or deleting a deposit, re-reads the order with `loadOrder()`
 - Context providers maintain synchronized state across components
 - Payment status updates are immediately reflected in order lists and collection views
 
@@ -758,7 +765,8 @@ The system supports multiple payment methods:
    - Order moves from "pending payment" to "fully paid" status
 
 9. **Post-Payment Actions**
-   - System reloads page via `window.location.reload()` in `CollectOrderForm.jsx:190`
+   - The screen updates in place from the server's answer: new debt, deposit row, "ORDEN COBRADA" if fully paid (no page reload since 2026-09-26)
+   - The request carries an `Idempotency-Key` kept per order + amount + method (`paymentKeyRef`), so a payment whose answer was lost can be repeated safely
    - Payment recorded in daily collections (`/cobrosHoy`)
    - Order appears in collections view if fully paid
 
@@ -1913,6 +1921,11 @@ Enforced in two places — add both when restricting a new user:
 - **Styling inside Ant Design Modals (links AND buttons)**: ⚠️ **RECURRING BUG — MANDATORY RULE** - Tailwind's base reset overrides Ant Design's zero-specificity (`:where`) styles inside `Modal.error()` / `Modal.confirm()`, making elements invisible (white on white). This bug has recurred multiple times (links, then the OK button of the client-edit confirm on 2026-07-02). Both halves of this rule are mandatory for EVERY modal, no exceptions:
   - **Links (`<a>` tags) in modal content**: Never rely solely on `style={{ color: '...' }}` — Tailwind's `color: inherit` reset overrides it. Always use the full style set: `style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}`.
   - **OK buttons in `Modal.confirm()`**: Tailwind's `background-color: transparent` button reset makes the default/primary OK button white-on-white. Every `Modal.confirm()` whose `okType` is NOT `'danger'` MUST set an explicit `okButtonProps` style, e.g. `okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } }` (blue for confirm/continue; green `#16a34a` for restore-type actions, see `ClientCard.jsx`). `okType: 'danger'` buttons render visibly red and are the only exemption. Never add a non-danger `Modal.confirm` without `okButtonProps`.
+- **Weak mobile signal** (2026-09-26, [PERFORMANCE_AUDIT.md §10](docs/PERFORMANCE_AUDIT.md#10-mobile-data-in-the-malls-2026-09-26)): staff work on mobile data inside the malls.
+  - **All axios behavior lives in [client/src/utils/network.js](client/src/utils/network.js)**, installed by `main.jsx`: timeouts (GET 15 s, resendable writes 20 s), 2 automatic retries (1 s, 3 s; while offline they wait for the signal), `ConnectionBanner` states, failure reports to `/clientError`, and the load-error dialog. Don't add per-call timeouts or retry loops elsewhere.
+  - **A write may be retried only if a resend can't apply it twice.** Either it sets a state (`setItemDeliveredRequest` passes `{ retry: true }`), or it carries an `Idempotency-Key` that the server claims with `claimRequestKey(conn, req, endpoint)` inside the write's transaction (`idempotent(key)` from `network.js`; `POST /order`, `POST /deposits`). **Keep one key per user intent** in a ref: reuse it when the user repeats the same action after a lost answer, and make a new one when the content changes (see `paymentKeyRef`, `saveKeyRef`).
+  - **Never `window.location.reload()`.** With no signal it lands on the browser's offline page. Update state from the write's answer, re-read only what changed, or call `reloadData()` from `network.js` (it remounts `App`, so every page reloads its data without a page load).
+  - Messages about a lost answer must say it was the signal and whether repeating is safe (see the error catalog in Rule #9).
 
 ### Database Query Patterns
 - **Timezone Awareness**: All datetime queries use CONVERT_TZ for Colombia timezone
@@ -1996,6 +2009,15 @@ Enforced in two places — add both when restricting a new user:
    - `DeliveredPage` sets `localStorage.dateFilter` on first load.
    - **Verified:** [server/tests/orderIntegrity.check.mjs](server/tests/orderIntegrity.check.mjs) (8 scenarios, local MySQL 8.0 container, REFERENCE.md "Local integrity check"). The same scenarios against the previous code: one delivery click erased a product added after page load (total 7,000 → 2,000), and 99 of 100 simultaneous edit + full-payment pairs ended **paid while still owing money**. Headless-Chromium run on a phone-sized screen through Nueva Orden ×2, Recorrido, Editar Orden (409 dialog + normal save), Cuentas por cobrar, Cobrar Alta T., Entregados and Cobrar Orden: 17/17 checks.
    - **Deploy the frontend first** (or together): see Rule #11.
+13. **Mobile data: retries, signal banner, no reloads, duplicate-safe resends** ✅ **IMPLEMENTED, PENDING DEPLOY** (2026-09-26). The client reported the app failing on Tigo mobile data inside the malls. Full detail: [PERFORMANCE_AUDIT.md §10](docs/PERFORMANCE_AUDIT.md#10-mobile-data-in-the-malls-2026-09-26).
+   - `client/src/utils/network.js` (the interceptors moved there from `main.jsx`): GET timeout 15 s, 2 automatic retries, waiting for the signal while offline, richer `/clientError` reports (`attempts`, `rttMs`, `downlinkMbps`).
+   - `ConnectionBanner`: "Sin señal", "Señal débil: reintentando", "La señal está lenta", "Conexión restablecida". "Reintentar" remounts the app instead of reloading the page.
+   - No `window.location.reload()` left: payments, deposit deletes and delivery ticks update in place (`useItemDelivery.jsx` is shared by the 3 delivery checkboxes). Recorrido got an "Actualizar" button, and its header wraps on phones (it was 521 px wide on a 390 px screen).
+   - `Idempotency-Key` on `POST /order` and `POST /deposits` (new `idempotency_keys` table, boot migration `create_idempotency_keys.js`), so those writes get a timeout and retries. Closes PENDING_IMPROVEMENTS 4.5.
+   - CORS `maxAge: 7200`.
+   - Also fixed: the `togglePlatform` flip on re-load, the `setOrder({ order })` bug (PENDING L2), and `!error.response` never matching network errors in `OrderForm`. Deleted the unused `utils/navigationUtils.js`.
+   - **Verified:** integrity check scenario 9 (plus a run with the key check disabled, which fails as expected); headless Chromium, 21/21 checks on a 390 px viewport.
+   - **Deploy:** backend first or both together. Owner action: the Render static-site header for `/assets/*` (audit §10).
 
 ### Priority Improvements Available for Implementation
 

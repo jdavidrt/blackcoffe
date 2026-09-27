@@ -5,13 +5,14 @@ import { useProducts } from "../context/ProductProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { PlusCircleOutlined, MinusCircleOutlined } from "@ant-design/icons";
-import { Select, Modal } from "antd"
+import { Select, Modal, message } from "antd"
 import SearchBar from "../components/SearchBar";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc, getItemDisplayTime } from '../utils/orderUtils';
 import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 import ProgressiveProductList from '../components/ProgressiveProductList';
+import { newRequestKey, reloadData } from '../utils/network';
 
 function OrderForm() {
   const { createOrder, getOrder, updateOrder } = useOrders();
@@ -32,6 +33,9 @@ function OrderForm() {
   // Edit mode: the items exactly as loaded, so the server can refuse a save that would
   // overwrite changes made to the order after this form opened.
   const loadedItemsRef = useRef(undefined);
+  // Idempotency key of the save in progress: saving the same client + cart again after the answer
+  // was lost (weak signal) reuses it, so the server can't add the products twice.
+  const saveKeyRef = useRef(null);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [formKey, setFormKey] = useState(0);
   const [orderLoaded, setOrderLoaded] = useState(false);
@@ -189,11 +193,15 @@ function OrderForm() {
         // adds these products to it (under a row lock, on its CURRENT items). Merging here from
         // a copy loaded when the client was picked erased anything added in between.
         setLoadingMessage("Guardando orden...");
-        await createOrder({
+        const intent = `${client}|${JSON.stringify(cart)}`;
+        if (saveKeyRef.current?.intent !== intent) saveKeyRef.current = { intent, key: newRequestKey() };
+        const result = await createOrder({
           clientId: client,
           shopId: 1,
           items: JSON.stringify(cart),
-        });
+        }, saveKeyRef.current.key);
+        saveKeyRef.current = null;
+        if (result?.duplicate) message.info('Esta orden ya estaba guardada.');
         // Reset form fully for next order
         setCart([]);
         setClient(null);
@@ -213,7 +221,7 @@ function OrderForm() {
           content: 'Alguien modificó esta orden mientras usted la editaba (agregó productos o marcó entregas). Sus cambios no se guardaron: recargue para ver la versión actual y vuelva a hacerlos.',
           okText: 'Recargar',
           okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
-          onOk: () => window.location.reload(),
+          onOk: reloadData,
         });
       } else if (paidOrderId) {
         Modal.error({
@@ -231,9 +239,17 @@ function OrderForm() {
           ),
           onOk: () => navigate('/'),
         });
-      } else if (!error.response) {
-        // No answer: the save may have gone through, and a retry would add the products twice.
-        alert("No se recibió respuesta del servidor. La orden pudo haberse guardado: revise 'Cuentas por cobrar' antes de intentar de nuevo.");
+      } else if (!error.response?.status) {
+        // No answer (axios 0.27 gives status 0 on network errors, none on timeouts): the save may
+        // have gone through. Nueva Orden's resend is safe (same key); Editar Orden's would get a 409.
+        Modal.warning({
+          title: 'Orden sin confirmar',
+          content: params.id
+            ? "La señal está débil o se perdió y no llegó la confirmación: los cambios pudieron guardarse o no. Revise la orden en 'Cuentas por cobrar' cuando tenga mejor señal."
+            : 'La señal está débil o se perdió y no llegó la confirmación: la orden pudo guardarse o no. ' +
+              'Cuando tenga mejor señal, toque Guardar otra vez sin cambiar nada: si ya estaba guardada, no se duplicará.',
+          okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
+        });
       } else {
         alert("Error al procesar la orden. Intenta de nuevo.");
       }

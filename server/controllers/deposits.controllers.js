@@ -1,5 +1,6 @@
 import pool from '../db.js'
 import { sendErrorEmail } from '../utils/emailNotifier.js'
+import { claimRequestKey } from '../migrations/create_idempotency_keys.js'
 
 export const computeOrderTotal = (itemsJson) => {
     try {
@@ -48,6 +49,8 @@ export const getDepositsByDate = async (req, res) => {
  * calls) can no longer leave a deposit row with a stale order total.
  *
  * Request body: { orderId, depositValue, paymentMethod, collectedBy }.
+ * Optional `Idempotency-Key` header: a resend with the same key answers
+ * { duplicate: true } without recording the payment again.
  * The server (not the client) computes lastDeposit/newDeposit/dueOnDeposit/
  * paid/paidAt from the locked order row's current items + deposit total.
  */
@@ -71,6 +74,12 @@ export const createDeposit = async (req, res) => {
         if (!paymentMethod) {
             await conn.rollback();
             return res.status(400).json({ message: "paymentMethod requerido" });
+        }
+
+        // A resend of a payment already recorded (its answer was lost on a weak signal).
+        if (!(await claimRequestKey(conn, req, 'createDeposit'))) {
+            await conn.rollback();
+            return res.json({ duplicate: true, orderId });
         }
 
         // Lock the order row until commit so concurrent deposits on the same order serialize.

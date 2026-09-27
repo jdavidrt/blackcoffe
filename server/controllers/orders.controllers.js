@@ -2,6 +2,7 @@ import pool from '../db.js'
 import { sendErrorEmail } from '../utils/emailNotifier.js'
 import { tzColombia } from '../utils/sqlFragments.js'
 import { computeOrderTotal } from './deposits.controllers.js'
+import { claimRequestKey } from '../migrations/create_idempotency_keys.js'
 
 // List screens (Cuentas por cobrar, Cobrar por mall) only show each order's total. Sending
 // `items` instead made those responses 2–3 MB (some open orders carry 600+ items) and timed
@@ -302,6 +303,13 @@ export const createOrder = async (req, res) => {
         console.log(`[createOrder] Request body:`, req.body);
 
         const { shopId, clientId, items } = req.body;
+
+        // A resend of a save already applied (its answer was lost on a weak signal): merging
+        // the same cart again would stack every quantity.
+        if (!(await claimRequestKey(conn, req, 'createOrder'))) {
+            await conn.rollback();
+            return res.json({ duplicate: true, clientId });
+        }
 
         const [existing] = await conn.query(
             `SELECT id, items FROM orders

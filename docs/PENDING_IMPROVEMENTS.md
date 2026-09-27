@@ -135,7 +135,7 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
 - **3.4** — Reactivating an abandoned order doesn't refresh item prices from the current `products` table; a long-abandoned order keeps stale `unitValue`s.
 - **3.5** — `DELETE /order/:id` is a hard delete, inconsistent with the soft-delete pattern used for `clients` and `deposits` — loses audit trail when an order (with no deposits) is removed.
 - **L3** — `unmarkOrderAsAbandoned` doesn't re-check `paid` before clearing abandon fields.
-- **L2** — `CollectOrderForm.jsx` has a `setOrder({ order })` nested-object bug (sets state to `{ order: {...} }` instead of `{...order}`); currently masked by a `window.location.reload()` a few seconds later.
+- ~~**L2**~~ **Done 2026-09-26** (the line was removed when the post-payment reload went away) — `CollectOrderForm.jsx` has a `setOrder({ order })` nested-object bug (sets state to `{ order: {...} }` instead of `{...order}`); currently masked by a `window.location.reload()` a few seconds later.
 - **L1** — Dead `values.items = JSON.stringify(cart)` line in `handleConfirmPayment` that doesn't actually feed into the update payload.
 
 ### User-error prevention (audit section 4)
@@ -143,7 +143,7 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
 - **4.2** — Several destructive actions (order delete, client delete, product delete) lack a confirmation modal in places `CLAUDE.md` documents as standard.
 - **4.3** — No lint rule enforcing `type="button"` on non-submit buttons inside forms — this exact bug has recurred historically and nothing prevents a recurrence.
 - **4.4** — Phone/premises/name fields have no format validation; a non-numeric `premises` value silently breaks the `CAST(clients.premises AS SIGNED)` sort.
-- **4.5** — Payment confirm button can theoretically be double-clicked into a duplicate deposit if the backend is slow; only a `setIsRegistering` flag guards it, no idempotency key.
+- ~~**4.5** — Payment confirm button can theoretically be double-clicked into a duplicate deposit if the backend is slow; only a `setIsRegistering` flag guards it, no idempotency key.~~ **Done 2026-09-26:** `POST /deposits` and `POST /order` take an `Idempotency-Key`, and the page reuses it when the same payment or save is repeated ([PERFORMANCE_AUDIT.md §10](PERFORMANCE_AUDIT.md#10-mobile-data-in-the-malls-2026-09-26), M5).
 - **4.6** — No `.trim()` on text inputs — `"david "` and `"david"` are different logins/client names.
 
 ### Data scalability (audit section 5)
@@ -159,7 +159,7 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
 
 ### Performance (audit section 6)
 - **6.2** — The `LIKE '%"delivered":false%'` full-table-scan pattern also shows up in `getNotDeliveredOrders`/`getDeliveredOrders` — same root cause as 5.1.
-- **6.3** — `window.location.reload()` is used as a poor-man's state sync after nearly every mutation (payment, deposit delete, checkbox toggle) — full SPA reload on every action, several seconds of dead screen on slow connections.
+- ~~**6.3** — `window.location.reload()` is used as a poor-man's state sync after nearly every mutation (payment, deposit delete, checkbox toggle) — full SPA reload on every action, several seconds of dead screen on slow connections.~~ **Done 2026-09-26:** none left in `client/src`; see [PERFORMANCE_AUDIT.md §10](PERFORMANCE_AUDIT.md#10-mobile-data-in-the-malls-2026-09-26) (M4).
 - **6.4** — `sumarDepositos`/`sumarDepositosPorMall` in `DepositedOrdersPage.jsx` recompute on every render instead of being memoized.
 - **6.5** — Most controller `SELECT`s pull every column (including the potentially large `items` TEXT/JSON) even for dashboard/count views that don't need it. **Partly done 2026-09-26**: Cuentas por cobrar, Cobrar por mall and Entregados no longer send full items (CLAUDE.md rule #11). Still sending full items: `/depositedOrdersByDate/:date` (Cobros del día, ~330 KB), `/depositsByDate/:date` (Abonos), `/abandonedOrders` (~165 KB), `/unPaidOrdersByClient/:id` (only its `id` is used by `ClientForm`).
 - **6.6** — No pagination on `/orders`, `/abonos`, `/clients` (`/deposits` was removed 2026-09-26) — tolerable at current (~10k row) volume, won't be at 10x that.
@@ -167,7 +167,8 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
   - Quick wins **QW1–QW4 verified locally on 2026-09-24, then deployed and confirmed live in production the same day** (`bae0493`): indexes; crash-proofing the `getConnection()`-outside-`try` handlers (extended 2026-09-26 to `updateOrder`/`setItemDelivered`); request-timing logs; a GET timeout plus a failed-load dialog in the frontend. The results are in the audit's "Evaluation" section.
   - **QW5 (the database maintenance window) is still open**; it is a DigitalOcean setting for the owner.
   - Next steps N1–N7.
-  - Infrastructure: move the API from Render Oregon to Render Virginia, next to the NYC3 database.
+  - Infrastructure: move the API from Render Oregon to Render Virginia, next to the NYC3 database. ⛔ **Not possible on the current Render plan** (owner, 2026-09-26); discarded for now.
+  - **Mobile data (2026-09-26):** retries, signal banner, no reloads, duplicate-safe resends, CORS preflight cache (N1, N4). Implemented, pending deploy; see the audit's §10. The owner still has to set the Render static-site header for `/assets/*` (the first attempt had the name and value split wrong).
   - The audit confirms 5.3, 5.6, 6.2, 6.3 and 6.5 with production data. Mark items done here as they ship. N5 and N7 shipped in code 2026-09-26 (pending deploy).
 
 ### Leftover items (from the old "Code Improvement Opportunities" list)

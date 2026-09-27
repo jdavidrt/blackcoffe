@@ -40,7 +40,7 @@ Verified with the owner on 2026-09-24; measurements come from [PERFORMANCE_AUDIT
 | Sígale | Its own variables, e.g. `SIGALE_DB_NAME` (`sigale`) and `DB_CA_CERT`; see `server/sigale/README.md` |
 
 **Things that follow from this setup:**
-- **The API and the database are in different regions.** Each database round trip from Oregon to NYC3 costs about 85 ms (measured), which adds up on multi-query operations such as payments. The recommended fix is to move the API to Render **Virginia**, not to move the database; see [PERFORMANCE_AUDIT.md §8](PERFORMANCE_AUDIT.md#8-infrastructure-put-the-api-next-to-the-database).
+- **The API and the database are in different regions.** Each database round trip from Oregon to NYC3 costs about 85 ms (measured), which adds up on multi-query operations such as payments. The audit recommended moving the API to Render **Virginia** ([PERFORMANCE_AUDIT.md §8](PERFORMANCE_AUDIT.md#8-infrastructure-put-the-api-next-to-the-database)), but ⛔ **the current Render plan doesn't allow changing any service's region** (owner, 2026-09-26), so that is discarded for now. Treat the latency as fixed: keep sequential queries per request low, and keep the frontend tolerant of slow or lost answers (PERFORMANCE_AUDIT.md §10).
 - **A primary-only cluster means any DigitalOcean maintenance is downtime.** Keep the maintenance window on Sunday early morning; the nightly backup job runs Monday to Saturday.
 - **The frontend's API address is hardcoded** as `RENDER_SERVER` in [client/src/utils/config.js](../client/src/utils/config.js), and **Sígale's app calls the same backend**. Changing the API's URL means redeploying the static site and coordinating with Sígale's owners.
 - **Render cannot move an existing service to another region.** A region change means creating a new service in the new region.
@@ -746,15 +746,15 @@ docker run -d --name bc-locktest -e MYSQL_ROOT_PASSWORD=test -e MYSQL_DATABASE=d
 docker exec -i bc-locktest mysql --default-character-set=utf8mb4 -uroot -ptest defaultdb < server/database/db.sql
 # db.sql lags production: add the columns the code uses
 docker exec bc-locktest mysql -uroot -ptest defaultdb -e "ALTER TABLE orders MODIFY items MEDIUMTEXT; ALTER TABLE deposits ADD dueOnDeposit int, ADD isDeleted tinyint(1) DEFAULT 0, ADD deletedAt datetime, ADD deletedBy varchar(255); ALTER TABLE clients ADD isDeleted tinyint(1) DEFAULT 0, ADD deletedAt datetime, ADD deletedBy varchar(255);"
-# the app's own boot migrations (snapshot columns, backup tables, indexes)
+# the app's own boot migrations (snapshot columns, backup tables, indexes, idempotency keys)
 export DB_HOST=127.0.0.1 DB_PORT=33306 DB_USER=root DB_PASSWORD=test DB_NAME=defaultdb
-node --input-type=module -e "for (const [m, fn] of [['add_client_snapshot','runMigrations'],['create_backup_tables','runBackupMigrations'],['add_performance_indexes','runIndexMigrations']]) await (await import('./server/migrations/' + m + '.js'))[fn](); process.exit(0)"
+node --input-type=module -e "for (const [m, fn] of [['add_client_snapshot','runMigrations'],['create_backup_tables','runBackupMigrations'],['add_performance_indexes','runIndexMigrations'],['create_idempotency_keys','runIdempotencyMigrations']]) await (await import('./server/migrations/' + m + '.js'))[fn](); process.exit(0)"
 ```
 
 Run (from the repo root, same `DB_*` variables):
 
 ```bash
-node server/tests/orderIntegrity.check.mjs   # prints "ok 1" … "ok 8"; exits non-zero on the first failed assertion
+node server/tests/orderIntegrity.check.mjs   # prints "ok 1" … "ok 9"; exits non-zero on the first failed assertion
 ```
 
 Notes:

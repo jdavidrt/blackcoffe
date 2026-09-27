@@ -25,7 +25,8 @@
 4. **Fix order:**
    - Apply the quick wins (§3). **QW1–QW4 shipped in `bae0493` (2026-09-24) and were confirmed live in production the same day** — see "Evaluation" below.
    - Measure.
-   - Move the API server next to the database (§8). **Do not move the database to San Francisco** (see §8 for why).
+   - ~~Move the API server next to the database (§8).~~ **Not possible on the current Render plan** (owner, 2026-09-26): services can't change region, so this is discarded for now. **Do not move the database to San Francisco** either (see §8 for why).
+5. **Mobile data (2026-09-26):** the client's staff use the app on Tigo mobile data across the malls, where the signal drops for seconds at a time. The app gave up on the first lost request. See §10: retries, a signal banner, no page reloads after payments or deliveries, and duplicate-safe resends.
 
 ---
 
@@ -140,7 +141,7 @@ Both exclusions are **mandatory**:
 
 **Why:** axios has **no timeout** anywhere in `client/src/api/`. A request that never gets a response leaves the "Cargando..." spinner forever, which is exactly the "stuck" symptom.
 
-**What:** two axios interceptors in [client/src/main.jsx](../client/src/main.jsx).
+**What:** two axios interceptors in `client/src/main.jsx` (moved to [client/src/utils/network.js](../client/src/utils/network.js) and extended with retries on 2026-09-26, see §10).
 1. **A 20 s timeout on GET requests only.** Write requests (POST/PUT/DELETE) are deliberately excluded: if a payment actually succeeded on the server after the browser gave up, the user would retry and create a duplicate deposit (PENDING_IMPROVEMENTS 4.5).
 2. **A "No se pudieron cargar los datos" dialog** with a **Reintentar** button (which reloads the page), shown once when a GET gets no answer (timeout, or server unreachable) or a 5xx.
    - This is required, not optional. Pages stop their spinner in a `finally` block with no `catch`, so without the dialog a failed load would render **"No hay pedidos…"**, and a delivery driver would read that as "nothing to deliver".
@@ -280,13 +281,14 @@ Summed over production's call volumes, these endpoints should need roughly **80%
 
 - Users in Bogotá also reach the Oregon server through Render's edge. A static file from the API takes 250–300 ms to its first byte on a new connection, about 180 ms of which is the Bogotá→Oregon hop.
 - Every write pays for a **CORS preflight** first (an extra full round trip). The frontend and API are on different domains, and `cors()` sets no `maxAge`.
-- Fix: §8 (move the API to Render Virginia). CORS preflight: N4.
+- Fix: §8 (move the API to Render Virginia), **not possible on the current plan** (2026-09-26). CORS preflight: N4, done 2026-09-26.
 
 ### F5 — Full page reloads after every action
 
 - `window.location.reload()` runs 3 s after each delivery tick ([OrderDeliveryCard.jsx:38](../client/src/components/OrderDeliveryCard.jsx#L38), [OrderDeliveredCard.jsx:38](../client/src/components/OrderDeliveredCard.jsx#L38)) and after payments ([CollectOrderForm.jsx:109](../client/src/pages/CollectOrderForm.jsx#L109), [:223](../client/src/pages/CollectOrderForm.jsx#L223)).
 - In 41.7 days that was **35,359** item updates and **7,994** Recorrido reloads. Each reload repeats F1 and F4 and re-parses the whole JS bundle.
 - Already tracked as PENDING_IMPROVEMENTS 6.3. The fix is N1 and has to be done carefully (see the note there).
+- **✅ Done 2026-09-26 (N1, §10):** no `window.location.reload()` is left in `client/src`. Payments and delivery ticks update the screen from the server's answer; deleting a deposit re-reads that order.
 
 ### F6 — Date filters written in a form no index can use
 
@@ -370,7 +372,7 @@ Database statistics can be re-checked at any time with the SQL in Appendix B, ru
 
 ## 7. Next steps (after the quick wins)
 
-- **N1 — Replace page reloads with in-place updates (F5, tracker 6.3).**
+- **N1 — Replace page reloads with in-place updates (F5, tracker 6.3).** ✅ **Done 2026-09-26**, see §10.
   - After `updateOrder` or `createDeposit` resolves, refetch only the affected list or order, and disable the control while it saves.
   - Read PENDING_IMPROVEMENTS "A second, more subtle regression risk: the delivery-card checkbox fix" first. That risk is lower since 2026-09-26: checkboxes send one item to `PUT /order/:id/delivered` instead of the whole list, and Editar Orden gets a 409 on stale data (CLAUDE.md rule #10). Still never write `items` from a local copy.
 - **N2 — Rewrite the date filters as ranges (F6), then index them.**
@@ -383,7 +385,7 @@ Database statistics can be re-checked at any time with the SQL in Appendix B, ru
 - **N3 — Split the bundle and cache assets (F7).**
   - `React.lazy` for `Invoice`, `BackupsPage` and `QueryPage`.
   - In the static site's Headers settings, add `/assets/*` → `Cache-Control: public, max-age=31536000, immutable`. Hashed filenames make this safe; `index.html` must stay uncached.
-- **N4 — Cache CORS preflights (F4).**
+- **N4 — Cache CORS preflights (F4).** ✅ **Done 2026-09-26** (`maxAge: 7200`; Sígale's owners should be told, see below).
   - Add `maxAge: 7200` to the `cors()` options in `server/index.js`.
   - **⚠️ Sígale:** that `cors()` call also carries Sígale's origin. This adds an option without touching the origins, but tell Sígale's owners.
 - ~~**N5 — Slimmer dashboard payload (F8, tracker 6.5).**~~ **Done 2026-09-26** for `/orders/`, `/unPaidOrders/:mall` and `/deliveredOrders/:date` (see F8). Still sending full items: `/depositedOrdersByDate/:date`, `/depositsByDate/:date`, `/abandonedOrders`.
@@ -393,6 +395,8 @@ Database statistics can be re-checked at any time with the SQL in Appendix B, ru
 ---
 
 ## 8. Infrastructure: put the API next to the database
+
+> ⛔ **Constraint (owner, 2026-09-26): the current Render plan doesn't allow changing any service's region.** This section's recommendation is discarded for now. It stays here in case the plan changes. Until then, the ~85 ms per database round trip and the Bogotá → Oregon hop are fixed costs. Keep the number of sequential queries per request low, and keep the app tolerant of slow answers (§10).
 
 ### Recommendation: move the API to Render **Virginia**, keep the database in NYC3
 
@@ -444,6 +448,86 @@ Moving the API server is reversible and leaves the data where it is.
 **Other observations (not performance):**
 - **The database is reachable from the internet.** Unknown hosts (likely scanners) connected 10–22 times each, which probably explains most of the 579 failed connection attempts. Enable DigitalOcean **Trusted Sources**, limited to Render's outbound IPs and your own.
 - **Both apps connect as `doadmin`,** the cluster's admin account. Use a least-privilege user per app. Related to PENDING_IMPROVEMENTS Priority 2; Sígale's user is its owners' call.
+
+---
+
+## 10. Mobile data in the malls (2026-09-26)
+
+**Why:** the client said the main problem is using the app **on mobile data** (Tigo, Bogotá). Their screenshot showed Cobrar Alta T. with "No se pudieron cargar los datos" at 4:44 pm, on 4G+ with partial signal. Staff walk the malls, where indoor coverage drops for seconds at a time.
+
+**Measured 2026-09-26 ≈ 20:30, from a fixed connection in Bogotá (not Tigo):**
+
+| Check | Result |
+|---|---|
+| API time | `/ping` 0.3–0.6 s; Cobrar Alta T. 0.6–1.2 s |
+| Cobrar Alta T. payload | **4.3 KB** on the wire (32 KB raw; N5 is live). Every list a phone loads is 3–30 KB |
+| Cloudflare edge | Bogotá (`colo=BOG`), IPv4 only |
+| Static site caching | `max-age=0` in the browser, 5 min at the edge (`s-maxage=300`), so edge misses go to Oregon. Bundle: 746 KB compressed |
+| CORS preflight per write | 0.4–0.7 s (it goes to Oregon), no `maxAge` set |
+
+**Diagnosis:**
+- A 4 KB answer takes under a second even on a very weak link. A 20 s timeout therefore means the connection stalled or dropped (mall coverage, cell handover), not a slow download.
+- The app had **zero tolerance** for that:
+  - Every request was tried once, and any loss showed the dialog, whose text blamed the server.
+  - "Reintentar", every payment and every delivery tick **reloaded the whole page**: about 5–7 requests, each of which had to survive the weak signal. Reloading with no signal lands on the browser's offline page.
+- **Writes had no timeout** (to avoid duplicate payments), so a payment on a dead connection spun until the browser gave up.
+
+### What changed (implemented 2026-09-26, pending deploy)
+
+| # | Change | Where |
+|---|---|---|
+| M1 | **Automatic retries.** GETs, plus the writes that are safe to resend, get 2 more attempts (1 s and 3 s apart). While the phone reports offline, a retry waits for the signal (up to 60 s) instead of burning attempts. Timeouts: 15 s for GETs, 20 s for resendable writes | [client/src/utils/network.js](../client/src/utils/network.js) (the interceptors moved there from `main.jsx`) |
+| M2 | **Signal banner** at the bottom of every page: "Sin señal. Esperando conexión…", "Señal débil: reintentando…", "La señal está lenta. Esperando respuesta…" (after 4 s), then "Conexión restablecida" | [client/src/components/ConnectionBanner.jsx](../client/src/components/ConnectionBanner.jsx) |
+| M3 | **Dialogs name the cause.** A load that fails 3 times says "Señal débil o sin conexión" (or "El servidor tuvo un problema" for 5xx). **"Reintentar" remounts the app** instead of reloading the page, so it works even with no signal at that moment | `network.js`, [main.jsx](../client/src/main.jsx) |
+| M4 | **No page reloads** after payments, deleting a deposit or delivery ticks (N1). Payment: the screen updates from `POST /deposits`'s answer (0 extra requests). Tick: the checkbox shows "Guardando…" and updates from the answer; a ticked item stays visible until the next load, so a mistake can be unticked. Recorrido gets an **"Actualizar"** button, since ticks no longer refresh the list | [CollectOrderForm.jsx](../client/src/pages/CollectOrderForm.jsx), [useItemDelivery.jsx](../client/src/utils/useItemDelivery.jsx), [DeliveryPage.jsx](../client/src/pages/DeliveryPage.jsx) |
+| M5 | **Duplicate-safe resends** (PENDING 4.5). `POST /order` and `POST /deposits` accept an `Idempotency-Key` header, claimed inside the write's own transaction in the new `idempotency_keys` table. A resend answers `{ duplicate: true }` without applying anything. The page keeps one key per intent (same order + amount + method; same client + cart), so a user who repeats a payment or order whose answer was lost can't apply it twice. This is what lets those writes have a timeout and retries. `PUT /order/:id/delivered` is retried without a key (it sets a state, it doesn't flip it) | [server/migrations/create_idempotency_keys.js](../server/migrations/create_idempotency_keys.js), `createDeposit`, `createOrder` |
+| M6 | **CORS preflight cached 2 h** (N4). Saves 0.4–0.7 s on every write after the first | `server/index.js` (⚠️ Sígale: shared `cors()` call, origins untouched; tell its owners) |
+| M7 | **Richer failure reports:** `attempts`, time since the first attempt, `rttMs` and `downlinkMbps` (`effectiveType` reads "4g" for almost any link) | `network.js` |
+| M8 | Recorrido's header **wraps on phones.** It measured 521 px wide on a 390 px screen, which scrolled the page sideways and cut dialogs in half | `DeliveryPage.jsx` |
+
+**Not resent automatically:** Editar Orden (a resend after success would get the 409 "La orden cambió"), deleting a deposit, and abandoning an order. They keep no timeout; if the answer is lost, a dialog asks the user to check.
+
+**Deploy order:** backend first (migration + endpoints) or both together. An old page doesn't send the key and works as before. The new page against the old backend would still work, but without duplicate protection.
+
+**Verified:**
+- [server/tests/orderIntegrity.check.mjs](../server/tests/orderIntegrity.check.mjs) scenario 9 (local MySQL 8): the same payment resent sequentially, 6 times simultaneously and after a refused attempt, plus a resent Nueva Orden, is applied once. With the key check disabled, scenario 9 fails. Scenarios 1–8 still pass.
+- Headless Chromium on a 390 px phone viewport, API mocked, **21/21 checks**:
+  - Two dropped loads then success: no dialog, banner "reintentando" then "restablecida".
+  - Three drops: the signal dialog, and "Reintentar" reloads the data without reloading the page.
+  - Offline: "Sin señal" and no dialog while offline; the list loads when the signal returns.
+  - A 6 s answer: "La señal está lenta".
+  - Delivery tick: dropped once then saved; after three drops, "Entrega sin confirmar" and the checkbox reverts.
+  - Payment: dropped once then saved with the same key, and the screen updated with no page reload.
+  - Payment answer lost, then repeated: same key sent again, "Este abono ya estaba registrado."
+
+### Owner action: static asset caching (Render dashboard)
+
+Render → `blackcofeepedidos` → Headers, **one** rule. It covers only `/assets/*`: never cache `index.html`, which must stay fresh after each deploy.
+
+| Request Path | Header Name | Header Value |
+|---|---|---|
+| `/assets/*` | `Cache-Control` | `public, max-age=31536000, immutable` |
+
+Filenames are content-hashed, so each deploy gets new names and this is safe. Check it with `curl -sI https://blackcofeepedidos.onrender.com/assets/<current bundle>.js | grep -i cache-control`. Until it's live, each app load re-checks the JS, CSS and logo, costing 3 extra round trips on the phone. The first attempt (2026-09-26) put `Cache-Control: public` in the *name* field and `max-age=31536000` in the value, and the live header was still `max-age=0`.
+
+### When the client reports it again
+
+Each failure that survives the retries emails `🚨 [BlackCoffe] Error en clientError`:
+
+| Report says | Meaning |
+|---|---|
+| `Network Error`, `online: false` | The phone had no signal. Nothing to fix server-side |
+| `Network Error` or timeout, `online: true`, `attempts: 3` | The link was up but dead or very bad (look at `rttMs`). Check Render → Logs at that minute: if the request is logged with a normal time, the server answered and the reply was lost on the phone's link |
+| `HTTP 502`/`503` | Render or the server was down or restarting: Render → Events |
+
+From the phone, on Tigo, where it fails:
+- `https://coffeserver.onrender.com/cdn-cgi/trace` shows `colo=`. Anything other than `BOG` means Tigo routes to a farther Cloudflare edge.
+- `speed.cloudflare.com` shows latency, jitter and packet loss.
+
+### Next, if it's still not enough
+- **Open the app with no signal.** A small service worker could cache `index.html` and `/assets/*`, so opening or reopening the app in a dead zone shows the app and its banner instead of the browser's offline page. Android discards background tabs, and those reload on return. Only worth it if reports show that pattern; a buggy service worker is hard to undo.
+- **Smaller bundle after each deploy** (N3): `React.lazy` for `Invoice` (`@react-pdf/renderer`), `BackupsPage` and `QueryPage`. On a weak signal a lazy chunk can fail to load, so it needs an import retry and an error boundary around it.
+- **Show the last list while offline:** keep each GET's last answer and show it with "datos de las HH:MM" when a refresh fails. Payments stay safe (the server checks the real total) but the screen could show an old balance.
 
 ---
 

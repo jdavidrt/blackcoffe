@@ -1,5 +1,6 @@
 import axios from "axios";
 import { API_CONFIG } from '../utils/config';
+import { idempotent } from '../utils/network';
 
 export const getOrdersRequest = async () =>
   await axios.get(`${API_CONFIG.RENDER_SERVER}/orders/`,);
@@ -25,8 +26,9 @@ export const getUnpaidOrders = async (mall) =>
 export const loadUnPaidOrdersbyClient = async (clientId) =>
   await axios.get(`${API_CONFIG.RENDER_SERVER}/unPaidOrdersByClient/${clientId}`, clientId);
 
-export const createOrderRequest = async (order) =>
-  await axios.post(`${API_CONFIG.RENDER_SERVER}/order`, order);
+// requestKey makes a resend (weak signal) safe: the server applies the same key only once.
+export const createOrderRequest = async (order, requestKey) =>
+  await axios.post(`${API_CONFIG.RENDER_SERVER}/order`, order, requestKey && idempotent(requestKey));
 
 export const deleteOrderRequest = async (id) =>
   await axios.delete(`${API_CONFIG.RENDER_SERVER}/order/${id}`);
@@ -39,7 +41,7 @@ export const updateOrderRequest = async (id, newFields) =>
 
 // Sets one item's delivery state on the server's current items (never send the whole list back).
 export const setItemDeliveredRequest = async (id, itemId, delivered, deliveredAt) =>
-  await axios.put(`${API_CONFIG.RENDER_SERVER}/order/${id}/delivered`, { itemId, delivered, deliveredAt });
+  await axios.put(`${API_CONFIG.RENDER_SERVER}/order/${id}/delivered`, { itemId, delivered, deliveredAt }, { retry: true });
 
 export const toggleOrderDoneRequest = async (id, done) =>
   await axios.put(`${API_CONFIG.RENDER_SERVER}/order/${id}`, {

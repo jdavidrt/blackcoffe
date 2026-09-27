@@ -21,8 +21,8 @@ app.use(depositRoutes);
 const server = app.listen(0);
 const base = `http://127.0.0.1:${server.address().port}`;
 
-const api = async (method, path, body) => {
-    const res = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
+const api = async (method, path, body, headers) => {
+    const res = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body && JSON.stringify(body) });
     return { status: res.status, body: await res.json().catch(() => null) };
 };
 const item = (id, unitValue = 1000, quantity = 1) => ({ id, productName: 'Prueba ' + id, unitValue, quantity, delivered: false, deliveredAt: '' });
@@ -136,7 +136,40 @@ try {
     assert.deepEqual(JSON.parse(day.items), expected);
     assert.equal(day.total, mine.total, 'Debe uses the full order total, not just the listed items');
     console.log('ok 8 - /orders/ sends total; /deliveredOrders/:date sends that day\'s items + full total');
+
+    // 9. Resends from a phone whose answer got lost (same Idempotency-Key) are applied once.
+    const key = (name) => ({ 'Idempotency-Key': `itest-${name}-${Date.now()}` });
+    const keyClient = await newClient();
+    const keyOrder = (await addProducts(keyClient, [item('k', 1000, 5)])).body.id; // total 5000
+    const pay = (headers, depositValue = 1000) =>
+        api('POST', '/deposits', { orderId: keyOrder, depositValue, paymentMethod: 'Efectivo', collectedBy: 't' }, headers);
+    const depositCount = async () => (await pool.query('SELECT COUNT(*) n FROM deposits WHERE orderId = ?', [keyOrder]))[0][0].n;
+    const kPay = key('pay');
+    assert.equal((await pay(kPay)).body.newDeposit, 1000);
+    const resent = await pay(kPay);
+    assert.equal(resent.status, 200);
+    assert.equal(resent.body.duplicate, true);
+    assert.equal(await depositCount(), 1, 'sequential resend not recorded');
+    const kBurst = key('burst');
+    const burst = await Promise.all([...Array(6)].map(() => pay(kBurst)));
+    assert.equal(burst.filter((r) => r.body.duplicate).length, 5, '6 simultaneous sends: 5 duplicates');
+    assert.equal(await depositCount(), 2, '6 simultaneous sends recorded once');
+    const kRefused = key('refused');
+    assert.equal((await pay(kRefused, 999999)).status, 400, 'overpayment refused');
+    assert.equal((await pay(kRefused, 500)).body.newDeposit, 2500, 'a refused attempt releases its key');
+    assert.equal((await pay(undefined, 500)).body.newDeposit, 3000, 'no key: processed as before');
+    const [[keyRow]] = await pool.query('SELECT deposit FROM orders WHERE id = ?', [keyOrder]);
+    assert.equal(Number(keyRow.deposit), 3000);
+    const kOrder = key('order');
+    const save = () => api('POST', '/order', { clientId: keyClient, shopId: 1, items: JSON.stringify([item('k2')]) }, kOrder);
+    assert.equal((await save()).body.mergedInto, keyOrder);
+    assert.equal((await save()).body.duplicate, true);
+    assert.equal((await itemsOf(keyOrder)).find((it) => it.id === 'k2').quantity, 1, 'resent Nueva Orden did not stack the quantity');
+    const [[{ openTrx: stillOpen }]] = await pool.query('SELECT COUNT(*) openTrx FROM information_schema.innodb_trx');
+    assert.equal(stillOpen, 0, 'duplicates roll back and release');
+    console.log('ok 9 - resent payments and orders (sequential, 6 simultaneous, after a refusal) are applied once');
 } finally {
+    await pool.query("DELETE FROM idempotency_keys WHERE requestKey LIKE 'itest-%'").catch(() => {});
     if (clientIds.length) {
         await pool.query('DELETE FROM deposits WHERE clientId IN (?)', [clientIds]);
         await pool.query('DELETE FROM orders WHERE clientId IN (?)', [clientIds]);

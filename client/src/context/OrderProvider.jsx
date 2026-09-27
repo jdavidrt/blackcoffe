@@ -72,8 +72,8 @@ export const OrderContextProvider = ({ children }) => {
 
   // The server merges into the client's open (unpaid) order if there is one, under a row lock.
   // Re-throws so OrderForm doesn't reset the form as if an order that failed had been saved.
-  const createOrder = async (order) => {
-    const response = await createOrderRequest(order);
+  const createOrder = async (order, requestKey) => {
+    const response = await createOrderRequest(order, requestKey);
     return response.data;
   };
 

@@ -9,6 +9,7 @@ import { sendErrorEmail } from "./utils/emailNotifier.js";
 import { runMigrations } from "./migrations/add_client_snapshot.js";
 import { runBackupMigrations } from "./migrations/create_backup_tables.js";
 import { runIndexMigrations } from "./migrations/add_performance_indexes.js";
+import { runIdempotencyMigrations } from "./migrations/create_idempotency_keys.js";
 import { startOrderBackupJob } from "./jobs/orderBackup.job.js";
 import indexRoutes from "./routes/index.routes.js";
 import ordersRoutes from "./routes/orders.routes.js";
@@ -49,7 +50,10 @@ app.use(cors({
     'http://localhost:5173',
     'http://localhost:25060'
   ],
-  credentials: true
+  credentials: true,
+  // Browsers re-send the CORS preflight before every write unless told to cache it (Chrome's
+  // default is 5 s, its cap 2 h). Each preflight is a full trip to Oregon: 0.4–0.7 s on a phone.
+  maxAge: 7200
 }));
 
 app.use(express.json())
@@ -86,7 +90,7 @@ app.get('*', (req, res) => {
   res.sendFile(join(__dirname, '../client/dist', 'index.html'));
 });
 
-runMigrations().then(runBackupMigrations).then(runIndexMigrations).then(() => {
+runMigrations().then(runBackupMigrations).then(runIndexMigrations).then(runIdempotencyMigrations).then(() => {
   app.listen(PORT);
   console.log(`[${new Date().toISOString()}] BlackCoffe Server running on port ${PORT}`);
   // Sigale boot is fire-and-forget: it runs its own migrations + scheduler.

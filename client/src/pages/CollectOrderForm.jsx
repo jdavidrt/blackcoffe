@@ -2,7 +2,7 @@ import { Form, Formik } from "formik";
 import { useOrders } from "../context/OrderProvider";
 import { useDeposits } from "../context/DepositsProvider";
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useRef, useState, Fragment } from "react";
 import dayjs from "dayjs";
 import { safeJSONParse } from '../utils/jsonUtils';
 import { sortProductsByDateDesc, getItemDisplayTime, getItemDate } from '../utils/orderUtils';
@@ -12,7 +12,8 @@ import { formatDate, extractDate, formatDepositDateTime } from '../utils/dateUti
 import ProgressiveProductList from '../components/ProgressiveProductList';
 import CoffeePouringAnimation from '../components/CoffeePouringAnimation';
 import { getOrderRestoresRequest } from '../api/backups.api';
-import { setItemDeliveredRequest } from '../api/orders.api';
+import { useItemDelivery } from '../utils/useItemDelivery';
+import { newRequestKey } from '../utils/network';
 
 function CollectOrderForm() {
 
@@ -39,7 +40,6 @@ function CollectOrderForm() {
   const params = useParams();
   const navigate = useNavigate();
   const [platformPayment, setPlatformPayment] = useState(false);
-  const fechaActual = dayjs().format('YYYY-MM-DD');
   const [depositedTotal, setDepositedTotal] = useState(false);
   const [isDeletingDeposit, setIsDeletingDeposit] = useState(false);
   const [showDeposits, setShowDeposits] = useState(false);
@@ -47,25 +47,10 @@ function CollectOrderForm() {
   const [loadingMessage, setLoadingMessage] = useState("");
 
 
-  const handleCheckboxChange = async (itemId) => {
-    const delivered = !cart.find((item) => item.id === itemId)?.delivered;
-    setCart((prevCart) => prevCart.map((item) =>
-      item.id === itemId ? { ...item, delivered, deliveredAt: fechaActual } : item
-    ));
-    try {
-      // Only this item's new state goes to the server, which applies it to the order's current
-      // items: products added after this page loaded are kept.
-      await setItemDeliveredRequest(params.id, itemId, delivered, fechaActual);
-    } catch (error) {
-      Modal.error({
-        title: 'No se pudo actualizar la entrega',
-        content: error.response?.data?.message || 'Revise la conexión y recargue la página.',
-        okText: 'Recargar',
-        okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
-        onOk: () => window.location.reload(),
-      });
-    }
-  };
+  const { isDelivered, isSaving, toggle } = useItemDelivery(params.id, cart);
+  // Idempotency key of the payment being confirmed: repeating the same payment (same order, amount
+  // and method) after its answer was lost reuses it, so the server can't record it twice.
+  const paymentKeyRef = useRef(null);
 
   const calculateTotal = () => {
     return cart.reduce((total, item) => total + item.unitValue * item.quantity, 0);
@@ -102,13 +87,12 @@ function CollectOrderForm() {
         try {
           await deleteDepositById(depositId);
           message.success("Depósito eliminado correctamente");
-          // Reload the page to refresh order and deposits data
-          setTimeout(() => {
-            window.location.reload();
-          }, 1500);
+          // The server recalculated every remaining deposit: read them again (no page reload).
+          await loadOrder();
         } catch (error) {
           message.error("Error al eliminar el depósito");
           console.error(error);
+        } finally {
           setIsDeletingDeposit(false);
           setLoadingMessage("");
         }
@@ -187,23 +171,61 @@ function CollectOrderForm() {
       collectedBy: localStorage.getItem('user') || 'Unknown',
     };
 
-    if (params.id) {
-      try {
-        console.log('[CollectOrderForm] Creating deposit (atomic):', depositPayload);
-        await createDeposit(depositPayload);
-        console.log('[CollectOrderForm] Deposit + order update committed atomically');
-      } catch (error) {
-        console.error('[CollectOrderForm] ERROR during payment processing:', error);
-        const serverMsg = error?.response?.data?.message;
+    const intent = `${params.id}|${individualDepositAmount}|${depositPayload.paymentMethod}`;
+    if (paymentKeyRef.current?.intent !== intent) paymentKeyRef.current = { intent, key: newRequestKey() };
+
+    let result;
+    try {
+      result = await createDeposit(depositPayload, paymentKeyRef.current.key);
+      paymentKeyRef.current = null;
+    } catch (error) {
+      console.error('[CollectOrderForm] ERROR during payment processing:', error);
+      if (!error.response?.status) {
+        // No answer (signal): the payment may or may not have been recorded.
+        Modal.warning({
+          title: 'Abono sin confirmar',
+          content: 'La señal está débil o se perdió y no llegó la confirmación del abono: pudo haberse registrado o no. ' +
+            'Cuando tenga mejor señal, toque "Cobrar Orden" otra vez con el mismo valor y método de pago: ' +
+            'si ya estaba registrado, no se cobrará dos veces.',
+          okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } },
+        });
+      } else {
+        const serverMsg = error.response.data?.message;
         alert(`Error al procesar el pago: ${serverMsg || error.message || 'Error desconocido'}. La operación fue revertida.`);
-        setIsRegistering(false);
-        setLoadingMessage("");
-        return; // Don't reload if there was an error
       }
+      setIsRegistering(false);
+      setLoadingMessage("");
+      return;
     }
 
+    // Show the result in place instead of reloading the page, which on a weak signal meant
+    // re-downloading the app and 3 more requests: the server's answer already has the new numbers.
+    if (result.duplicate) {
+      message.info('Este abono ya estaba registrado.');
+      await loadOrder();
+    } else {
+      setOrder((current) => ({
+        ...current,
+        deposit: result.newDeposit,
+        paid: result.paid,
+        ...(result.paid ? { paidAt: formatDate(dayjs().format('YYYY-MM-DD')) } : {}),
+      }));
+      setDeposits((current) => [...current, {
+        depositId: result.depositId,
+        depositValue: result.depositValue,
+        lastDeposit: result.lastDeposit,
+        newDeposit: result.newDeposit,
+        dueOnDeposit: result.dueOnDeposit,
+        depositCreatedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+        paymentMeethd: depositPayload.paymentMethod,
+        isDeleted: 0,
+      }]);
+      message.success(result.paid ? 'Orden pagada completamente' : 'Abono registrado');
+    }
+    setIsRegistering(false);
+    setLoadingMessage("");
+
     // Reset form and states after successful transaction
-    setOrder({ order });
     setDepositedTotal(false); // Reset total deposit flag
     setDeposit(0); // Reset deposit amount
 
@@ -216,10 +238,6 @@ function CollectOrderForm() {
         }
       });
     }
-
-    setTimeout(() => {
-      window.location.reload();
-    }, 2000);
 
     // Clear pending data
     setPendingFormData(null);
@@ -235,62 +253,61 @@ function CollectOrderForm() {
     setDeposit(0);
   };
 
-  useEffect(() => {
-    const loadOrder = async () => {
-      if (params.id) {
-        try {
-          const order = await getOrder(params.id);
-          console.log(order)
-          const depositsRequest = await getDepositsByOrderId(params.id);
+  // Also runs after deleting a deposit, or when a resent payment was already recorded.
+  const loadOrder = async () => {
+    if (params.id) {
+      try {
+        const order = await getOrder(params.id);
+        console.log(order)
+        const depositsRequest = await getDepositsByOrderId(params.id);
 
-          // Check if order exists
-          if (!order) {
-            console.error('[CollectOrderForm] Order not found:', params.id);
-            alert('No se pudo cargar la orden. Por favor, verifique la conexión al servidor.');
-            return;
-          }
-
-          setDeposits(depositsRequest || []);
-          try {
-            const restoresData = await getOrderRestoresRequest(params.id);
-            setRestores(restoresData.data || []);
-          } catch (e) {
-            setRestores([]);
-          }
-          setCart(safeJSONParse(order.items, []))
-          if (order.paymentMethod == "Plataforma") {
-            togglePlatform(true)
-          }
-          if (order.paid) {
-            setOrder({
-              clientId: order.clientId,
-              shopId: 1,
-              items: cart,
-              clientName: order.clientName,
-              premises: order.premises,
-              createdAt: extractDate(order.createdAt),
-              paid: order.paid,
-              paidAt: order.paidAt ? formatDate(order.paidAt) : null,
-              deposit: order.deposit,
-            });
-          } else {
-            setOrder({
-              clientId: order.clientId,
-              shopId: 1,
-              items: cart,
-              clientName: order.clientName,
-              premises: order.premises,
-              createdAt: extractDate(order.createdAt),
-              paid: order.paid,
-              deposit: order.deposit,
-            });
-          }
-        } catch (error) {
-          console.error('[CollectOrderForm] Error loading order:', error);
-          alert('Error al cargar la orden. Por favor, verifique la conexión al servidor e intente nuevamente.');
+        // Check if order exists
+        if (!order) {
+          console.error('[CollectOrderForm] Order not found:', params.id);
+          alert('No se pudo cargar la orden. Por favor, verifique la conexión al servidor.');
+          return;
         }
+
+        setDeposits(depositsRequest || []);
+        try {
+          const restoresData = await getOrderRestoresRequest(params.id);
+          setRestores(restoresData.data || []);
+        } catch (e) {
+          setRestores([]);
+        }
+        setCart(safeJSONParse(order.items, []))
+        setPlatformPayment(order.paymentMethod == "Plataforma") // not togglePlatform: loadOrder can run twice
+        if (order.paid) {
+          setOrder({
+            clientId: order.clientId,
+            shopId: 1,
+            items: cart,
+            clientName: order.clientName,
+            premises: order.premises,
+            createdAt: extractDate(order.createdAt),
+            paid: order.paid,
+            paidAt: order.paidAt ? formatDate(order.paidAt) : null,
+            deposit: order.deposit,
+          });
+        } else {
+          setOrder({
+            clientId: order.clientId,
+            shopId: 1,
+            items: cart,
+            clientName: order.clientName,
+            premises: order.premises,
+            createdAt: extractDate(order.createdAt),
+            paid: order.paid,
+            deposit: order.deposit,
+          });
+        }
+      } catch (error) {
+        console.error('[CollectOrderForm] Error loading order:', error);
+        alert('Error al cargar la orden. Por favor, verifique la conexión al servidor e intente nuevamente.');
       }
-    };
+    }
+  };
+  useEffect(() => {
     loadOrder();
 
     // Reset states when component mounts to ensure clean state
@@ -534,11 +551,12 @@ function CollectOrderForm() {
                       <input
                         type="checkbox"
                         className="ml-2"
-                        value={item.delivered}
-                        checked={item.delivered}
-                        onChange={() => handleCheckboxChange(item.id)}
+                        checked={isDelivered(item)}
+                        disabled={isSaving(item)}
+                        onChange={() => toggle(item)}
                       />
                       <p className="flex items-center px-2">{item.productName} - ({item.quantity})</p>
+                      {isSaving(item) && <p className="flex items-center text-xs text-gray-500">Guardando…</p>}
                       <p className="p-2 text-sm text-gray-700 flex items-center justify-center font-bold h-content">
                         {getItemDisplayTime(item.id)}
                       </p>

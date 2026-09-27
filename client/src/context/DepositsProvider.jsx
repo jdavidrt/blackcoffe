@@ -20,10 +20,10 @@ export const DepositContextProvider = ({ children }) => {
     const [deposits, setDeposits] = useState([]);
 
 
-    const createDeposit = async (deposits) => {
+    const createDeposit = async (deposits, requestKey) => {
         try {
             console.log('[DepositsProvider] Creating deposit:', deposits);
-            const response = await createDepositRequest(deposits);
+            const response = await createDepositRequest(deposits, requestKey);
             console.log('[DepositsProvider] Deposit created successfully:', response.data);
             return response.data;
         } catch (error) {
