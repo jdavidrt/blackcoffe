@@ -1,6 +1,5 @@
 import { Route, Routes, useNavigate, Navigate } from "react-router-dom";
 import { useEffect } from "react";
-import Invoice from "./pages/Invoice";
 import PublicInvoice from "./pages/PublicInvoice";
 import OrdersPage from "./pages/OrdersPage";
 import OrderForm from "./pages/OrderForm";
@@ -16,8 +15,6 @@ import DeliveredOrdersPage from "./pages/DeliveredPage";
 import DepositedOrdersPage from "./pages/DepositedOrdersPage";
 import OrphanedOrdersPage from "./pages/OrphanedOrdersPage";
 import AbandonedOrdersPage from "./pages/AbandonedOrdersPage";
-import QueryPage from "./pages/QueryPage";
-import BackupsPage from "./pages/BackupsPage";
 import NotFound from "./pages/NotFound";
 import { OrderContextProvider } from "./context/OrderProvider";
 import { ClientContextProvider } from "./context/ClientProvider";
@@ -26,7 +23,14 @@ import { UserContextProvider } from "./context/UserProvider";
 import { DepositContextProvider } from "./context/DepositsProvider";
 import LoginForm from "./pages/LoginForm";
 import Navbar from "./components/Navbar";
+import { lazyPage } from "./utils/lazyPage";
 import './fonts/ShareTechMono-Regular.ttf';
+
+// Rarely opened pages with heavy code (the PDF library, the backups calendar): downloaded only
+// when opened, so they're not in the bundle every phone loads at startup (PERFORMANCE_AUDIT N3).
+const Invoice = lazyPage(() => import("./pages/Invoice"));
+const QueryPage = lazyPage(() => import("./pages/QueryPage"));
+const BackupsPage = lazyPage(() => import("./pages/BackupsPage"));
 
 function App() {
   // Obtener el valor del usuario desde el localStorage

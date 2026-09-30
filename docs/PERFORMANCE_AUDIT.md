@@ -27,6 +27,18 @@
    - Measure.
    - ~~Move the API server next to the database (§8).~~ **Not possible on the current Render plan** (owner, 2026-09-26): services can't change region, so this is discarded for now. **Do not move the database to San Francisco** either (see §8 for why).
 5. **Mobile data (2026-09-26):** the client's staff use the app on Tigo mobile data across the malls, where the signal drops for seconds at a time. The app gave up on the first lost request. See §10: retries, a signal banner, no page reloads after payments or deliveries, and duplicate-safe resends.
+6. **Checked in production after the deploys (2026-09-28, §11):**
+   - The indexes cut database time on the main pages: Cobrar por mall 85 → 28 ms, Recorrido 142 → 88 ms, Cobrar Orden's deposits 49 → 3 ms, and the Nueva Orden lock 82 → 1 ms.
+   - The new frontend was on every phone that took a payment.
+   - Up to ~480 page reloads were avoided on 09-28, and no duplicate payments occurred.
+   - The biggest remaining server-side cost is the API pulling every order's full `items` from New York just to add up totals (N8), then Entregados and Cobros del día (N2).
+7. **Render and DigitalOcean data (2026-09-30, §12):**
+   - **Crashes don't explain "stuck".** Render's event history shows **one** crash in all of 2026: the 09-26 out-of-memory from `GET /deposits` (F9), back up in about 8 s.
+   - After the 09-28 frontend, requests abandoned by the browser (HTTP 499) fell from ~35 a day to 1–5, and CORS preflights from ~1,000 to ~300.
+   - **Two production bugs found in the logs and fixed in code:**
+     - Editar Orden failed on large orders: 10 failed saves of order 20604 on 09-29.
+     - Render has none of the alert-email variables, so **no alert email has ever been sent from production**. That one needs an owner action.
+   - N8, N2 and N3 are implemented. N8 and N2 were checked against production data: identical results. They are pending deploy.
 
 ---
 
@@ -49,7 +61,7 @@ These are small, low-risk changes, ordered by impact.
 **Status (2026-09-26):**
 - **QW1–QW4 were verified locally on 2026-09-24** against a MySQL 8.0 copy of the production schema, filled with synthetic data at production scale, then deployed the same day (`bae0493`). See "Evaluation" at the end of this section.
 - **Confirmed live in production 2026-09-24 ≈21:05 Colombia time**: all three indexes (`idx_orders_paid`, `idx_orders_client_paid`, `idx_deposits_order`) present via `information_schema.STATISTICS`; row counts unchanged (25,618 orders / 386 unpaid) — a direct read-only check against production, not an estimate.
-- **QW5 is a DigitalOcean setting** for the owner to change.
+- **QW5 was adjusted by the owner on 2026-09-30.** The cluster restarted again on **2026-09-25 at 00:17** Colombia time, the same time of night as the previous restart (08-14 ≈ 00:16). That points to a nightly maintenance window already in place; confirm it in DigitalOcean.
 
 | # | Change | Fixes | Status |
 |---|---|---|---|
@@ -57,7 +69,7 @@ These are small, low-risk changes, ordered by impact.
 | QW2 | Stop database errors from crashing or hanging the server | F3 | ✅ Deployed. Extended 2026-09-26 to `updateOrder` and the new `setItemDelivered` (see below) |
 | QW3 | Log the response time of every request | lets you diagnose the next "stuck" episode | ✅ Deployed |
 | QW4 | Time out read requests in the frontend (GET only) and say so | endless spinners, or "No hay …" shown when a load failed | ✅ Deployed |
-| QW5 | Set the database maintenance window to off-hours | downtime during business hours | ⏳ Owner (DigitalOcean setting) |
+| QW5 | Set the database maintenance window to off-hours | downtime during business hours | ✅ Adjusted by the owner (2026-09-30) |
 
 ### QW1 — Add the missing indexes
 
@@ -319,7 +331,8 @@ Summed over production's call volumes, these endpoints should need roughly **80%
 - [getDeposits](../server/controllers/deposits.controllers.js#L14) returns all 34,169 deposits, joined with `orders.*` including `items`.
 - **Nothing in the current frontend calls it**: `loadDeposits` is defined but never used. If anything did, the response would be tens of MB.
 - Already tracked as PENDING_IMPROVEMENTS 5.6. The fix is N7.
-- **Confirmed 2026-09-26, then removed (N7, pending deploy).** During the follow-up investigation, one `GET /deposits` took 13 s and returned Render's 502 page. Unrelated endpoints then answered 502 for roughly half a minute before `/ping` recovered. That pattern fits the 512 MB instance running out of memory and restarting, which takes Sígale down too. Check Render → Events for an "Out of memory" around 18:20 Colombia time that day to confirm.
+- **Confirmed 2026-09-26, then removed (N7, pending deploy).** During the follow-up investigation, one `GET /deposits` took 13 s and returned Render's 502 page. Unrelated endpoints then answered 502 for roughly half a minute before `/ping` recovered. That pattern fits the 512 MB instance running out of memory and restarting, which takes Sígale down too.
+- **Confirmed 2026-09-30 from Render's API (§12).** The event is `server_failed` at 18:21:12, exit code 134. The log shows `FATAL ERROR: Reached heap limit … JavaScript heap out of memory` inside `JSON.stringify`, at a heap of about 258 MB. The process was listening again 8 s later.
 
 ---
 
@@ -346,7 +359,7 @@ Typical waits, estimated from the measurements:
 
 The slowest statement recorded in 41.7 days took 2.1 s, so something else makes requests wait much longer or never finish. The candidates, most likely first:
 
-1. **Process crash and restart (F3).** This fits "all pages, all devices, several times a day". Check Render → Events. Besides unhandled errors, **memory** can kill the process: F9 did it with a single request (2026-09-26), and the 2–3 MB list responses of F8 (now slimmed) added to the peak when several phones loaded at once.
+1. **Process crash and restart (F3).** ❌ **Ruled out by Render's event history (2026-09-30, §12):** there was one crash in 2026 (09-26, F9), not several a day. QW2 stays, as protection. Original reasoning: this fits "all pages, all devices, several times a day". Check Render → Events. Besides unhandled errors, **memory** can kill the process: F9 did it with a single request (2026-09-26), and the 2–3 MB list responses of F8 (now slimmed) added to the peak when several phones loaded at once.
 2. **Database maintenance or restart on a primary-only cluster.** With F3, even a short database outage becomes a server crash. Check DigitalOcean → the cluster's activity/maintenance history (QW5).
 3. **A request stuck on a dead database connection.** It would hang until the operating system's TCP timeout (minutes). Evidence *against* this: the app opened only **about 209 database connections in 41.7 days**, so connections are stable. Revisit only if QW3's logs show requests lasting minutes.
 4. **Render platform incidents.** Check the history at status.render.com for the reported times.
@@ -360,11 +373,21 @@ Not the cause: Render's Starter plan **never sleeps**, so free-tier cold starts 
 | Where | What to look at | What it means |
 |---|---|---|
 | **Render → coffeserver → Events** | "Instance failed", "Server unhealthy", "Out of memory", deploys during business hours | Crashes, OOM kills or deploys at the complaint times confirm F3 or a memory problem |
-| **Render → Metrics** (7-day range) | CPU near 0.5 and memory near 512 MB, especially 9–10 h and 15–18 h | Resource saturation → consider the Standard plan (only if confirmed) |
+| **Render → Metrics** (7-day range) | CPU near 0.5 and memory near 512 MB, especially 9–10 h and 15–18 h | Resource saturation → consider the Standard plan (only if confirmed). **Checked 2026-09-30:** memory 48–87 MB, CPU ≤ 0.03 (§12) |
 | **Render → Logs** | Search `exited`, `ECONNRESET`, `PROTOCOL_CONNECTION_LOST`, `ETIMEDOUT`. Each `BlackCoffe Server running on port` line is a (re)start. After QW3, sort by `ms` | Restarts and database connection errors, with timestamps |
 | **Alert inbox** (`NOTIFICATION_EMAIL`, subject `🚨 [BlackCoffe] Error en …`) | Bursts at the complaint times; SQL codes such as `ER_LOCK_WAIT_TIMEOUT` or `ETIMEDOUT` | Request-level failures. Crashes from F3 send no email |
 | **DigitalOcean → Databases → pedidos → Insights** | CPU, memory, disk I/O and connections at the complaint times; disk usage | Database saturation (unlikely per §4), and whether the 30 GiB storage add-on is needed |
 | **DigitalOcean → cluster Settings/Activity** | Maintenance window and past maintenance events | Planned downtime during business hours (QW5) |
+
+**The Render workspace is on the Hobby plan (owner, 2026-09-30). Upgrading is not budgeted.** On Hobby:
+- Logs, metrics and events are kept **7 days**. Anything to investigate has to be read within a week.
+- There are **no HTTP request logs** (Render's per-request log with status and path) and **no latency percentiles**; both need a Pro workspace. The QW3 request log (`morgan`) in the app logs covers the same ground for BlackCoffe routes.
+- The Render API works on Hobby. `RENDER_API_KEY` in the root `.env.local` gives:
+  - events: `GET /v1/services/{id}/events`;
+  - app logs: `GET /v1/logs` (with `text=` search);
+  - metrics: `GET /v1/metrics/{memory,cpu,http-requests,bandwidth,instance-count}`. `http-requests` is broken down by status code.
+
+  Render keys can't be limited to read-only: the key can change anything in the workspace, so only read endpoints are called.
 
 Database statistics can be re-checked at any time with the SQL in Appendix B, run from the DigitalOcean console or the app's `/consultas` page (read-only queries only).
 
@@ -375,14 +398,14 @@ Database statistics can be re-checked at any time with the SQL in Appendix B, ru
 - **N1 — Replace page reloads with in-place updates (F5, tracker 6.3).** ✅ **Done 2026-09-26**, see §10.
   - After `updateOrder` or `createDeposit` resolves, refetch only the affected list or order, and disable the control while it saves.
   - Read PENDING_IMPROVEMENTS "A second, more subtle regression risk: the delivery-card checkbox fix" first. That risk is lower since 2026-09-26: checkboxes send one item to `PUT /order/:id/delivered` instead of the whole list, and Editar Orden gets a 409 on stale data (CLAUDE.md rule #10). Still never write `items` from a local copy.
-- **N2 — Rewrite the date filters as ranges (F6), then index them.**
+- **N2 — Rewrite the date filters as ranges (F6), then index them.** ✅ **Implemented 2026-09-30, pending deploy** (§12).
   - The database clock is **UTC** (verified), so a Colombia day `:date` for UTC-stored columns becomes: `col >= :date + INTERVAL 5 HOUR AND col < :date + INTERVAL 29 HOUR`.
   - For `paidAt`, which is stored in Colombia time: `paidAt >= :date AND paidAt < :date + INTERVAL 1 DAY`.
   - Then add `orders(paidAt)` and `deposits(depositCreatedAt)` indexes.
   - Split the `OR` in `getDepositedOrdersByDate` into a `UNION`, and **remove its `IGNORE INDEX (idx_deposits_order)` hint** (added with QW1; see there).
-  - Bound Entregados with `AND (orders.paid = 0 OR orders.paidAt >= :date)`. This is safe because paid orders can't be modified (since 2026-05-12). Dates before that could miss orders whose items were ticked after payment.
+  - Bound Entregados with `AND (orders.paid = 0 OR orders.paidAt >= :date)`. This is safe because paid orders can't be modified (since 2026-05-12). Dates before that could miss orders whose items were ticked after payment. The owner confirmed on 2026-09-30 that everything from before then was already delivered. The production comparison (§12) found no difference, even for 2025 dates.
   - Update REFERENCE.md Rule 2 in the same change.
-- **N3 — Split the bundle and cache assets (F7).**
+- **N3 — Split the bundle and cache assets (F7).** ✅ **Implemented 2026-09-30, pending deploy** (§12). The asset caching was already live on 2026-09-28.
   - `React.lazy` for `Invoice`, `BackupsPage` and `QueryPage`.
   - In the static site's Headers settings, add `/assets/*` → `Cache-Control: public, max-age=31536000, immutable`. Hashed filenames make this safe; `index.html` must stay uncached.
 - **N4 — Cache CORS preflights (F4).** ✅ **Done 2026-09-26** (`maxAge: 7200`; Sígale's owners should be told, see below).
@@ -391,6 +414,11 @@ Database statistics can be re-checked at any time with the SQL in Appendix B, ru
 - ~~**N5 — Slimmer dashboard payload (F8, tracker 6.5).**~~ **Done 2026-09-26** for `/orders/`, `/unPaidOrders/:mall` and `/deliveredOrders/:date` (see F8). Still sending full items: `/depositedOrdersByDate/:date`, `/depositsByDate/:date`, `/abandonedOrders`.
 - **N6 — Normalize `items` into an `order_items` table (tracker 5.1).** Only if the `LIKE`-based delivery queries are still slow after QW1 and N2.
 - ~~**N7 — Remove or paginate `GET /deposits` (F9, tracker 5.6).**~~ **Done 2026-09-26: removed** (see F9).
+- **N8 — Compute list totals in MySQL instead of fetching `items` (found 2026-09-28, §11).** This is the largest remaining server-side cost on Cuentas por cobrar and Cobrar por mall. ✅ **Implemented 2026-09-30, pending deploy** (§12).
+  - What: replace `orders.items` in `getOrders` and `getUnPaidOrders` with a `JSON_TABLE` sum (the exact SQL is in §11). `getDeliveredOrders` could return its `total` the same way, but it still needs that day's items.
+  - Keep `computeOrderTotal` for `createDeposit`: payments must keep validating against the JS formula.
+  - Checks: the integrity check's scenarios 7–8 already compare list totals with `computeOrderTotal`. Also rerun the §11 comparison over every mall.
+  - Expected effect (estimate): about 0.5–1 s less per list load, since roughly 2 MB no longer crosses from New York to Oregon on every load.
 
 ---
 
@@ -427,7 +455,7 @@ Moving the API server is reversible and leaves the data where it is.
 5. **Suspend the Oregon service as soon as traffic has switched.** Both services run the same cron jobs (BlackCoffe's nightly backup and Sígale's every-minute jobs) and must not run them in parallel. Delete it after a few days. The CORS origins don't change, because the frontends keep their URLs.
 
 **Plans:**
-- Keep Render **Starter** unless Render Metrics show CPU or memory saturation (§6).
+- Keep Render **Starter** unless Render Metrics show CPU or memory saturation (§6). **Checked 2026-09-30:** normal peaks use about 17% of the memory and 6% of the CPU (§12).
 - The database plan (2 GB / 1 vCPU) is enough once QW1 is in: BlackCoffe's queries kept it busy only about one hour over 41.7 days.
 - The BlackCoffe and Sígale data together measure about 67 MB. Check Insights → disk usage before paying for more storage (binary logs also use disk).
 
@@ -448,6 +476,7 @@ Moving the API server is reversible and leaves the data where it is.
 **Other observations (not performance):**
 - **The database is reachable from the internet.** Unknown hosts (likely scanners) connected 10–22 times each, which probably explains most of the 579 failed connection attempts. Enable DigitalOcean **Trusted Sources**, limited to Render's outbound IPs and your own.
 - **Both apps connect as `doadmin`,** the cluster's admin account. Use a least-privilege user per app. Related to PENDING_IMPROVEMENTS Priority 2; Sígale's user is its owners' call.
+- **Both are marked pending by the owner (2026-09-30)**, tracked in PENDING_IMPROVEMENTS Priority 2 (items 2.11 and 2.12).
 
 ---
 
@@ -472,7 +501,7 @@ Moving the API server is reversible and leaves the data where it is.
   - "Reintentar", every payment and every delivery tick **reloaded the whole page**: about 5–7 requests, each of which had to survive the weak signal. Reloading with no signal lands on the browser's offline page.
 - **Writes had no timeout** (to avoid duplicate payments), so a payment on a dead connection spun until the browser gave up.
 
-### What changed (implemented 2026-09-26, pending deploy)
+### What changed (implemented 2026-09-26, deployed 2026-09-27; production results in §11)
 
 | # | Change | Where |
 |---|---|---|
@@ -508,6 +537,8 @@ Render → `blackcofeepedidos` → Headers, **one** rule. It covers only `/asset
 |---|---|---|
 | `/assets/*` | `Cache-Control` | `public, max-age=31536000, immutable` |
 
+✅ **Live, verified 2026-09-28:** `/assets/index.c0d04d80.js` answers `Cache-Control: public, max-age=31536000, immutable`.
+
 Filenames are content-hashed, so each deploy gets new names and this is safe. Check it with `curl -sI https://blackcofeepedidos.onrender.com/assets/<current bundle>.js | grep -i cache-control`. Until it's live, each app load re-checks the JS, CSS and logo, costing 3 extra round trips on the phone. The first attempt (2026-09-26) put `Cache-Control: public` in the *name* field and `max-age=31536000` in the value, and the live header was still `max-age=0`.
 
 ### When the client reports it again
@@ -528,6 +559,244 @@ From the phone, on Tigo, where it fails:
 - **Open the app with no signal.** A small service worker could cache `index.html` and `/assets/*`, so opening or reopening the app in a dead zone shows the app and its banner instead of the browser's offline page. Android discards background tabs, and those reload on return. Only worth it if reports show that pattern; a buggy service worker is hard to undo.
 - **Smaller bundle after each deploy** (N3): `React.lazy` for `Invoice` (`@react-pdf/renderer`), `BackupsPage` and `QueryPage`. On a weak signal a lazy chunk can fail to load, so it needs an import retry and an error boundary around it.
 - **Show the last list while offline:** keep each GET's last answer and show it with "datos de las HH:MM" when a refresh fails. Payments stay safe (the server checks the real total) but the screen could show an old balance.
+
+---
+
+## 11. After the deploys: production check (2026-09-28)
+
+**How it was measured:**
+- Read-only queries against production on 2026-09-28 ≈ 19:30 Colombia time, after a full Monday of use.
+- API timings taken from Bogotá.
+- Nothing was written.
+
+**Which traffic the statistics cover:**
+- The cluster restarted on **2026-09-25 at 00:17** Colombia time, after the indexes were created (09-24 ≈ 21:05). So MySQL's statistics cover **only post-index traffic**: 09-25 and 09-26 with the previous frontend, and 09-28 with everything. 09-27 was a Sunday.
+- Deploy timeline, from the statistics' first- and last-seen times:
+  - The old Nueva Orden client lookup was last seen 09-26 19:50.
+  - The server-side merge from `2f3066b` appears from 09-26 19:51.
+  - The new delivery endpoint was first used 09-28 07:56, and the first save with an idempotency key 08:18.
+
+### Database time per page
+
+"Before" is the 41.7 days up to 09-24 (F1). "After" is 09-25 → 09-28.
+
+| Page → query | Avg before → after | p95 before → after | Max before → after | Rows read per call |
+|---|---|---|---|---|
+| Cobrar por mall `/unPaidOrders/:mall` | 85 → **28 ms** | 158 → 33 ms | 1,748 → 521 ms | 25,428 → 833 |
+| Recorrido `/notDeliveredOrders/` | 142 → **88 ms** | 251 → 151 ms | 820 → 531 ms | 25,056 → 444 |
+| Cuentas por cobrar `/orders/` | 136 → **107 ms** | 550 → 525 ms | 1,777 → 531 ms | 25,651 → 1,042 |
+| Cobrar Orden, deposits `/deposits/:id` | 49 → **2.8 ms** | 87 → 2.2 ms | 360 → 308 ms | 33,375 → 2 |
+| Nueva Orden save, lock query | 82 → **0.8 ms** | 151 → 1.1 ms | 382 → 4 ms | 24,997 → 1 |
+| Nueva Orden client lookup | 62 → 1.1 ms, then **removed** after 09-26 (no request at all) | | | 24,956 → 2 |
+| Cobros del día `/depositedOrdersByDate/:date` | 207 → 260 ms | 347 → 603 ms | 669 → 1,812 ms | 80,438 → 57,741 |
+| Entregados `/deliveredOrders/:date` | 1,357 → 1,240 ms | 1,660 → 1,514 ms | 2,136 → 1,465 ms | ~25,900 (every order) |
+
+Before-period p95s are the approximations from F1.
+
+**What the table shows:**
+- **The indexes worked as intended.** Rows read per call dropped from about 25,000 to 1–1,042, the peak-hour maxima of 1.7–1.8 s are gone, and the order-creation lock (F2) takes 1 ms instead of 82.
+- **Recorrido and Cuentas por cobrar improved less than the local estimate** (~40 ms and ~36 ms). Both still read every open order's `items`:
+  - Recorrido runs its `LIKE` over them.
+  - Cuentas por cobrar also sorts through a temporary table, hence its unchanged 525 ms p95.
+- **Cobros del día and Entregados did not improve**, as expected: their date filters can't use an index (F6, N2). Cobros del día's max went up to 1.8 s. It is now the slowest page after Entregados and the next thing to fix (N2).
+
+### Other effects seen in production on 09-28
+
+- **The new version reached the phones.** All **32** payments of the day carried an `Idempotency-Key`, so every phone that took a payment ran the new frontend. Nueva Orden saved **358** times with a key (peak 48 in the 9 h hour), each lock query taking about 1 ms.
+- **No duplicate payments.** No order has two deposits of the same amount within 10 minutes since 09-21.
+- **Page reloads avoided: up to ~480 in one day.** 448 delivery ticks and 32 payments each used to trigger a full page reload: the page, 3 files, 1–3 API requests and re-parsing a 2.3 MB script on the phone. It's "up to" because ticks within 3 s shared one reload.
+- **Row lock waits went up, by design.**
+  - Server-wide they went from 204 in 41.7 days (avg 17 ms, max 285 ms) to 101 in 3.8 days (avg 148 ms, max 489 ms).
+  - Nearly all of it is the new delivery tick. Its locked read averages 33 ms (p95 200 ms, max 491 ms) for a one-row lookup that takes 0.5 ms unlocked, and 448 × 33 ms ≈ 14.6 s of the 15.0 s total.
+  - Why: ticks on the same order now queue behind each other (each holds the row for about two round trips to New York ≈ 170 ms) instead of overwriting each other, which was the 7,000 → 2,000 bug.
+  - Cost to the driver: at most ~0.5 s with "Guardando…" on screen. Acceptable; revisit only if drivers notice.
+- **Asset caching and CORS preflight cache are live.** `/assets/*` answers `public, max-age=31536000, immutable`, and the preflight answers `Access-Control-Max-Age: 7200` and allows `idempotency-key`.
+- **`Aborted_clients` 34 (≈ 9/day, was ≈ 5/day).** This fits the two deploys restarting the process, each dropping its pooled connections, and it includes Sígale. It isn't a crash signal by itself; check Render → Events if it keeps growing.
+
+### API time from Bogotá, and where it goes
+
+That evening's connection from Bogotá was noisy: TCP connect to the Bogotá edge took 58–450 ms, against 39–98 ms on 09-26. The figures below therefore leave out connection setup. Each is the median of 7 runs of time to first byte minus TLS time.
+
+| Request | Median | Database time (table above) |
+|---|---|---|
+| `/index.html` from the API server (no database) | 278 ms | — (the Bogotá ↔ Oregon floor) |
+| `/ping` | 450 ms | 1 round trip |
+| `/products` | 391 ms | ~1 ms |
+| Recorrido | 774 ms | 88 ms |
+| Cobrar Alta T. | 985 ms | 28 ms |
+| Cobros del día | 1,014 ms | 260 ms |
+| Cuentas por cobrar | 1,305 ms | 107 ms |
+| Entregados | 2,433 ms | 1,240 ms |
+
+One `/orders/` call took 8.6 s. It was the first of five; the next four took 1.0–1.5 s. It happened while the connection was noisy, so it can't be attributed.
+
+**Finding (→ N8).** On Cobrar Alta T. and Cuentas por cobrar, about 0.5–1 s per load is neither the query nor the phone's download.
+- It's the API pulling every open order's full `items` from New York to Oregon just to add up totals. N5 slimmed what goes to the phone, not what comes from the database.
+- Test, read-only, on the real Cobrar Alta T. query (193 orders):
+
+| Variant | Data from the database | Time from Bogotá (215 ms round trip) | Totals |
+|---|---|---|---|
+| As today: fetch `items`, add up in Node | 1.8 MB | median **7.1 s** (6.0–15.3 s) | — |
+| Totals computed in MySQL | 0 KB of items | median **0.29 s** | **identical for all 193 orders** |
+
+From Oregon the gap is smaller: the link to New York is faster than this one. But the same 1.8 MB crosses it on every load of the page; Cuentas por cobrar pulls about 2.8 MB. The SQL used:
+
+```sql
+(SELECT COALESCE(SUM(jt.u * jt.q), 0)
+ FROM JSON_TABLE(IF(JSON_VALID(orders.items), orders.items, '[]'), '$[*]'
+   COLUMNS (u DECIMAL(14,2) PATH '$.unitValue' DEFAULT '0' ON EMPTY DEFAULT '0' ON ERROR,
+            q DECIMAL(14,2) PATH '$.quantity'  DEFAULT '0' ON EMPTY DEFAULT '0' ON ERROR)) jt) AS total
+```
+
+`JSON_VALID` and the `DEFAULT … ON ERROR` clauses mirror `computeOrderTotal`'s rule that malformed data counts as 0, so a bad row can't fail the whole list.
+
+### What's left, in order
+1. **N8:** totals in MySQL for Cuentas por cobrar and Cobrar por mall. Estimated ~0.5–1 s less per load.
+2. **N2:** date filters as ranges plus indexes, for Cobros del día (max 1.8 s) and Entregados (~1.2 s of database time, ~2.4 s end to end).
+3. **Watch the failure emails** (§10, "When the client reports it again"). The database can't show what happened on the phones. Tomorrow's emails and Render's request log (QW3) can.
+
+**To repeat this check:** run Appendix B's query 3, plus the `idempotency_keys` count per day. The statistics accumulate until the next cluster restart. So a clean day-by-day comparison needs a snapshot of `events_statements_summary_by_digest` at the start and end of the day.
+
+---
+
+## 12. Render and DigitalOcean data, and N2/N3/N8 (2026-09-30)
+
+**Sources:**
+- The Render API (events since 2025-02, metrics and logs for the last 7 days; Hobby plan, see §6).
+- The owner's screenshots of DigitalOcean Insights (14 days, 09-16 → 09-30).
+- Read-only queries against production.
+
+Nothing was written to production.
+
+### Render: the server is healthy, and crashes don't explain "stuck"
+
+**Events.** `coffeserver` failed **once** in 2026: `server_failed` on 09-26 at 18:21, exit code 134. That's the F9 out-of-memory: the heap hit its ~258 MB limit inside `JSON.stringify` while answering `GET /deposits`. The process was listening again 8 s later.
+- The earlier failures are crash loops on 2025-10-04 and 2025-10-07 (exit 1).
+- Render's routine-maintenance redeploys are zero-downtime (4 since 2025-02).
+
+So the "stuck several times a day" reports were **not** process restarts. §5's first hypothesis is ruled out.
+
+**Resources, in 5-minute samples over 7 days:**
+
+| | Normal | Peak | Limit |
+|---|---|---|---|
+| Memory | 48–75 MB | 87 MB | 512 MB |
+| CPU | ~0 | 0.03 | 0.5 |
+
+One instance the whole time. The 5-minute samples can't show a spike as short as the F9 crash, which took only seconds.
+
+**HTTP responses per day** (Colombia days; 09-27 was a Sunday):
+
+| Day | 200 | 204 (mostly CORS preflights) | 304 | 499 (browser gave up) | 500 | 502 |
+|---|---|---|---|---|---|---|
+| 09-23 | 2,411 | 1,020 | 1,226 | 38 | — | — |
+| 09-24 | 1,998 | 1,052 | 1,268 | 38 | — | — |
+| 09-25 | 2,163 | 902 | 1,243 | 33 | — | — |
+| 09-26 | 2,265 | 855 | 1,162 | 35 | — | 9 (the F9 crash) |
+| 09-28 | 1,365 | 294 | 1,183 | 1 | — | — |
+| 09-29 | 1,206 | 338 | 1,148 | 5 | 10 (bug below) | — |
+
+From 09-28, the day the new frontend and backend were fully in use (§11):
+- **499s fell from ~35 a day to 1–5.** A 499 is a request the browser abandoned before the answer arrived: a page reload, a closed tab, or a dropped connection. It's the closest thing Render records to "stuck". The drop fits the end of the automatic page reloads (M4) and the retries (M1).
+- **Preflights (204) fell about 70%,** from the 2-hour CORS cache (M6).
+- **Successful requests (200) fell about 40%,** since pages no longer reload after each tick or payment.
+
+### Two production bugs found in the logs
+
+**1. Editar Orden couldn't save large orders.**
+- On 09-29 between 15:09 and 15:12, someone tried **10 times** to save order 20604 in Editar Orden. Every attempt got a 500 with `request entity too large`.
+- Why: since 2026-09-26, Editar Orden sends the items twice (`items` plus `expectedItems` for the conflict check, rule #10). Order 20604 has 414 items (53.8 KB), so the JSON-escaped body passes `express.json()`'s default 100 KB limit. The largest open order has 88 KB of items.
+- **Fixed:** `express.json({ limit: '1mb' })` in `server/index.js`. The same parser runs before Sígale's routes; raising a limit doesn't change anything else for it.
+
+**2. No alert email has ever been sent from production.**
+- The Render service has only `DB_*` and Sígale's variables. `RESEND_API_KEY`, `NOTIFICATION_EMAIL` and `FROM_EMAIL` are missing, so every `sendErrorEmail` logs `RESEND_API_KEY or NOTIFICATION_EMAIL not configured. Email not sent.`
+- That includes the 10 errors above and 4 phone failure reports (`/clientError`) on 09-28 at 12:29, whose contents were lost.
+- "Watch the failure emails" (§10, §11) can't work until this is fixed.
+- **Owner action:** add the three variables to `coffeserver` → Environment, with the values from `.env.local`. Saving environment variables redeploys the service.
+
+Also removed: `createOrder` and `updateOrder` wrote the whole request body to the log on every call, up to 88 KB of items for Editar Orden, plus a sample row from Cobros del día. With 7-day log retention, that noise was burying the useful lines.
+
+### DigitalOcean Insights (14 days)
+
+| Graph | Before the indexes (to 09-24) | After (09-25 →) | Reading |
+|---|---|---|---|
+| CPU | 10–15%, rising to ~20% peaks on 09-22 → 09-24 | 8–10%, flat | The indexes (QW1) cut the database's CPU by about a third. The one spike (~52%) is the 09-25 00:17 restart |
+| Load average (1 vCPU) | daily peaks 1.5–2.7 | daily peaks 1–2.7 | Above 1 means work is queuing on the single vCPU. Brief, but daily. The graph can't say at what hour (below) |
+| Memory | ~53% | 60–66% since the 09-25 restart, flat | ~1.3 GB of 2 GB. The buffer pool is fixed at 256 MB, so the rest is MySQL and DigitalOcean's agents. Not a problem; worth an alert |
+| Disk | 3.3% | 3.3% | The 30 GiB storage add-on is almost unused (below) |
+| Connections | 3–10 | 3–13 | Far from the 151 limit |
+| Reads using an index | ~3% | spikes of 25–56% | The new indexes are in use. The rest are the `LIKE` scans on `items` (Recorrido, Entregados) |
+| Operations | < 1 fetch/s | < 1 fetch/s | Very light traffic |
+
+**Open question.** Do the load-average peaks happen during business hours or at night? At night they'd come from DigitalOcean's backup, the 23:00 snapshot job or maintenance.
+- **What's needed:** a **1-day** view of Load Average and CPU for a working day (Insights → Select Period → 1 day).
+- **Why it matters:** if the peaks are at 9–10 h or 15–18 h, they're users queuing on the database. N2 and N8 should lower them, and the same view after the deploy would show it.
+
+**Suggestions (owner, DigitalOcean dashboard):**
+- **Alert policies** (Insights → Manage Alert Policies): CPU above 80% for 5 minutes, memory above 85%, disk above 80%. They cost nothing and would email the owner directly. That matters more while the app's own emails are down.
+- **The 30 GiB additional storage:** DigitalOcean allows reducing additional storage, as long as what's left covers the latest backup plus a buffer ([docs](https://docs.digitalocean.com/products/databases/mysql/how-to/resize/)). At 3.3% used, it could be removed to save its monthly cost. That's the owner's call.
+
+### N8, N2 and N3: implemented and checked (pending deploy)
+
+**N8: list totals computed in MySQL.**
+- `getOrders` (Cuentas por cobrar) and `getUnPaidOrders` (Cobrar por mall) no longer select `items`. They select `orderTotalSql('orders.items') AS total`, the `JSON_TABLE` sum from §11, in [server/utils/sqlFragments.js](../server/utils/sqlFragments.js).
+  - It mirrors `computeOrderTotal`: invalid JSON, a non-array or a bad value counts as 0.
+  - It uses `DOUBLE` columns so `total` arrives as a JS number, as before.
+  - `createDeposit` still validates payments with the JS function. The two must stay in sync.
+- Entregados keeps computing its total in Node, since it needs that day's items anyway.
+
+**N2: date filters as ranges, plus two indexes.**
+- New helpers in `sqlFragments.js`:
+  - `colombiaDayUtc(col)`: `col >= TIMESTAMP(?) + INTERVAL 5 HOUR AND col < TIMESTAMP(?) + INTERVAL 29 HOUR`, for UTC-stored timestamps.
+  - `colombiaDay(col)`: the same for Colombia-stored `paidAt`.
+- **Cobros del día** (`getDepositedOrdersByDate`) is a `UNION ALL` of two parts:
+  - the day's active deposits;
+  - orders paid that day with no deposit row that day (`NOT EXISTS`).
+
+  The `IGNORE INDEX (idx_deposits_order)` hint is gone.
+- **Entregados** only searches open orders and orders paid on or after the date, found through the indexes.
+- `getCollectedOrders` and `getDepositsByDate` use the range helpers too.
+- New indexes in the same boot migration, with the same safeguards (QW1):
+  - `orders(paid, paidAt)`, as `idx_orders_paid_paidat`;
+  - `deposits(depositCreatedAt)`, as `idx_deposits_created`.
+- REFERENCE.md "Rule 2" was rewritten to prescribe the range form.
+
+**Checked against production data (read-only, 09-30 ≈ 07:10).** Each old controller and each new one was called with the same input, and the results were compared row by row:
+
+| Check | Result |
+|---|---|
+| N8: `/orders/` (337 orders) and `/unPaidOrders/:mall` for all 4 malls (336 orders) | **Identical rows and totals.** `total` is a number |
+| N2: Entregados, Cobros del día, `/collectedOrders`, `/depositsByDate`. 47 dates: every day 08-22 → 09-30, plus 05-12, 05-11, 04-15, 03-10, 01-20, 2025-11-05, 2025-06-10 | **0 differences.** The Entregados bound lost no order, even for 2025 dates |
+| Time from Bogotá, `/orders/` | 2.8 s → **0.40 s** (N8). Cobrar Alta T. 1.0 → 0.36 s |
+| Time from Bogotá, N2 endpoints | Slightly faster already. The real gain needs the two new indexes, which only exist after the deploy |
+
+- **Local check:** [orderIntegrity.check.mjs](../server/tests/orderIntegrity.check.mjs) scenarios 1–9 pass on MySQL 8.0 with the migration creating all 5 indexes.
+- **After the deploy:**
+  - Confirm `Migration: Added index idx_orders_paid_paidat` and `idx_deposits_created` in the log.
+  - Run `EXPLAIN` on Cobros del día and Entregados. They should show `key = idx_deposits_created`, `idx_orders_paid_paidat` and `idx_orders_paid` instead of `type = ALL`.
+  - Re-run Appendix B's query 3 after a working day.
+
+**N3: rarely used pages load on demand.**
+- `Invoice` (which contains `@react-pdf/renderer`), `BackupsPage` and `QueryPage` are loaded through `lazyPage()` in [client/src/utils/lazyPage.jsx](../client/src/utils/lazyPage.jsx).
+- **Main bundle:** 2,285 KB → **776 KB** (721 → **244 KB** gzipped, −66%). That's what every phone downloads and parses when opening the app.
+- The Invoice chunk (1,443 KB) downloads only when someone opens `/pdfOrden/:id`.
+- **Weak signal:** a failed chunk download is retried twice (1 s, 3 s), then the page shows "No se pudo abrir esta página" with a **Reintentar** button, never a blank screen.
+- **Chrome remembers a failed `import()`** and fails the same URL again without going to the network. The retries therefore ask for the chunk under a new URL (`?retry=…`, taken from Chrome's error message).
+- **Verified in headless Chromium** on a 390 px screen:
+  - startup loads only the main bundle;
+  - Copias opens normally;
+  - two failed downloads, then the page opens with no error screen;
+  - three failed downloads show the error screen, and "Reintentar" opens the page without a page reload;
+  - Invoice loads and renders.
+
+  Without the new-URL retry, "Reintentar" stayed broken until the app was closed; the test caught it.
+
+### Owner decisions recorded (2026-09-30)
+- Render workspace: **Hobby**; Pro is not budgeted (§6).
+- QW5 maintenance window: **adjusted**.
+- N8, N2, N3: **approved** and implemented.
+- Trusted Sources and least-privilege DB users (§9): **pending**, in PENDING_IMPROVEMENTS Priority 2.
+- Sígale: changes to the shared process are fine as long as they don't interfere with BlackCoffe. This closes the "tell Sígale's owners" notes in QW2, N4 and M6.
 
 ---
 

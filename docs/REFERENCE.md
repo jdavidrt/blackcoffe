@@ -19,7 +19,7 @@ Verified with the owner on 2026-09-24; measurements come from [PERFORMANCE_AUDIT
 
 | Piece | Provider / service | Plan | Region | URL |
 |---|---|---|---|---|
-| **API server** (BlackCoffe + the co-hosted Sígale API, one Node process) | Render **Web Service** `coffeserver` | **Starter**: 512 MB RAM, 0.5 CPU, always on (no sleeping) | **Oregon** (US West) | https://coffeserver.onrender.com |
+| **API server** (BlackCoffe + the co-hosted Sígale API, one Node process) | Render **Web Service** `coffeserver` | **Starter** instance: 512 MB RAM, 0.5 CPU, always on (no sleeping). Render workspace on the **Hobby** plan (below) | **Oregon** (US West) | https://coffeserver.onrender.com |
 | **Frontend** (production) | Render **Global Static Site** `blackcofeepedidos` (served from a CDN) | — | global CDN | https://blackcofeepedidos.onrender.com |
 | **Database** | DigitalOcean **Managed MySQL** cluster `pedidos` (MySQL 8.0.45) | **Basic 2 GB RAM / 1 vCPU**, **30 GiB additional storage**, **primary only** (no standby node) | **NYC3** (New York) | host in `DB_HOST` |
 | Error alert emails | Resend | — | — | `NOTIFICATION_EMAIL` inbox |
@@ -35,13 +35,22 @@ Verified with the owner on 2026-09-24; measurements come from [PERFORMANCE_AUDIT
 | Group | Variables |
 |---|---|
 | Database | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (`defaultdb`), read by [server/db.js](../server/db.js) |
-| Error alerts | `RESEND_API_KEY`, `NOTIFICATION_EMAIL`, `FROM_EMAIL` |
+| Error alerts | `RESEND_API_KEY`, `NOTIFICATION_EMAIL`, `FROM_EMAIL`. ⚠️ **Missing on Render as of 2026-09-30** (checked with the Render API): no alert email is sent from production until they're added ([PERFORMANCE_AUDIT.md §12](PERFORMANCE_AUDIT.md#12-render-and-digitalocean-data-and-n2n3n8-2026-09-30)) |
 | Port | `PORT`, set by Render |
 | Sígale | Its own variables, e.g. `SIGALE_DB_NAME` (`sigale`) and `DB_CA_CERT`; see `server/sigale/README.md` |
 
+**Render workspace: Hobby plan** (owner, 2026-09-30; upgrading to Pro is not budgeted):
+- Logs, metrics and events are kept **7 days**.
+- There are **no HTTP request logs and no latency metrics**; those are Pro-only. The app's own `morgan` line per request (PERFORMANCE_AUDIT QW3) is the substitute.
+- The Render API works on this plan. `RENDER_API_KEY` in the root `.env.local` covers:
+  - events: `GET /v1/services/srv-cmttsj8cmk4c73918720/events`;
+  - app logs: `GET /v1/logs?ownerId=tea-csprtaq3esus738s1fn0&resource=srv-cmttsj8cmk4c73918720`;
+  - metrics: `GET /v1/metrics/{memory,cpu,http-requests}?resource=…`.
+- Render keys can't be limited to read-only. The key can change anything in the workspace, so use read endpoints only.
+
 **Things that follow from this setup:**
 - **The API and the database are in different regions.** Each database round trip from Oregon to NYC3 costs about 85 ms (measured), which adds up on multi-query operations such as payments. The audit recommended moving the API to Render **Virginia** ([PERFORMANCE_AUDIT.md §8](PERFORMANCE_AUDIT.md#8-infrastructure-put-the-api-next-to-the-database)), but ⛔ **the current Render plan doesn't allow changing any service's region** (owner, 2026-09-26), so that is discarded for now. Treat the latency as fixed: keep sequential queries per request low, and keep the frontend tolerant of slow or lost answers (PERFORMANCE_AUDIT.md §10).
-- **A primary-only cluster means any DigitalOcean maintenance is downtime.** Keep the maintenance window on Sunday early morning; the nightly backup job runs Monday to Saturday.
+- **A primary-only cluster means any DigitalOcean maintenance is downtime.** Keep the maintenance window outside business hours; the owner adjusted it on 2026-09-30 (PERFORMANCE_AUDIT QW5). The nightly backup job runs Monday to Saturday.
 - **The frontend's API address is hardcoded** as `RENDER_SERVER` in [client/src/utils/config.js](../client/src/utils/config.js), and **Sígale's app calls the same backend**. Changing the API's URL means redeploying the static site and coordinating with Sígale's owners.
 - **Render cannot move an existing service to another region.** A region change means creating a new service in the new region.
 - **The service runs scheduled jobs:** BlackCoffe's nightly order backup (23:00 Monday–Saturday, Bogotá time) and Sígale's every-minute jobs. Never run two copies of the service at the same time for long.
@@ -630,17 +639,29 @@ SELECT
 FROM orders
 ```
 
-### Rule 2: Always Filter by Converted Dates
+### Rule 2: Filter a Colombia day as a range on the raw column
+
+Wrapping the column in a function (`DATE(CONVERT_TZ(col, …)) = ?`, `DATE(paidAt) = ?`) returns the right rows, but no index can serve it, so every call scans the whole table (PERFORMANCE_AUDIT.md F6/N2). Compare the raw column against the day's bounds instead. The helpers in [server/utils/sqlFragments.js](../server/utils/sqlFragments.js) each take the date twice:
 
 **Correct** ✅:
-```sql
-WHERE DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) = ?
+```js
+// AUTO timestamps stored in UTC (createdAt, depositCreatedAt): the Colombia day is 05:00 → 29:00 UTC
+`WHERE ${colombiaDayUtc('deposits.depositCreatedAt')}`, [date, date]
+// → deposits.depositCreatedAt >= TIMESTAMP(?) + INTERVAL 5 HOUR AND deposits.depositCreatedAt < TIMESTAMP(?) + INTERVAL 29 HOUR
+
+// MANUAL timestamps already in Colombia time (paidAt, deliveredAt)
+`WHERE ${colombiaDay('orders.paidAt')}`, [date, date]
+// → orders.paidAt >= TIMESTAMP(?) AND orders.paidAt < TIMESTAMP(?) + INTERVAL 1 DAY
 ```
 
 **Incorrect** ❌:
 ```sql
-WHERE DATE(orders.paidAt) = ?  -- Wrong timezone!
+WHERE DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ?  -- right rows, full table scan
+WHERE DATE(deposits.depositCreatedAt) = ?                                  -- UTC day: wrong rows after 19:00
+WHERE DATE(CONVERT_TZ(orders.paidAt, '+00:00', '-05:00')) = ?             -- paidAt is already Colombia time: shifted a day
 ```
+
+Converting in the `SELECT` list (Rule 1) is still correct: that only formats the returned value.
 
 ### Rule 3: Manual Timestamp Insertion (Colombia Time)
 

@@ -1,7 +1,7 @@
 import pool from '../db.js';
 
 /**
- * Hot-path indexes (docs/PERFORMANCE_AUDIT.md, QW1).
+ * Hot-path indexes (docs/PERFORMANCE_AUDIT.md, QW1 and N2).
  *
  * Additive only: ADD INDEX never changes or removes rows. Each index is created
  * only when its name is missing, so this is safe to run on every boot.
@@ -14,6 +14,9 @@ const indexes = [
     { table: 'orders', name: 'idx_orders_paid', columns: 'paid' },
     { table: 'orders', name: 'idx_orders_client_paid', columns: 'clientId, paid' },
     { table: 'deposits', name: 'idx_deposits_order', columns: 'orderId' },
+    // Date filters rewritten as ranges (N2): Cobros del día, Entregados, /depositsByDate.
+    { table: 'orders', name: 'idx_orders_paid_paidat', columns: 'paid, paidAt' },
+    { table: 'deposits', name: 'idx_deposits_created', columns: 'depositCreatedAt' },
 ];
 
 export async function runIndexMigrations() {

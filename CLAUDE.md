@@ -81,13 +81,18 @@ Verified 2026-09-24. Full details, including environment variables, are in [REFE
 
 | Piece | Service | Plan | Region |
 |---|---|---|---|
-| API (BlackCoffe + Sígale, one Node process) | Render Web Service `coffeserver` (https://coffeserver.onrender.com) | Starter: 512 MB, 0.5 CPU, never sleeps | **Oregon** |
+| API (BlackCoffe + Sígale, one Node process) | Render Web Service `coffeserver` (https://coffeserver.onrender.com) | Starter: 512 MB, 0.5 CPU, never sleeps. Workspace on the **Hobby** plan | **Oregon** |
 | Frontend | Render Global Static Site `blackcofeepedidos` (https://blackcofeepedidos.onrender.com) | — | global CDN |
 | Database | DigitalOcean Managed MySQL `pedidos` (MySQL 8), databases `defaultdb` (BlackCoffe) and `sigale` | Basic 2 GB / 1 vCPU, 30 GiB additional storage, **primary only** | **NYC3** |
 
 - **The API and the database are in different regions.** Each database round trip costs about 85 ms. When writing server code, avoid adding sequential queries to a request.
 - ⛔ **Regions can't be changed on the current Render plan** (owner, 2026-09-26). The audit's "move the API to Render Virginia" recommendation is discarded for now, so the Bogotá → Oregon → NYC3 latency is a fixed cost: don't propose region moves as a fix.
 - **Staff use the app on mobile data across the malls** (Tigo, Bogotá), where the signal drops for seconds at a time. Every axios request goes through [client/src/utils/network.js](client/src/utils/network.js): timeouts, automatic retries, the bottom `ConnectionBanner`, and failure reports. **Never add `window.location.reload()`**: update the screen from the write's answer, or re-read only what changed. A new write may be marked for retries only if a resend can't apply it twice. See "Weak mobile signal" under Development Patterns.
+- **The Render workspace is on the Hobby plan** (owner, 2026-09-30; Pro is not budgeted).
+  - Logs, metrics and events are kept 7 days.
+  - There are no HTTP request logs or latency metrics; the app's `morgan` line is the substitute.
+  - `RENDER_API_KEY` in `.env.local` gives API access to events, logs and metrics (see REFERENCE.md). It's a full-access key: call read endpoints only.
+  - ⚠️ As of 2026-09-30 the service lacks `RESEND_API_KEY`/`NOTIFICATION_EMAIL`/`FROM_EMAIL`, so **no alert email is sent from production**. It's an owner action; don't assume a quiet inbox means no errors.
 - **Performance problems are tracked in [PERFORMANCE_AUDIT.md](docs/PERFORMANCE_AUDIT.md).** The main tables had no indexes besides the primary key (QW1 fixed the hot paths); it also covers crash-prone handlers and, in §10, mobile data.
 
 ### Database Integration
@@ -118,14 +123,14 @@ The BlackCoffe backend exposes 41 routes (counted from `server/routes/*.routes.j
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/orders/` | Unpaid, non-abandoned orders with client details (dashboard). **Returns `total` instead of `items`** (2026-09-26): 2.8 MB → 55 KB. See Rule #11 "Order list payloads" |
+| GET | `/orders/` | Unpaid, non-abandoned orders with client details (dashboard). **Returns `total` instead of `items`** (2026-09-26): 2.8 MB → 55 KB. Since 2026-09-30 `total` is computed in MySQL (`orderTotalSql`, audit N8), so `items` never leaves the database either. See Rule #11 "Order list payloads" |
 | GET | `/order/:id` | Get single order by ID with client information |
 | GET | `/orphanedOrders/` | Get orders without assigned clients (`clientId IS NULL` or invalid) |
 | GET | `/notDeliveredOrders/` | Get all orders pending delivery (`delivered = 0`) |
 | GET | `/deliveredOrders/:date` | Orders with items delivered on `:date` (Entregados). **`items` holds only the items delivered on `:date`** (still a JSON string) **plus the full order `total`** (2026-09-26): 2.0 MB → 97 KB |
 | GET | `/collectedOrders/:date` | Get orders collected/paid on specific date |
 | GET | `/depositedOrdersByDate/:date` | Get orders with deposits on specific date (includes partially and fully paid) |
-| GET | `/unPaidOrders/:mall` | Unpaid orders filtered by mall location (`paid = 0` AND `mall = :mall`). **Returns `total` instead of `items`** (2026-09-26): Alta Tecnología 2.26 MB → 34 KB. See Rule #11 "Order list payloads" |
+| GET | `/unPaidOrders/:mall` | Unpaid orders filtered by mall location (`paid = 0` AND `mall = :mall`). **Returns `total` instead of `items`** (2026-09-26): Alta Tecnología 2.26 MB → 34 KB. `total` is computed in MySQL since 2026-09-30 (N8). See Rule #11 "Order list payloads" |
 | GET | `/unPaidOrdersByClient/:clientId` | Get all unpaid orders for specific client |
 | GET | `/abandonedOrders` | Get all abandoned orders (`isAbandoned = 1`) |
 | POST | `/order` | Save products for a client (requires `clientId`, `items` JSON). **If the client already has an open (unpaid, non-abandoned) order, merges into it** under `SELECT … FOR UPDATE` (lowest id first); otherwise inserts. Returns `{ id, clientId }` or `{ id, clientId, mergedInto }` — no longer echoes `items` (2026-09-26). Optional `Idempotency-Key` header (2026-09-26): a resend with an already-applied key answers `{ duplicate: true, clientId }` and changes nothing. The ONLY path Nueva Orden uses (see Rule #1) |
@@ -586,7 +591,11 @@ An order's `items` list can be changed from several phones at once (Nueva Orden,
 **Verified by** [server/tests/orderIntegrity.check.mjs](server/tests/orderIntegrity.check.mjs) (see REFERENCE.md "Local integrity check"): concurrent Nueva Orden saves, a product added after the Recorrido page loaded, stale edits, 25 edit-vs-payment races, the paid-order freeze, no transaction left open by rejected requests, and the list payloads below.
 
 #### 11. Order list payloads: `total` instead of `items` ✅ (2026-09-26)
-Some open orders carry 600+ items (up to ~90 KB each). The list screens only show each order's total, so the server computes it (`withTotal` → `computeOrderTotal`, the same function `createDeposit` validates payments with) and drops `items`:
+Some open orders carry 600+ items (up to ~90 KB each). The list screens only show each order's total, so the server computes it and drops `items`:
+- Cuentas por cobrar and Cobrar por mall use `orderTotalSql` in MySQL (2026-09-30, audit N8).
+- Entregados uses `withTotal` → `computeOrderTotal` in Node.
+
+`orderTotalSql` mirrors `computeOrderTotal`, which `createDeposit` validates payments with: **change both together**.
 
 | Screen | Endpoint | Before → after (production data, 2026-09-26) | Frontend reads |
 |---|---|---|---|
@@ -1921,6 +1930,11 @@ Enforced in two places — add both when restricting a new user:
 - **Styling inside Ant Design Modals (links AND buttons)**: ⚠️ **RECURRING BUG — MANDATORY RULE** - Tailwind's base reset overrides Ant Design's zero-specificity (`:where`) styles inside `Modal.error()` / `Modal.confirm()`, making elements invisible (white on white). This bug has recurred multiple times (links, then the OK button of the client-edit confirm on 2026-07-02). Both halves of this rule are mandatory for EVERY modal, no exceptions:
   - **Links (`<a>` tags) in modal content**: Never rely solely on `style={{ color: '...' }}` — Tailwind's `color: inherit` reset overrides it. Always use the full style set: `style={{ color: '#1677ff', textDecoration: 'underline', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}`.
   - **OK buttons in `Modal.confirm()`**: Tailwind's `background-color: transparent` button reset makes the default/primary OK button white-on-white. Every `Modal.confirm()` whose `okType` is NOT `'danger'` MUST set an explicit `okButtonProps` style, e.g. `okButtonProps: { style: { backgroundColor: '#1677ff', borderColor: '#1677ff', color: '#fff' } }` (blue for confirm/continue; green `#16a34a` for restore-type actions, see `ClientCard.jsx`). `okType: 'danger'` buttons render visibly red and are the only exemption. Never add a non-danger `Modal.confirm` without `okButtonProps`.
+- **Rarely used, heavy pages load on demand** (2026-09-30, audit N3): `Invoice` (the PDF library), `BackupsPage` and `QueryPage` are wrapped in `lazyPage(() => import(...))` from [client/src/utils/lazyPage.jsx](client/src/utils/lazyPage.jsx).
+  - It retries a failed chunk download under a fresh URL, because Chrome caches a failed `import()`.
+  - It shows a "Reintentar" screen instead of a blank page.
+  - Use it for any new heavy page, and never import those pages statically elsewhere, or they go back into the main bundle.
+- **Date filters are ranges on the raw column** (2026-09-30, audit N2): use `colombiaDayUtc()` / `colombiaDay()` from `server/utils/sqlFragments.js`, never `DATE(CONVERT_TZ(col, …)) = ?`, which no index can serve (REFERENCE.md Rule 2).
 - **Weak mobile signal** (2026-09-26, [PERFORMANCE_AUDIT.md §10](docs/PERFORMANCE_AUDIT.md#10-mobile-data-in-the-malls-2026-09-26)): staff work on mobile data inside the malls.
   - **All axios behavior lives in [client/src/utils/network.js](client/src/utils/network.js)**, installed by `main.jsx`: timeouts (GET 15 s, resendable writes 20 s), 2 automatic retries (1 s, 3 s; while offline they wait for the signal), `ConnectionBanner` states, failure reports to `/clientError`, and the load-error dialog. Don't add per-call timeouts or retry loops elsewhere.
   - **A write may be retried only if a resend can't apply it twice.** Either it sets a state (`setItemDeliveredRequest` passes `{ retry: true }`), or it carries an `Idempotency-Key` that the server claims with `claimRequestKey(conn, req, endpoint)` inside the write's transaction (`idempotent(key)` from `network.js`; `POST /order`, `POST /deposits`). **Keep one key per user intent** in a ref: reuse it when the user repeats the same action after a lost answer, and make a new one when the content changes (see `paymentKeyRef`, `saveKeyRef`).

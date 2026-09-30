@@ -1,6 +1,7 @@
 import pool from '../db.js'
 import { sendErrorEmail } from '../utils/emailNotifier.js'
 import { claimRequestKey } from '../migrations/create_idempotency_keys.js'
+import { colombiaDayUtc } from '../utils/sqlFragments.js'
 
 export const computeOrderTotal = (itemsJson) => {
     try {
@@ -30,8 +31,8 @@ export const getDepositsByOrder = async (req, res) => {
 export const getDepositsByDate = async (req, res) => {
     try {
         // deletedAt is a COLOMBIA timestamp (stored via DATE_SUB) - no CONVERT_TZ needed
-        const [result] = await pool.query("SELECT orders.id, orders.clientId, orders.items, orders.deposit, deposits.paymentMethod, deposits.depositValue, deposits.lastDeposit, deposits.newDeposit, deposits.isDeleted, deposits.deletedAt as deletedAt, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt , clients.clientName, clients.premises, clients.mall FROM deposits join orders on orders.id = deposits.orderId join clients on orders.clientId = clients.id WHERE DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ? ORDER BY orders.clientId, deposits.depositCreatedAt, orders.createdAt ASC", [
-            req.params.date,
+        const [result] = await pool.query(`SELECT orders.id, orders.clientId, orders.items, orders.deposit, deposits.paymentMethod, deposits.depositValue, deposits.lastDeposit, deposits.newDeposit, deposits.isDeleted, deposits.deletedAt as deletedAt, CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt , clients.clientName, clients.premises, clients.mall FROM deposits join orders on orders.id = deposits.orderId join clients on orders.clientId = clients.id WHERE ${colombiaDayUtc('deposits.depositCreatedAt')} ORDER BY orders.clientId, deposits.depositCreatedAt, orders.createdAt ASC`, [
+            req.params.date, req.params.date,
         ]);
         res.json(result)
     } catch (error) {

@@ -56,7 +56,10 @@ app.use(cors({
   maxAge: 7200
 }));
 
-app.use(express.json())
+// Editar Orden sends the order's items twice (items + expectedItems). Open orders reach
+// 88 KB of items, past express.json's 100 KB default: every save of order 20604 got a 500
+// on 2026-09-29 (docs/PERFORMANCE_AUDIT.md §12).
+app.use(express.json({ limit: '1mb' }))
 app.use(indexRoutes)
 app.use(ordersRoutes)
 app.use(productRoutes)

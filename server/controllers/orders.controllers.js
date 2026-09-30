@@ -1,12 +1,11 @@
 import pool from '../db.js'
 import { sendErrorEmail } from '../utils/emailNotifier.js'
-import { tzColombia } from '../utils/sqlFragments.js'
+import { tzColombia, colombiaDayUtc, colombiaDay, orderTotalSql } from '../utils/sqlFragments.js'
 import { computeOrderTotal } from './deposits.controllers.js'
 import { claimRequestKey } from '../migrations/create_idempotency_keys.js'
 
-// List screens (Cuentas por cobrar, Cobrar por mall) only show each order's total. Sending
-// `items` instead made those responses 2–3 MB (some open orders carry 600+ items) and timed
-// out on phones over 4G. Same function createDeposit uses, so the list matches the payment check.
+// Entregados shows each order's total but also needs that day's items, so it computes the total
+// from `items` in Node. Same function createDeposit uses, so the list matches the payment check.
 const withTotal = ({ items, ...order }) => ({ ...order, total: computeOrderTotal(items) });
 
 /**
@@ -38,7 +37,8 @@ export const getOrders = async (req, res) => {
         const [result] = await pool.query(`
             SELECT
                 orders.id, orders.deposit,
-                orders.clientId, orders.paid, orders.collectedBy, orders.items,
+                orders.clientId, orders.paid, orders.collectedBy,
+                ${orderTotalSql('orders.items')} AS total,
                 DATE(${tzColombia('orders.createdAt')}) AS createdAt,
                 COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
                 COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
@@ -48,7 +48,9 @@ export const getOrders = async (req, res) => {
             WHERE orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
             ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC
         `);
-        res.json(result.map(withTotal))
+        // Lists show only each order's total: computed in MySQL (orderTotalSql) instead of sending
+        // `items`, which made these responses 2–3 MB (N5) and pulled them from New York (N8).
+        res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getOrders');
         return res.status(500).json({ message: 'Error obteniendo las órdenes' });
@@ -101,8 +103,16 @@ export const getDeliveredOrders = async (req, res) => {
                 COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
                 COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
                 COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
-            FROM
-                orders
+            FROM (
+                -- Paid orders are frozen (since 2026-05-12), so an order paid before :date can't
+                -- have items delivered on :date: only open orders and those paid on/after it are
+                -- searched, via indexes, instead of LIKE over every order (PERFORMANCE_AUDIT N2).
+                SELECT id FROM orders WHERE paid = 0
+                UNION ALL
+                SELECT id FROM orders WHERE paid = 1 AND paidAt >= TIMESTAMP(?)
+            ) AS candidates
+            JOIN
+                orders ON orders.id = candidates.id
             JOIN
                 clients ON orders.clientId = clients.id
             WHERE
@@ -113,7 +123,7 @@ export const getDeliveredOrders = async (req, res) => {
                 CAST(clients.premises AS SIGNED),
                 clients.clientname ASC,
                 orders.createdAt ASC
-        `, [req.params.date]);
+        `, [req.params.date, req.params.date]);
         // Entregados lists only the items delivered on :date and uses `total` for "Debe", so
         // send just those items (still a JSON string: the page searches it for the date).
         res.json(result.map((order) => {
@@ -135,20 +145,11 @@ export const getDepositedOrdersByDate = async (req, res) => {
         // Two scenarios:
         // 1) Orders with deposits made on selected date (multiple rows if multiple deposits same day)
         // 2) Orders marked as paid on selected date without any deposits on that date (single row with NULL deposit fields)
-        const [result] = await pool.query(`
-                SELECT
-                deposits.orderId,
-                deposits.depositId,
-                CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00') as depositCreatedAt,
-                deposits.clientId as depositClientId,
-                deposits.paymentMethod,
-                deposits.depositValue,
-                deposits.lastDeposit,
-                deposits.newDeposit,
-                deposits.isDeleted,
-                deposits.deletedAt as deletedAt,  -- COLOMBIA timestamp: stored via DATE_SUB, no conversion needed
+        // Written as a UNION of two index-served halves instead of one LEFT JOIN with an OR and
+        // DATE(CONVERT_TZ(...)) = ?, which no index could serve (docs/PERFORMANCE_AUDIT.md, N2).
+        const orderColumns = `
                 orders.id,
-                CONVERT_TZ(orders.createdAt, '+00:00', '-05:00') as createdAt,
+                ${tzColombia('orders.createdAt')} as createdAt,
                 orders.clientId,
                 orders.paidAt as paidAt,  -- MANUAL timestamp: already in Colombia time, no conversion needed
                 orders.items,
@@ -156,28 +157,44 @@ export const getDepositedOrdersByDate = async (req, res) => {
                 orders.paid,
                 COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
                 COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
-                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
-            FROM
-                orders
-            JOIN
-                clients ON orders.clientId = clients.id
-            LEFT JOIN
-                -- IGNORE INDEX keeps the hash-join plan: with idx_deposits_order MySQL switches to
-                -- one index lookup per order, which measured ~2x slower here because the date
-                -- filter can't use an index yet (docs/PERFORMANCE_AUDIT.md, N2).
-                deposits IGNORE INDEX (idx_deposits_order) ON deposits.orderId = orders.id
-                    AND DATE(CONVERT_TZ(deposits.depositCreatedAt, '+00:00', '-05:00')) = ?
-            WHERE
-                ((deposits.depositId IS NOT NULL AND deposits.isDeleted = 0)
-                OR (DATE(orders.paidAt) = ? AND orders.paid = 1 AND deposits.depositId IS NULL))
+                COALESCE(orders.clientMallSnapshot, clients.mall) AS mall`;
+        const d = req.params.date;
+        const [result] = await pool.query(`
+            -- 1) Every active deposit made on :date (one row per deposit)
+            SELECT
+                deposits.orderId,
+                deposits.depositId,
+                ${tzColombia('deposits.depositCreatedAt')} as depositCreatedAt,
+                deposits.clientId as depositClientId,
+                deposits.paymentMethod,
+                deposits.depositValue,
+                deposits.lastDeposit,
+                deposits.newDeposit,
+                deposits.isDeleted,
+                deposits.deletedAt as deletedAt,  -- COLOMBIA timestamp: stored via DATE_SUB, no conversion needed
+                ${orderColumns}
+            FROM deposits
+            JOIN orders ON orders.id = deposits.orderId
+            JOIN clients ON orders.clientId = clients.id
+            WHERE ${colombiaDayUtc('deposits.depositCreatedAt')}
+                AND deposits.isDeleted = 0
                 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
-            ORDER BY
-                orders.createdAt ASC
-        `, [req.params.date, req.params.date]);
-        console.log(`[${new Date().toISOString()}] getDepositedOrdersByDate - Date: ${req.params.date}, Results: ${result.length}`);
-        if (result.length > 0) {
-            console.log(`[${new Date().toISOString()}] Sample result - orderId: ${result[0].id}, paid: ${result[0].paid}, depositValue: ${result[0].depositValue || 'NULL'}, paidAt: ${result[0].paidAt}`);
-        }
+            UNION ALL
+            -- 2) Orders marked paid on :date with no deposit row that day (deleted ones included,
+            --    as before), as a single row with NULL deposit fields
+            SELECT
+                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                ${orderColumns}
+            FROM orders
+            JOIN clients ON orders.clientId = clients.id
+            WHERE orders.paid = 1 AND ${colombiaDay('orders.paidAt')}
+                AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+                AND NOT EXISTS (
+                    SELECT 1 FROM deposits
+                    WHERE deposits.orderId = orders.id AND ${colombiaDayUtc('deposits.depositCreatedAt')}
+                )
+            ORDER BY createdAt ASC
+        `, [d, d, d, d, d, d]);
         res.json(result);
     } catch (error) {
         sendErrorEmail(req, error, 'getDepositedOrdersByDate');
@@ -190,7 +207,8 @@ export const getUnPaidOrders = async (req, res) => {
         const [result] = await pool.query(`
             SELECT
                 orders.id, orders.deposit,
-                orders.clientId, orders.paid, orders.collectedBy, orders.items,
+                orders.clientId, orders.paid, orders.collectedBy,
+                ${orderTotalSql('orders.items')} AS total,
                 DATE(${tzColombia('orders.createdAt')}) AS createdAt,
                 COALESCE(orders.clientPremisesSnapshot, clients.premises) AS premises,
                 COALESCE(orders.clientNameSnapshot, clients.clientName) AS clientName,
@@ -200,7 +218,7 @@ export const getUnPaidOrders = async (req, res) => {
             WHERE clients.mall = ? AND orders.paid = 0 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
             ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC
         `, [req.params.mall]);
-        res.json(result.map(withTotal))
+        res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getUnPaidOrders');
         return res.status(500).json({ message: 'Error obteniendo las órdenes por ubicación' });
@@ -242,9 +260,9 @@ export const getCollectedOrders = async (req, res) => {
                 COALESCE(orders.clientMallSnapshot, clients.mall) AS mall
             FROM orders
             JOIN clients ON orders.clientId = clients.id
-            WHERE DATE(orders.paidAt) = ? AND orders.paid = 1 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
+            WHERE ${colombiaDay('orders.paidAt')} AND orders.paid = 1 AND (orders.isAbandoned = 0 OR orders.isAbandoned IS NULL)
             ORDER BY CAST(clients.premises AS SIGNED), clients.clientname ASC, orders.createdAt ASC
-        `, [req.params.date]);
+        `, [req.params.date, req.params.date]);
         res.json(result)
     } catch (error) {
         sendErrorEmail(req, error, 'getCollectedOrders');
@@ -299,8 +317,6 @@ export const createOrder = async (req, res) => {
     try {
         conn = await pool.getConnection();
         await conn.beginTransaction();
-
-        console.log(`[createOrder] Request body:`, req.body);
 
         const { shopId, clientId, items } = req.body;
 
@@ -367,9 +383,6 @@ export const createOrder = async (req, res) => {
 export const updateOrder = async (req, res) => {
     let conn;
     try {
-        console.log(`[updateOrder] Request params:`, req.params);
-        console.log(`[updateOrder] Request body:`, req.body);
-
         // Audit fix 1.5: stack-merge (sum quantity) any colliding IDs in the
         // incoming items array instead of rejecting the request. A no-op for
         // an already-deduped array.
@@ -467,7 +480,6 @@ export const updateOrder = async (req, res) => {
         ]);
         await conn.commit();
 
-        console.log(`[updateOrder] Update result:`, result);
         res.json(result);
     } catch (error) {
         await conn?.rollback().catch(() => {});

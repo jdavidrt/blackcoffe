@@ -118,6 +118,8 @@ This document (deleted as part of this consolidation) proposed a client+server c
 | 2.4 (high) | Hardcoded master password `'031421'` in the frontend bundle unlocks an all-orders view | `client/src/pages/OrdersPage.jsx` |
 | 2.5 (high) | DB credentials and Resend API key live in `.env.local` in the project worktree; rotation story unclear | project root `.env.local` |
 | 2.10 (medium) | No CSRF protection — currently moot (localStorage has no ambient-authority CSRF exposure), but becomes relevant the moment auth moves to cookies | n/a |
+| 2.11 (medium) | **The database accepts connections from anywhere.** DigitalOcean Trusted Sources is off; unknown hosts (likely scanners) connect regularly ([PERFORMANCE_AUDIT.md §9](PERFORMANCE_AUDIT.md#9-ruled-out-and-other-observations)). Fix: enable Trusted Sources with Render's outbound IPs plus the owner's. It also affects Sígale (same cluster) and local read-only checks. **Marked pending by the owner 2026-09-30.** | DigitalOcean → `pedidos` → Settings |
+| 2.12 (medium) | **Both apps connect as `doadmin`,** the cluster's admin account. Fix: one least-privilege MySQL user per app (BlackCoffe: `defaultdb` only). Sígale's user is its owners' call. **Marked pending by the owner 2026-09-30.** | Render env `DB_USER`/`DB_PASSWORD` |
 
 Superseded/folded-in from the old `PROJECT_IMPROVEMENTS.md` "Code Improvement Opportunities" list (same category, kept together rather than duplicated):
 - **DB credentials → env vars** (`server/db.js` hardcodes the DigitalOcean password).
@@ -153,6 +155,7 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
   - **Confirmed in production on 2026-09-24:** `orders`, `deposits` and `clients` have *no* index besides the primary key, and the main pages read about 25,000 rows per request.
   - The three indexes that help today are [PERFORMANCE_AUDIT.md](PERFORMANCE_AUDIT.md) QW1: `orders(paid)`, `orders(clientId, paid)` and `deposits(orderId)`. **Implemented 2026-09-24** as the boot migration `server/migrations/add_performance_indexes.js`, verified locally, then **deployed and confirmed present in production the same day**.
   - The date-column indexes only help after the date filters are rewritten (audit N2). The `clients` table is too small to need any.
+  - **N2 implemented 2026-09-30 (pending deploy):** the date filters are ranges now, and the same migration adds `orders(paid, paidAt)` and `deposits(depositCreatedAt)`. Checked against production data over 47 dates: identical results ([PERFORMANCE_AUDIT.md §12](PERFORMANCE_AUDIT.md#12-render-and-digitalocean-data-and-n2n3n8-2026-09-30)).
 - **5.4** — No foreign-key constraints anywhere (`orders.clientId`, `deposits.orderId`, `deposits.clientId` are soft references only) — this is precisely why the `/ordenesSinCliente` orphaned-orders cleanup page has to exist.
 - **5.5** — Soft-deleted deposits are never archived/purged; every query pays the scan cost forever.
 - ~~**5.6** — `getDeposits` has no `WHERE`/`LIMIT` — returns every deposit ever made.~~ **Done 2026-09-26: endpoint removed** (nothing called it; one request exhausted the instance's memory).
@@ -165,14 +168,20 @@ Everything below is a known gap with no code anywhere addressing it. Organized b
 - **6.6** — No pagination on `/orders`, `/abonos`, `/clients` (`/deposits` was removed 2026-09-26) — tolerable at current (~10k row) volume, won't be at 10x that.
 - **6.7 — Performance audit (2026-09-24), in progress.** The client reported the app getting "slow or stuck" several times a day, on phones and PCs, on all pages. Full evidence and fixes are in [PERFORMANCE_AUDIT.md](PERFORMANCE_AUDIT.md).
   - Quick wins **QW1–QW4 verified locally on 2026-09-24, then deployed and confirmed live in production the same day** (`bae0493`): indexes; crash-proofing the `getConnection()`-outside-`try` handlers (extended 2026-09-26 to `updateOrder`/`setItemDelivered`); request-timing logs; a GET timeout plus a failed-load dialog in the frontend. The results are in the audit's "Evaluation" section.
-  - **QW5 (the database maintenance window) is still open**; it is a DigitalOcean setting for the owner.
+  - ~~QW5 (the database maintenance window)~~ **adjusted by the owner 2026-09-30.**
   - Next steps N1–N7.
   - Infrastructure: move the API from Render Oregon to Render Virginia, next to the NYC3 database. ⛔ **Not possible on the current Render plan** (owner, 2026-09-26); discarded for now.
   - **Mobile data (2026-09-26):** retries, signal banner, no reloads, duplicate-safe resends, CORS preflight cache (N1, N4). Implemented, pending deploy; see the audit's §10. The owner still has to set the Render static-site header for `/assets/*` (the first attempt had the name and value split wrong).
-  - The audit confirms 5.3, 5.6, 6.2, 6.3 and 6.5 with production data. Mark items done here as they ship. N5 and N7 shipped in code 2026-09-26 (pending deploy).
+  - The audit confirms 5.3, 5.6, 6.2, 6.3 and 6.5 with production data. Mark items done here as they ship. N5 and N7 shipped in code 2026-09-26 and were deployed 2026-09-27.
+  - **2026-09-30 (audit §12):**
+    - Render's event history rules out crashes as the cause of "stuck": one crash in 2026, the 09-26 out-of-memory.
+    - **N8** (list totals in MySQL), **N2** (date ranges plus indexes) and **N3** (lazy-loaded Invoice/Copias/Consultas, main bundle −66%) are implemented, pending deploy.
+    - Fixed: Editar Orden returned 500 on large orders, because the body passed the 100 KB limit.
+    - Render workspace is Hobby; Pro is not budgeted.
+  - **Owner action (open):** add `RESEND_API_KEY`, `NOTIFICATION_EMAIL` and `FROM_EMAIL` to the Render service. They're missing, so no alert email has ever been sent from production.
 
 ### Leftover items (from the old "Code Improvement Opportunities" list)
-- **Frontend error boundaries** — no React error boundary exists anywhere; a component crash white-screens the whole app. Fully open.
+- **Frontend error boundaries** — a component crash white-screens the whole app. **Partly done 2026-09-30:** the three lazy-loaded pages (Invoice, Copias, Consultas) have one in `client/src/utils/lazyPage.jsx`. The rest of the app still has none.
 - ~~Basic error handling in controllers~~ / ~~Standardize API response format~~ — **partially superseded** by the branch's `server/utils/responseUtils.js` (Priority 1) — re-evaluate scope once that lands rather than building a second, competing response wrapper.
 
 ---
