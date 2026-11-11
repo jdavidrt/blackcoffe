@@ -48,7 +48,10 @@ app.use(cors({
     'https://blackcofeepedidos.onrender.com',
     'https://sigale.onrender.com', // Sigale production frontend (PWA)
     'http://localhost:5173',
-    'http://localhost:25060'
+    'http://localhost:25060',
+    'https://sigale.onrender.com', // Sigale production frontend (PWA)
+    'https://sigale.shop',
+    'https://www.sigale.shop'
   ],
   credentials: true,
   // Browsers re-send the CORS preflight before every write unless told to cache it (Chrome's
