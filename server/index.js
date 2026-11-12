@@ -46,6 +46,7 @@ app.use(morgan('tiny', { skip: (req) => req.path.startsWith('/users/') || req.pa
 app.use(cors({
   origin: [
     'https://blackcofeepedidos.onrender.com',
+    'https://blackcofee.com/',
     'https://sigale.onrender.com', // Sigale production frontend (PWA)
     'http://localhost:5173',
     'http://localhost:25060',
